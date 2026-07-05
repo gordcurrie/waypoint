@@ -1,0 +1,26 @@
+# Environment
+.env
+.env.local
+
+# Garmin auth tokens (never commit)
+garmin_tokens.json
+.garminconnect/
+
+# Go
+bin/
+*.test
+*.out
+
+# Data volumes
+data/
+influxdb_data/
+grafana_data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+sync/.venv/
+
+# OS
+.DS_Store
