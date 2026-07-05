@@ -8,9 +8,6 @@ datasources:
     url: http://influxdb:8181
     jsonData:
       version: InfluxQL
-      dbName: ${INFLUXDB_BUCKET:-garmin}
-      httpHeaderName1: Authorization
-    secureJsonData:
-      httpHeaderValue1: Token ${INFLUXDB_TOKEN}
+      dbName: ${INFLUXDB_BUCKET}
     isDefault: true
     editable: false

@@ -29,7 +29,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Grafana: http://localhost:3000 (admin / see .env)
+Grafana: http://localhost:3001 (admin / see .env)
 InfluxDB: http://localhost:8181
 
 ## Environment Variables
