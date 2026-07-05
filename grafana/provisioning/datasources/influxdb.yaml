@@ -7,7 +7,12 @@ datasources:
     access: proxy
     url: http://influxdb:8181
     jsonData:
+      # InfluxDB 3 Core has partial InfluxQL support. Basic SELECT queries work;
+      # GROUP BY time() with fill(), sub-queries, and some aggregates do not.
+      # Switch to version: Flux or use the SQL API if panels hit unsupported features.
       version: InfluxQL
+      # INFLUXDB_BUCKET must be set in the grafana service environment (docker-compose.yml does this).
+      # Grafana provisioning does not support ${VAR:-default} syntax; use plain ${VAR} only.
       dbName: ${INFLUXDB_BUCKET}
     isDefault: true
     editable: false

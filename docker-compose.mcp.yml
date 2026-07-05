@@ -1,4 +1,8 @@
 # MCP server as HTTP service for homelab/remote deployment.
+# NOTE: Go binary and root Dockerfile not yet written (Phase 1, step 6).
+# Running this overlay before cmd/mcp-server/ is built will fail with
+# "failed to read dockerfile". Implement the MCP server first.
+#
 # Usage: docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
 #
 # Claude config (claude_desktop_config.json or Claude Code settings):
@@ -18,7 +22,8 @@ services:
     environment:
       INFLUXDB_URL: http://influxdb:8181
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
-      INFLUXDB_DATABASE: ${INFLUXDB_BUCKET:-garmin}
+      # INFLUXDB_DATABASE accepts INFLUXDB_DATABASE first, falls back to INFLUXDB_BUCKET
+      INFLUXDB_DATABASE: ${INFLUXDB_DATABASE:-${INFLUXDB_BUCKET:-garmin}}
     command: ["--transport=http", "--addr=0.0.0.0:8080"]
     depends_on:
       influxdb:
