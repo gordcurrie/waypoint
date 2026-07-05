@@ -47,8 +47,9 @@ Phase 3: cmd/web/ ──► Go HTTP server, optional chat panel
 ```
 waypoint/
 ├── cmd/
-│   ├── mcp-server/          # Phase 1: Go MCP server binary (stdio + SSE transport)
+│   ├── mcp-server/          # Phase 1: Go MCP server binary (stdio + http transport)
 │   └── cli/                 # Phase 2: Go CLI
+├── tools/                   # MCP tool registration (RegisterAll, per-group files, helpers)
 ├── internal/
 │   ├── influx/              # InfluxDB client wrapper + query helpers
 │   ├── llm/                 # LLM provider interface + implementations
@@ -80,11 +81,15 @@ waypoint/
 
 ### Go MCP server — `cmd/mcp-server/`
 
-Library: `github.com/mark3labs/mcp-go` (most mature Go MCP SDK)
+Library: `github.com/modelcontextprotocol/go-sdk` (official MCP Go SDK)
 
-**Transport modes** (controlled by `WAYPOINT_MCP_TRANSPORT`):
+Follows `gordcurrie/agent-skills` → `generate-mcp` skill conventions:
+- `tools/` package with `RegisterAll`, per-group files, `client_iface.go`
+- `tools/helpers.go`: `jsonResult`, `textResult`, `errorResult`
+
+**Transport modes** (controlled by `--transport` flag):
 - `stdio` (default) — Claude Desktop/Code spawns it as subprocess. Local dev.
-- `sse` — Runs as HTTP service on `WAYPOINT_MCP_PORT` (default 8080). Homelab deployment.
+- `http` — Streamable HTTP via `mcp.NewStreamableHTTPHandler`. Homelab deployment.
 
 **Tools to expose (data only — no LLM calls):**
 
@@ -113,9 +118,10 @@ No separate trigger needed. Computation is fast (simple EMA over ~90 data points
 
 | Package | Purpose |
 |---------|---------|
-| `github.com/mark3labs/mcp-go` | MCP server framework |
+| `github.com/modelcontextprotocol/go-sdk` | MCP server framework (official SDK) |
 | `github.com/InfluxCommunity/influxdb3-go/v2` | InfluxDB 3 client |
 | `github.com/spf13/viper` | Config (env vars + config file) |
+| `github.com/anthropics/anthropic-sdk-go` | Claude provider (CLI only, optional) |
 
 ### InfluxDB Schema
 
@@ -178,12 +184,12 @@ Add to `~/.config/claude/mcp_servers.json`:
 }
 ```
 
-**Homelab (SSE) — for remote deployment:**
+**Homelab (HTTP) — for remote deployment:**
 ```json
 {
   "waypoint": {
-    "type": "sse",
-    "url": "http://homelab-ip:8080/sse"
+    "type": "http",
+    "url": "http://homelab-ip:8080/mcp"
   }
 }
 ```
