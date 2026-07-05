@@ -181,7 +181,7 @@ Add to `~/.config/claude/mcp_servers.json`:
   "waypoint": {
     "command": "/path/to/waypoint-mcp",
     "env": {
-      "INFLUXDB_URL": "http://localhost:8086",
+      "INFLUXDB_URL": "http://localhost:8181",
       "INFLUXDB_TOKEN": "..."
     }
   }
