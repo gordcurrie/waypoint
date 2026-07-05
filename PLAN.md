@@ -152,15 +152,19 @@ Measurement: training_load  (computed by Go on demand, written for Grafana)
 - Runs as a Docker container on cron (default: every 30 min)
 - Credentials via env vars only (never hardcoded)
 
-### Docker Compose — Phase 1
+### Docker/Podman Compose — Phase 1
 
-`docker-compose.yml` services: `influxdb` (3-core), `grafana`, `sync` (Python sidecar)
+`docker-compose.yml` services: `influxdb` (3-core), `grafana`, `sync` (Python sidecar). Works with `docker compose` or `podman-compose`.
 
-MCP server is **not** in the default Docker Compose — it runs as a local binary for stdio transport.
+MCP server is **not** in the default compose stack — it runs as a local binary for stdio transport.
 
-For homelab SSE deployment, `docker-compose.mcp.yml` provides an override:
+For homelab HTTP deployment, `docker-compose.mcp.yml` provides an override:
 ```bash
+# Docker
 docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
+
+# Podman
+podman-compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
 ```
 
 Grafana bootstraps with:
@@ -265,7 +269,7 @@ Single `config.yaml` + env var overrides via Viper. Supports:
 
 ## Hosting Path
 
-1. **Now**: `docker-compose up` on local Mac for iteration; MCP server as local binary
+1. **Now**: `docker compose up` / `podman-compose up` on local Mac; MCP server as local binary
 2. **Goal**: Deploy to Proxmox (LXC containers) or TrueNAS apps
    - InfluxDB + Grafana + sync sidecar: TrueNAS apps (catalog) or Proxmox Docker VM
    - MCP server: Proxmox LXC or Docker container with SSE transport (`docker-compose.mcp.yml`)
@@ -285,7 +289,7 @@ Single `config.yaml` + env var overrides via Viper. Supports:
 
 ## Verification Plan
 
-1. `docker-compose up` → Grafana at :3000, InfluxDB at :8181
+1. `docker compose up` / `podman-compose up` → Grafana at :3001, InfluxDB at :8181
 2. Python sync runs → data appears in InfluxDB
 3. Grafana dashboard 23245 shows real data
 4. `waypoint-mcp` binary starts (stdio), registers with Claude Desktop/Code

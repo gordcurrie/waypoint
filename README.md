@@ -14,11 +14,10 @@ Pulls activity, sleep, HRV, and health data from Garmin Connect. Stores it in In
 
 ## Prerequisites
 
-- Docker + Docker Compose
+- Docker + Docker Compose **or** Podman + podman-compose
 - Go 1.22+
-- Python 3.11+
+- Python 3.12+
 - Garmin Connect account
-- Anthropic API key
 
 ## Quick Start
 
@@ -26,7 +25,11 @@ Pulls activity, sleep, HRV, and health data from Garmin Connect. Stores it in In
 cp .env.example .env
 # Edit .env with your credentials
 
+# Docker
 docker compose up -d
+
+# Podman
+podman-compose up -d
 ```
 
 Grafana: http://localhost:3001 (admin / see .env)
