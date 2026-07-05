@@ -30,7 +30,7 @@ docker compose up -d
 ```
 
 Grafana: http://localhost:3000 (admin / see .env)
-InfluxDB: http://localhost:8086
+InfluxDB: http://localhost:8181
 
 ## Environment Variables
 

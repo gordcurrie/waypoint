@@ -1,0 +1,26 @@
+# MCP server as HTTP service for homelab/remote deployment.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
+#
+# Claude config (claude_desktop_config.json or Claude Code settings):
+#   {
+#     "waypoint": {
+#       "type": "http",
+#       "url": "http://<host>:8080/mcp"
+#     }
+#   }
+
+services:
+  mcp-server:
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+    environment:
+      INFLUXDB_URL: http://influxdb:8181
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      INFLUXDB_DATABASE: ${INFLUXDB_BUCKET:-garmin}
+    command: ["--transport=http", "--addr=0.0.0.0:8080"]
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped

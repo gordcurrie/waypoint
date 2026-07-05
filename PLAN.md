@@ -285,7 +285,7 @@ Single `config.yaml` + env var overrides via Viper. Supports:
 
 ## Verification Plan
 
-1. `docker-compose up` → Grafana at :3000, InfluxDB at :8086
+1. `docker-compose up` → Grafana at :3000, InfluxDB at :8181
 2. Python sync runs → data appears in InfluxDB
 3. Grafana dashboard 23245 shows real data
 4. `waypoint-mcp` binary starts (stdio), registers with Claude Desktop/Code
