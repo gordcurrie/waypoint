@@ -1,0 +1,77 @@
+services:
+  influxdb:
+    image: influxdb:3-core
+    ports:
+      - "127.0.0.1:8181:8181"
+    volumes:
+      - influxdb_data:/var/lib/influxdb3/data
+      - influxdb_plugins:/var/lib/influxdb3/plugins
+    environment:
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-garmin}
+    command:
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --plugin-dir=/var/lib/influxdb3/plugins
+      - --http-bind=0.0.0.0:8181
+      - --without-auth
+    healthcheck:
+      test: ["CMD-SHELL", "influxdb3 show databases --host http://localhost:8181 2>/dev/null | grep -q '${INFLUXDB_BUCKET:-garmin}'"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  influxdb-init:
+    image: influxdb:3-core
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until influxdb3 show databases --host http://influxdb:8181 2>/dev/null | grep -q "${INFLUXDB_BUCKET:-garmin}"; do
+          influxdb3 create database "${INFLUXDB_BUCKET:-garmin}" --host http://influxdb:8181 2>/dev/null || true
+          sleep 1
+        done
+    depends_on:
+      influxdb:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-garmin}
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  sync:
+    build: ./sync
+    environment:
+      GARMIN_EMAIL: ${GARMIN_EMAIL}
+      GARMIN_PASSWORD: ${GARMIN_PASSWORD}
+      INFLUXDB_URL: http://influxdb:8181
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      INFLUXDB_DATABASE: ${INFLUXDB_BUCKET:-garmin}
+      SYNC_SCHEDULE: ${SYNC_SCHEDULE:-*/30 * * * *}
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  influxdb_data:
+  influxdb_plugins:
+  grafana_data:
