@@ -66,6 +66,9 @@ services:
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
       INFLUXDB_DATABASE: ${INFLUXDB_BUCKET:-garmin}
       SYNC_SCHEDULE: ${SYNC_SCHEDULE:-*/30 * * * *}
+      BACKFILL_DAYS: ${BACKFILL_DAYS:-90}
+    volumes:
+      - sync_data:/data
     depends_on:
       influxdb:
         condition: service_healthy
@@ -75,3 +78,4 @@ volumes:
   influxdb_data:
   influxdb_plugins:
   grafana_data:
+  sync_data:
