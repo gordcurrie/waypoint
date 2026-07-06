@@ -57,13 +57,19 @@ log = logging.getLogger(__name__)
 
 def _load_state() -> dict[str, Any]:
     if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text())
+        try:
+            return json.loads(STATE_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            log.warning("State file corrupt — resetting to empty state")
+            return {}
     return {}
 
 
 def _save_state(state: dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, indent=2))
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    tmp.replace(STATE_FILE)
 
 
 def _last_synced(state: dict[str, Any], key: str) -> date:
@@ -115,8 +121,11 @@ def _write(client: InfluxDBClient3, points: list[Any]) -> None:
 
 
 def _parse_gmt(ts: str) -> datetime:
-    # Garmin sometimes appends fractional seconds; strip before parsing
-    return datetime.strptime(ts.split(".")[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+    # Garmin sometimes appends fractional seconds; strip before parsing.
+    # Replace T separator so both "2026-07-06 10:30:00" and "2026-07-06T10:30:00" work.
+    return datetime.strptime(ts.split(".")[0].replace("T", " "), "%Y-%m-%d %H:%M:%S").replace(
+        tzinfo=UTC
+    )
 
 
 def _day_ts(d: date) -> datetime:
@@ -207,7 +216,7 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, An
             p, n = _add_fields(p, fields)
             if n:
                 points.append(p)
-        except GarminConnectAuthenticationError:
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
             raise
         except Exception as exc:
             log.warning("activity %s: %s", a.get("activityId"), exc)
@@ -224,6 +233,7 @@ def sync_daily_stats(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
 
     points = []
     d = start
+    _first_err: date | None = None
     while d <= end:
         try:
             s = garmin.get_stats(d.isoformat())
@@ -244,15 +254,18 @@ def sync_daily_stats(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except GarminConnectAuthenticationError:
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
             raise
         except Exception as exc:
+            if _first_err is None:
+                _first_err = d
             log.warning("daily_stats %s: %s", d, exc)
         d += timedelta(days=1)
         time.sleep(0.2)
 
+    watermark = (_first_err - timedelta(days=1)) if _first_err else end
     _write(client, points)
-    _advance_state(state, "daily_stats", points, end)
+    _advance_state(state, "daily_stats", points, watermark)
     log.info("daily_stats: wrote %d points", len(points))
 
 
@@ -263,12 +276,17 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -
 
     points = []
     d = start
+    _first_err: date | None = None
     while d <= end:
         try:
             raw = garmin.get_sleep_data(d.isoformat())
             if raw:
                 daily = raw.get("dailySleepDTO") or {}
-                scores = raw.get("sleepScores") or {}
+                # sleepScores can be a dict or a list; normalise to dict
+                _ss = raw.get("sleepScores")
+                scores: dict[str, Any] = (
+                    (_ss[0] if _ss else {}) if isinstance(_ss, list) else (_ss or {})
+                )
                 p = Point("sleep").time(_day_ts(d))
                 fields = {
                     "total_sleep_s": _fval(daily, "sleepTimeSeconds"),
@@ -285,15 +303,18 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except GarminConnectAuthenticationError:
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
             raise
         except Exception as exc:
+            if _first_err is None:
+                _first_err = d
             log.warning("sleep %s: %s", d, exc)
         d += timedelta(days=1)
         time.sleep(0.2)
 
+    watermark = (_first_err - timedelta(days=1)) if _first_err else end
     _write(client, points)
-    _advance_state(state, "sleep", points, end)
+    _advance_state(state, "sleep", points, watermark)
     log.info("sleep: wrote %d points", len(points))
 
 
@@ -305,11 +326,14 @@ def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> 
     status_num = {"BALANCED": 2.0, "UNBALANCED": 1.0, "POOR": 0.0}
     points = []
     d = start
+    _first_err: date | None = None
     while d <= end:
         try:
             raw = garmin.get_hrv_data(d.isoformat())
             if raw:
-                summary = raw.get("hrvSummary") or raw
+                # get_hrv_data can return a list or a dict; normalise to dict first
+                item = raw[0] if isinstance(raw, list) else raw
+                summary = (item.get("hrvSummary") or item) if isinstance(item, dict) else item
                 p = Point("hrv").time(_day_ts(d))
                 fields = {
                     "weekly_avg_ms": _fval(summary, "weeklyAvg"),
@@ -320,15 +344,18 @@ def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> 
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except GarminConnectAuthenticationError:
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
             raise
         except Exception as exc:
+            if _first_err is None:
+                _first_err = d
             log.warning("hrv %s: %s", d, exc)
         d += timedelta(days=1)
         time.sleep(0.2)
 
+    watermark = (_first_err - timedelta(days=1)) if _first_err else end
     _write(client, points)
-    _advance_state(state, "hrv", points, end)
+    _advance_state(state, "hrv", points, watermark)
     log.info("hrv: wrote %d points", len(points))
 
 
@@ -339,6 +366,7 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
 
     points = []
     d = start
+    _first_err: date | None = None
     while d <= end:
         try:
             raw = garmin.get_training_readiness(d.isoformat())
@@ -355,15 +383,18 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except GarminConnectAuthenticationError:
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
             raise
         except Exception as exc:
+            if _first_err is None:
+                _first_err = d
             log.warning("training_readiness %s: %s", d, exc)
         d += timedelta(days=1)
         time.sleep(0.2)
 
+    watermark = (_first_err - timedelta(days=1)) if _first_err else end
     _write(client, points)
-    _advance_state(state, "training_readiness", points, end)
+    _advance_state(state, "training_readiness", points, watermark)
     log.info("training_readiness: wrote %d points", len(points))
 
 
@@ -382,11 +413,18 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
     }
     points = []
     d = start
+    _first_err: date | None = None
     while d <= end:
         try:
             raw = garmin.get_training_status(d.isoformat())
             if raw:
-                latest = raw.get("latestTrainingStatusData") or raw
+                # get_training_status can return a list; normalise like training_readiness
+                item = raw[0] if isinstance(raw, list) else raw
+                latest = (
+                    (item.get("latestTrainingStatusData") or item)
+                    if isinstance(item, dict)
+                    else item
+                )
                 p = Point("training_status").time(_day_ts(d))
                 status_str = str(latest.get("trainingStatus", "")).lower()
                 fields = {
@@ -398,15 +436,18 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except GarminConnectAuthenticationError:
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
             raise
         except Exception as exc:
+            if _first_err is None:
+                _first_err = d
             log.warning("training_status %s: %s", d, exc)
         d += timedelta(days=1)
         time.sleep(0.2)
 
+    watermark = (_first_err - timedelta(days=1)) if _first_err else end
     _write(client, points)
-    _advance_state(state, "training_status", points, end)
+    _advance_state(state, "training_status", points, watermark)
     log.info("training_status: wrote %d points", len(points))
 
 
@@ -418,6 +459,7 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
 
     points = []
     d = start
+    _first_err: date | None = None
     while d <= end:
         try:
             raw = garmin.get_max_metrics(d.isoformat())
@@ -432,35 +474,55 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except GarminConnectAuthenticationError:
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
             raise
         except Exception as exc:
+            if _first_err is None:
+                _first_err = d
             log.warning("performance %s: %s", d, exc)
         d += timedelta(days=1)
         time.sleep(0.2)
 
+    watermark = (_first_err - timedelta(days=1)) if _first_err else end
     _write(client, points)
-    _advance_state(state, "performance", points, end)
+    _advance_state(state, "performance", points, watermark)
     log.info("performance: wrote %d points", len(points))
 
 
 def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """Most-recent lactate threshold result — separate measurement avoids timestamp collision with performance."""
-    end = date.today()
     log.info("lactate_threshold: fetching most recent")
     try:
         lt = garmin.get_lactate_threshold()
-        if lt:
-            p = Point("lactate_threshold").time(_day_ts(end))
-            fields = {
-                "lt_hr_bpm": _fval(lt, "heartRateThreshold"),
-                "lt_pace_s_per_km": _fval(lt, "paceThreshold"),
-            }
-            p, n = _add_fields(p, fields)
-            if n:
-                _write(client, [p])
-                log.info("lactate_threshold: wrote 1 point")
-    except GarminConnectAuthenticationError:
+        if not lt:
+            return
+        # Use the actual test date from the API response; fall back to today
+        raw_date = lt.get("testDate") or lt.get("date") or lt.get("dateTime")
+        if raw_date:
+            try:
+                test_date = date.fromisoformat(str(raw_date)[:10])
+            except (ValueError, TypeError):
+                test_date = date.today()
+        else:
+            test_date = date.today()
+
+        # Skip re-write if we already have this test date
+        if state.get("lactate_threshold") == test_date.isoformat():
+            log.info("lactate_threshold: already synced %s", test_date)
+            return
+
+        p = Point("lactate_threshold").time(_day_ts(test_date))
+        fields = {
+            "lt_hr_bpm": _fval(lt, "heartRateThreshold"),
+            "lt_pace_s_per_km": _fval(lt, "paceThreshold"),
+        }
+        p, n = _add_fields(p, fields)
+        if n:
+            _write(client, [p])
+            state["lactate_threshold"] = test_date.isoformat()
+            _save_state(state)
+            log.info("lactate_threshold: wrote 1 point at %s", test_date)
+    except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
         raise
     except Exception as exc:
         log.warning("lactate_threshold: %s", exc)
@@ -473,6 +535,7 @@ def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
 
     points = []
     d = start
+    _first_err: date | None = None
     while d <= end:
         try:
             raw = garmin.get_respiration_data(d.isoformat())
@@ -487,15 +550,18 @@ def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except GarminConnectAuthenticationError:
+        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
             raise
         except Exception as exc:
+            if _first_err is None:
+                _first_err = d
             log.warning("respiration %s: %s", d, exc)
         d += timedelta(days=1)
         time.sleep(0.2)
 
+    watermark = (_first_err - timedelta(days=1)) if _first_err else end
     _write(client, points)
-    _advance_state(state, "respiration", points, end)
+    _advance_state(state, "respiration", points, watermark)
     log.info("respiration: wrote %d points", len(points))
 
 
@@ -519,7 +585,11 @@ def run_sync(garmin: Garmin, client: InfluxDBClient3) -> None:
     for fn in SYNC_FUNCS:
         try:
             fn(garmin, client, state)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise  # handled by main loop
         except Exception as exc:
             log.error("%s failed: %s", fn.__name__, exc)

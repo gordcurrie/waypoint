@@ -55,6 +55,50 @@ grafana/          Provisioning and dashboards
 - **Phase 2**: CLI tool
 - **Phase 3**: Web UI (if warranted)
 
+## Development
+
+### Python sync sidecar (`sync/`)
+
+Install dev dependencies:
+
+```bash
+pip install -r sync/requirements-dev.txt
+```
+
+Run linter (ruff):
+```bash
+ruff check sync/
+ruff format --check sync/
+```
+
+Run type checker (mypy):
+```bash
+mypy --config-file sync/pyproject.toml sync/sync.py
+```
+
+Run tests (pytest):
+```bash
+pytest sync/
+```
+
+CI runs all three on every push/PR to `main` via `.github/workflows/ci.yml`.
+
+Config lives in `sync/pyproject.toml` (ruff, mypy, pytest all in one file).
+
+### Interactive Garmin auth
+
+First run (or after token expiry) requires an interactive MFA step:
+
+```bash
+podman run --rm -it \
+  -v waypoint_sync_data:/data \
+  -e GARMIN_EMAIL=you@example.com \
+  -e GARMIN_PASSWORD=yourpassword \
+  localhost/waypoint_sync python auth.py
+```
+
+This saves a token to `/data/garmin_auth`. Subsequent syncs use the token — no MFA required until it expires.
+
 ## Disclaimer
 
 Uses Garmin's unofficial API. For personal use only. Not affiliated with Garmin.

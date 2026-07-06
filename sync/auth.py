@@ -16,7 +16,7 @@ from pathlib import Path
 
 from garminconnect import Garmin
 
-email    = os.environ["GARMIN_EMAIL"]
+email = os.environ["GARMIN_EMAIL"]
 password = os.environ["GARMIN_PASSWORD"]
 data_dir = Path(os.environ.get("DATA_DIR", "/data"))
 token_store = str(data_dir / "garmin_auth")

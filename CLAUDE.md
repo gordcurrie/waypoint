@@ -49,6 +49,30 @@ the `training_load` measurement for Grafana. No background worker or separate tr
 6. `tools/` + `cmd/mcp-server/` — MCP server (Phase 1 complete)
 7. `internal/llm/` + `cmd/cli/` — CLI (Phase 2)
 
+## Python sync toolchain (`sync/`)
+
+Tools: **ruff** (lint + format), **mypy** (strict type checking), **pytest** + **freezegun** (tests).
+
+Config: `sync/pyproject.toml` — ruff, mypy, and pytest all configured there.
+Dev deps: `sync/requirements-dev.txt` (includes `-r requirements.txt`).
+
+Run commands:
+```bash
+ruff check sync/          # lint
+ruff format --check sync/ # format check
+mypy --config-file sync/pyproject.toml sync/sync.py
+pytest sync/
+```
+
+CI: `.github/workflows/ci.yml` — runs all four checks on push/PR to main.
+
+Key conventions:
+- Tests in `sync/tests/`, discovered via `testpaths = ["tests"]` in pyproject.toml
+- `sync/conftest.py` sets required env vars before `sync` is imported (module-level env reads)
+- `conftest.py` patches `DATA_DIR`/`TOKEN_STORE`/`STATE_FILE` to `tmp_path` — no `/data` volume needed in tests
+- mypy strict with `disable_error_code = ["import-untyped", "no-untyped-call", "no-untyped-def", "no-any-return"]` to suppress third-party untyped-lib noise
+- CI passes `--config-file sync/pyproject.toml` explicitly — mypy won't find it from repo root otherwise
+
 ## Go module
 
 `github.com/gordcurrie/waypoint`
