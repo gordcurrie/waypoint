@@ -60,6 +60,7 @@ services:
     environment:
       GARMIN_EMAIL: ${GARMIN_EMAIL}
       GARMIN_PASSWORD: ${GARMIN_PASSWORD}
+      GARMIN_MFA_CODE: ${GARMIN_MFA_CODE:-}
       INFLUXDB_URL: http://influxdb:8181
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
       INFLUXDB_DATABASE: ${INFLUXDB_BUCKET:-garmin}
