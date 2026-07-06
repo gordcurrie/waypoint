@@ -18,9 +18,9 @@ import logging
 import os
 import re
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 from garminconnect import (
     Garmin,
@@ -32,20 +32,20 @@ from influxdb_client_3 import InfluxDBClient3, Point
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-GARMIN_EMAIL    = os.environ["GARMIN_EMAIL"]
+GARMIN_EMAIL = os.environ["GARMIN_EMAIL"]
 GARMIN_PASSWORD = os.environ["GARMIN_PASSWORD"]
 GARMIN_MFA_CODE = os.environ.get("GARMIN_MFA_CODE", "")  # one-shot MFA for automated envs
-INFLUXDB_URL    = os.environ["INFLUXDB_URL"]
-INFLUXDB_DB     = os.environ.get("INFLUXDB_DATABASE", "garmin")
-INFLUXDB_TOKEN  = os.environ.get("INFLUXDB_TOKEN", "")
-BACKFILL_DAYS   = int(os.environ.get("BACKFILL_DAYS", "90"))
-DATA_DIR        = Path(os.environ.get("DATA_DIR", "/data"))
-TOKEN_STORE     = str(DATA_DIR / "garmin_auth")
-STATE_FILE      = DATA_DIR / "sync_state.json"
+INFLUXDB_URL = os.environ["INFLUXDB_URL"]
+INFLUXDB_DB = os.environ.get("INFLUXDB_DATABASE", "garmin")
+INFLUXDB_TOKEN = os.environ.get("INFLUXDB_TOKEN", "")
+BACKFILL_DAYS = int(os.environ.get("BACKFILL_DAYS", "90"))
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
+TOKEN_STORE = str(DATA_DIR / "garmin_auth")
+STATE_FILE = DATA_DIR / "sync_state.json"
 
 # Guard against SYNC_SCHEDULE="" which would cause IndexError on split()[0]
-_cron           = os.environ.get("SYNC_SCHEDULE", "*/30 * * * *")
-_cron_parts     = _cron.split()
+_cron = os.environ.get("SYNC_SCHEDULE", "*/30 * * * *")
+_cron_parts = _cron.split()
 _interval_match = re.match(r"\*/(\d+)", _cron_parts[0]) if _cron_parts else None
 SYNC_INTERVAL_S = int(_interval_match.group(1)) * 60 if _interval_match else 1800
 
@@ -54,24 +54,26 @@ log = logging.getLogger(__name__)
 
 # ── State ──────────────────────────────────────────────────────────────────────
 
-def _load_state() -> dict:
+
+def _load_state() -> dict[str, Any]:
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text())
     return {}
 
 
-def _save_state(state: dict) -> None:
+def _save_state(state: dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
-def _last_synced(state: dict, key: str) -> date:
+def _last_synced(state: dict[str, Any], key: str) -> date:
     if key in state:
         return date.fromisoformat(state[key])
     return date.today() - timedelta(days=BACKFILL_DAYS)
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
+
 
 def _garmin_login() -> Garmin:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -95,6 +97,7 @@ def _garmin_login() -> Garmin:
 
 # ── InfluxDB ───────────────────────────────────────────────────────────────────
 
+
 def _influx_client() -> InfluxDBClient3:
     return InfluxDBClient3(
         host=INFLUXDB_URL,
@@ -103,23 +106,24 @@ def _influx_client() -> InfluxDBClient3:
     )
 
 
-def _write(client: InfluxDBClient3, points: list) -> None:
+def _write(client: InfluxDBClient3, points: list[Any]) -> None:
     if points:
         client.write(record=points)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+
 def _parse_gmt(ts: str) -> datetime:
     # Garmin sometimes appends fractional seconds; strip before parsing
-    return datetime.strptime(ts.split(".")[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    return datetime.strptime(ts.split(".")[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
 
 
 def _day_ts(d: date) -> datetime:
-    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+    return datetime(d.year, d.month, d.day, tzinfo=UTC)
 
 
-def _fval(data, *keys) -> Optional[float]:
+def _fval(data: Any, *keys: str) -> float | None:
     """Safe nested float extraction from a dict."""
     v = data
     for k in keys:
@@ -134,7 +138,7 @@ def _fval(data, *keys) -> Optional[float]:
         return None
 
 
-def _add_fields(p: Point, fields: dict) -> tuple[Point, int]:
+def _add_fields(p: Point, fields: dict[str, Any]) -> tuple[Point, int]:
     """Add non-None fields to point; return (point, count_added)."""
     count = 0
     for k, v in fields.items():
@@ -144,7 +148,7 @@ def _add_fields(p: Point, fields: dict) -> tuple[Point, int]:
     return p, count
 
 
-def _advance_state(state: dict, key: str, points: list, end: date) -> None:
+def _advance_state(state: dict[str, Any], key: str, points: list[Any], end: date) -> None:
     """Advance watermark only if data was written; guards against silent all-fail loops."""
     if points:
         state[key] = end.isoformat()
@@ -155,9 +159,10 @@ def _advance_state(state: dict, key: str, points: list, end: date) -> None:
 
 # ── Sync functions ─────────────────────────────────────────────────────────────
 
-def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+
+def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "activities")
-    end   = date.today()
+    end = date.today()
     log.info("activities: %s → %s", start, end)
 
     activities = garmin.get_activities_by_date(start.isoformat(), end.isoformat())
@@ -173,29 +178,31 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict) -> Non
             p = Point("activity").tag("sport", sport).time(_parse_gmt(ts_str))
 
             # Use is not None check to handle activityId=0 correctly
-            fields: dict = {
-                "activity_id":      float(a["activityId"]) if a.get("activityId") is not None else None,
-                "distance_m":       _fval(a, "distance"),
-                "duration_s":       _fval(a, "duration"),
-                "avg_hr_bpm":       _fval(a, "averageHR"),
-                "max_hr_bpm":       _fval(a, "maxHR"),
-                "calories_kcal":    _fval(a, "calories"),
+            fields: dict[str, Any] = {
+                "activity_id": float(a["activityId"]) if a.get("activityId") is not None else None,
+                "distance_m": _fval(a, "distance"),
+                "duration_s": _fval(a, "duration"),
+                "avg_hr_bpm": _fval(a, "averageHR"),
+                "max_hr_bpm": _fval(a, "maxHR"),
+                "calories_kcal": _fval(a, "calories"),
                 "elevation_gain_m": _fval(a, "elevationGain"),
-                "avg_speed_m_s":    _fval(a, "avgSpeed"),
-                "training_load":    _fval(a, "activityTrainingLoad"),
-                "aerobic_te":       _fval(a, "aerobicTrainingEffect"),
-                "anaerobic_te":     _fval(a, "anaerobicTrainingEffect"),
-                "vo2max":           _fval(a, "vO2MaxValue"),
+                "avg_speed_m_s": _fval(a, "avgSpeed"),
+                "training_load": _fval(a, "activityTrainingLoad"),
+                "aerobic_te": _fval(a, "aerobicTrainingEffect"),
+                "anaerobic_te": _fval(a, "anaerobicTrainingEffect"),
+                "vo2max": _fval(a, "vO2MaxValue"),
             }
             if sport in ("running", "trail_running", "treadmill_running", "indoor_running"):
-                fields.update({
-                    "cadence_avg_spm":         _fval(a, "averageRunningCadenceInStepsPerMinute"),
-                    "ground_contact_time_ms":  _fval(a, "avgGroundContactTime"),
-                    "vertical_oscillation_mm": _fval(a, "avgVerticalOscillation"),
-                    "stride_length_mm":        _fval(a, "avgStrideLength"),
-                    "vertical_ratio_pct":      _fval(a, "avgVerticalRatio"),
-                    "avg_power_w":             _fval(a, "avgPower"),
-                })
+                fields.update(
+                    {
+                        "cadence_avg_spm": _fval(a, "averageRunningCadenceInStepsPerMinute"),
+                        "ground_contact_time_ms": _fval(a, "avgGroundContactTime"),
+                        "vertical_oscillation_mm": _fval(a, "avgVerticalOscillation"),
+                        "stride_length_mm": _fval(a, "avgStrideLength"),
+                        "vertical_ratio_pct": _fval(a, "avgVerticalRatio"),
+                        "avg_power_w": _fval(a, "avgPower"),
+                    }
+                )
 
             p, n = _add_fields(p, fields)
             if n:
@@ -210,9 +217,9 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict) -> Non
     log.info("activities: wrote %d points", len(points))
 
 
-def sync_daily_stats(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+def sync_daily_stats(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "daily_stats")
-    end   = date.today()
+    end = date.today()
     log.info("daily_stats: %s → %s", start, end)
 
     points = []
@@ -223,14 +230,14 @@ def sync_daily_stats(garmin: Garmin, client: InfluxDBClient3, state: dict) -> No
             if s:
                 p = Point("daily_stats").time(_day_ts(d))
                 fields = {
-                    "steps":                  _fval(s, "totalSteps"),
-                    "resting_hr_bpm":         _fval(s, "restingHeartRate"),
-                    "body_battery_max":        _fval(s, "bodyBatteryHighestValue"),
-                    "body_battery_min":        _fval(s, "bodyBatteryLowestValue"),
-                    "stress_avg":             _fval(s, "averageStressLevel"),
-                    "active_calories":        _fval(s, "activeKilocalories"),
-                    "total_calories":         _fval(s, "totalKilocalories"),
-                    "floors_ascended":        _fval(s, "floorsAscended"),
+                    "steps": _fval(s, "totalSteps"),
+                    "resting_hr_bpm": _fval(s, "restingHeartRate"),
+                    "body_battery_max": _fval(s, "bodyBatteryHighestValue"),
+                    "body_battery_min": _fval(s, "bodyBatteryLowestValue"),
+                    "stress_avg": _fval(s, "averageStressLevel"),
+                    "active_calories": _fval(s, "activeKilocalories"),
+                    "total_calories": _fval(s, "totalKilocalories"),
+                    "floors_ascended": _fval(s, "floorsAscended"),
                     "vigorous_intensity_min": _fval(s, "vigorousIntensityMinutes"),
                     "moderate_intensity_min": _fval(s, "moderateIntensityMinutes"),
                 }
@@ -249,9 +256,9 @@ def sync_daily_stats(garmin: Garmin, client: InfluxDBClient3, state: dict) -> No
     log.info("daily_stats: wrote %d points", len(points))
 
 
-def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "sleep")
-    end   = date.today()
+    end = date.today()
     log.info("sleep: %s → %s", start, end)
 
     points = []
@@ -260,20 +267,20 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
         try:
             raw = garmin.get_sleep_data(d.isoformat())
             if raw:
-                daily  = raw.get("dailySleepDTO") or {}
+                daily = raw.get("dailySleepDTO") or {}
                 scores = raw.get("sleepScores") or {}
                 p = Point("sleep").time(_day_ts(d))
                 fields = {
-                    "total_sleep_s":      _fval(daily, "sleepTimeSeconds"),
-                    "deep_sleep_s":       _fval(daily, "deepSleepSeconds"),
-                    "light_sleep_s":      _fval(daily, "lightSleepSeconds"),
-                    "rem_sleep_s":        _fval(daily, "remSleepSeconds"),
-                    "awake_s":            _fval(daily, "awakeSleepSeconds"),
-                    "sleep_score":        _fval(scores, "overall", "value"),
-                    "avg_hrv_ms":         _fval(daily, "avgOvernightHrv"),
-                    "avg_spo2_pct":       _fval(daily, "averageSpO2Value"),
+                    "total_sleep_s": _fval(daily, "sleepTimeSeconds"),
+                    "deep_sleep_s": _fval(daily, "deepSleepSeconds"),
+                    "light_sleep_s": _fval(daily, "lightSleepSeconds"),
+                    "rem_sleep_s": _fval(daily, "remSleepSeconds"),
+                    "awake_s": _fval(daily, "awakeSleepSeconds"),
+                    "sleep_score": _fval(scores, "overall", "value"),
+                    "avg_hrv_ms": _fval(daily, "avgOvernightHrv"),
+                    "avg_spo2_pct": _fval(daily, "averageSpO2Value"),
                     "avg_breathing_rate": _fval(daily, "averageRespirationValue"),
-                    "avg_stress":         _fval(daily, "avgSleepStress"),
+                    "avg_stress": _fval(daily, "avgSleepStress"),
                 }
                 p, n = _add_fields(p, fields)
                 if n:
@@ -290,9 +297,9 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
     log.info("sleep: wrote %d points", len(points))
 
 
-def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "hrv")
-    end   = date.today()
+    end = date.today()
     log.info("hrv: %s → %s", start, end)
 
     status_num = {"BALANCED": 2.0, "UNBALANCED": 1.0, "POOR": 0.0}
@@ -305,10 +312,10 @@ def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
                 summary = raw.get("hrvSummary") or raw
                 p = Point("hrv").time(_day_ts(d))
                 fields = {
-                    "weekly_avg_ms":     _fval(summary, "weeklyAvg"),
-                    "last_night_ms":     _fval(summary, "lastNight"),
+                    "weekly_avg_ms": _fval(summary, "weeklyAvg"),
+                    "last_night_ms": _fval(summary, "lastNight"),
                     "last_5min_high_ms": _fval(summary, "lastNight5MinHigh"),
-                    "status":            status_num.get(str(summary.get("status", "")), None),
+                    "status": status_num.get(str(summary.get("status", "")), None),
                 }
                 p, n = _add_fields(p, fields)
                 if n:
@@ -325,9 +332,9 @@ def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
     log.info("hrv: wrote %d points", len(points))
 
 
-def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "training_readiness")
-    end   = date.today()
+    end = date.today()
     log.info("training_readiness: %s → %s", start, end)
 
     points = []
@@ -339,11 +346,11 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
                 item = raw[0] if isinstance(raw, list) else raw
                 p = Point("training_readiness").time(_day_ts(d))
                 fields = {
-                    "score":           _fval(item, "score"),
-                    "hrv_status":      _fval(item, "hrvStatus"),
-                    "sleep_score":     _fval(item, "sleepScore"),
+                    "score": _fval(item, "score"),
+                    "hrv_status": _fval(item, "hrvStatus"),
+                    "sleep_score": _fval(item, "sleepScore"),
                     "recovery_time_h": _fval(item, "recoveryTime"),
-                    "acw_ratio":       _fval(item, "acwRatio"),
+                    "acw_ratio": _fval(item, "acwRatio"),
                 }
                 p, n = _add_fields(p, fields)
                 if n:
@@ -360,14 +367,18 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
     log.info("training_readiness: wrote %d points", len(points))
 
 
-def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "training_status")
-    end   = date.today()
+    end = date.today()
     log.info("training_status: %s → %s", start, end)
 
     status_num = {
-        "peaking": 5.0, "maintaining": 4.0, "productive": 3.0,
-        "recovery": 2.0, "detraining": 1.0, "overreaching": 0.0,
+        "peaking": 5.0,
+        "maintaining": 4.0,
+        "productive": 3.0,
+        "recovery": 2.0,
+        "detraining": 1.0,
+        "overreaching": 0.0,
     }
     points = []
     d = start
@@ -379,10 +390,10 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict) -
                 p = Point("training_status").time(_day_ts(d))
                 status_str = str(latest.get("trainingStatus", "")).lower()
                 fields = {
-                    "status_num":     status_num.get(status_str, None),
+                    "status_num": status_num.get(status_str, None),
                     "vo2max_running": _fval(latest, "latestRunningVO2MaxValue"),
                     "vo2max_cycling": _fval(latest, "latestCyclingVO2MaxValue"),
-                    "fitness_age":    _fval(latest, "fitnessAge"),
+                    "fitness_age": _fval(latest, "fitnessAge"),
                 }
                 p, n = _add_fields(p, fields)
                 if n:
@@ -399,10 +410,10 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict) -
     log.info("training_status: wrote %d points", len(points))
 
 
-def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """VO2 max / fitness age per day. Lactate threshold written to its own measurement."""
     start = _last_synced(state, "performance")
-    end   = date.today()
+    end = date.today()
     log.info("performance: %s → %s", start, end)
 
     points = []
@@ -411,11 +422,11 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict) -> No
         try:
             raw = garmin.get_max_metrics(d.isoformat())
             if raw:
-                item    = raw[0] if isinstance(raw, list) else raw
+                item = raw[0] if isinstance(raw, list) else raw
                 generic = item.get("generic") or item
                 p = Point("performance").time(_day_ts(d))
                 fields = {
-                    "vo2max":      _fval(generic, "vo2MaxPreciseValue"),
+                    "vo2max": _fval(generic, "vo2MaxPreciseValue"),
                     "fitness_age": _fval(generic, "fitnessAge"),
                 }
                 p, n = _add_fields(p, fields)
@@ -433,7 +444,7 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict) -> No
     log.info("performance: wrote %d points", len(points))
 
 
-def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """Most-recent lactate threshold result — separate measurement avoids timestamp collision with performance."""
     end = date.today()
     log.info("lactate_threshold: fetching most recent")
@@ -442,7 +453,7 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict)
         if lt:
             p = Point("lactate_threshold").time(_day_ts(end))
             fields = {
-                "lt_hr_bpm":        _fval(lt, "heartRateThreshold"),
+                "lt_hr_bpm": _fval(lt, "heartRateThreshold"),
                 "lt_pace_s_per_km": _fval(lt, "paceThreshold"),
             }
             p, n = _add_fields(p, fields)
@@ -455,9 +466,9 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict)
         log.warning("lactate_threshold: %s", exc)
 
 
-def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict) -> None:
+def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "respiration")
-    end   = date.today()
+    end = date.today()
     log.info("respiration: %s → %s", start, end)
 
     points = []
@@ -469,9 +480,9 @@ def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict) -> No
                 p = Point("respiration").time(_day_ts(d))
                 fields = {
                     "avg_waking_brpm": _fval(raw, "avgWakingRespirationValue"),
-                    "avg_sleep_brpm":  _fval(raw, "avgSleepRespirationValue"),
-                    "highest_brpm":    _fval(raw, "highestRespirationValue"),
-                    "lowest_brpm":     _fval(raw, "lowestRespirationValue"),
+                    "avg_sleep_brpm": _fval(raw, "avgSleepRespirationValue"),
+                    "highest_brpm": _fval(raw, "highestRespirationValue"),
+                    "lowest_brpm": _fval(raw, "lowestRespirationValue"),
                 }
                 p, n = _add_fields(p, fields)
                 if n:
@@ -537,7 +548,8 @@ if __name__ == "__main__":
                 "Initial login failed: %s. "
                 "If MFA is required, set GARMIN_MFA_CODE or run sync/auth.py to seed the token. "
                 "Retrying in %ds.",
-                exc, _login_backoff,
+                exc,
+                _login_backoff,
             )
             time.sleep(_login_backoff)
             _login_backoff = min(_login_backoff * 2, 1800)

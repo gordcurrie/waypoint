@@ -1,0 +1,19 @@
+"""Set required env vars before sync.py is imported (module-level reads os.environ)."""
+
+import os
+
+import pytest
+
+os.environ.setdefault("GARMIN_EMAIL", "test@test.com")
+os.environ.setdefault("GARMIN_PASSWORD", "testpass")
+os.environ.setdefault("INFLUXDB_URL", "http://localhost:8181")
+
+import sync  # noqa: E402  (must come after env setup)
+
+
+@pytest.fixture(autouse=True)
+def _safe_data_dir(tmp_path, monkeypatch):
+    """Redirect all file I/O away from /data so tests run without Docker volumes."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(sync, "TOKEN_STORE", str(tmp_path / "garmin_auth"))
+    monkeypatch.setattr(sync, "STATE_FILE", tmp_path / "sync_state.json")
