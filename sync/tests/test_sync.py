@@ -55,27 +55,39 @@ def test_fval_non_numeric():
 # ── _advance_state ─────────────────────────────────────────────────────────────
 
 
-def test_advance_state_with_points():
+def test_advance_state_advances_watermark():
     state: dict = {}
     with patch.object(sync, "_save_state") as mock_save:
-        sync._advance_state(state, "activities", [MagicMock()], date(2026, 7, 6))
+        sync._advance_state(state, "activities", date(2026, 7, 6))
     assert state["activities"] == "2026-07-06"
     mock_save.assert_called_once_with(state)
 
 
-def test_advance_state_no_points_does_not_save():
+def test_advance_state_advances_on_empty_day():
+    """Rest day (zero points, no error) must still advance watermark."""
     state: dict = {}
     with patch.object(sync, "_save_state") as mock_save:
-        sync._advance_state(state, "activities", [], date(2026, 7, 6))
-    assert "activities" not in state
+        sync._advance_state(state, "activities", date(2026, 7, 6))
+    assert state["activities"] == "2026-07-06"
+    mock_save.assert_called_once_with(state)
+
+
+def test_advance_state_regression_guard():
+    """Watermark must never move backward."""
+    state = {"activities": "2026-07-06"}
+    with patch.object(sync, "_save_state") as mock_save:
+        sync._advance_state(state, "activities", date(2026, 7, 5))
+    assert state["activities"] == "2026-07-06"
     mock_save.assert_not_called()
 
 
-def test_advance_state_no_points_does_not_overwrite_existing():
-    state = {"activities": "2026-07-01"}
-    with patch.object(sync, "_save_state"):
-        sync._advance_state(state, "activities", [], date(2026, 7, 6))
-    assert state["activities"] == "2026-07-01"
+def test_advance_state_regression_guard_same_date():
+    """Watermark equal to existing should also not trigger a write."""
+    state = {"activities": "2026-07-06"}
+    with patch.object(sync, "_save_state") as mock_save:
+        sync._advance_state(state, "activities", date(2026, 7, 6))
+    assert state["activities"] == "2026-07-06"
+    mock_save.assert_not_called()
 
 
 # ── sync_activities ────────────────────────────────────────────────────────────
@@ -161,14 +173,14 @@ def test_activities_running_uses_avg_ground_contact_time():
 
 
 @freeze_time("2026-07-06")
-def test_activities_state_not_advanced_when_no_points():
+def test_activities_state_advanced_on_empty_response():
+    """No activities = rest day; watermark still advances so backfill window doesn't grow."""
     garmin = _make_garmin([])
     client = MagicMock()
     state: dict = {}
-    with patch.object(sync, "_save_state") as mock_save:
+    with patch.object(sync, "_save_state"):
         sync.sync_activities(garmin, client, state)
-    assert "activities" not in state
-    mock_save.assert_not_called()
+    assert state["activities"] == "2026-07-06"
 
 
 @freeze_time("2026-07-06")
