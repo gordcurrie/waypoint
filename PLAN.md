@@ -155,8 +155,11 @@ Measurement: training_status
   Fields: status_num (5=Peaking → 0=Overreaching), vo2max_running,
           vo2max_cycling, fitness_age
 
-Measurement: performance  (VO2 max updates after qualifying activity; LT after test)
-  Fields: vo2max, fitness_age, lt_hr_bpm, lt_pace_s_per_km
+Measurement: performance  (VO2 max / fitness age per day)
+  Fields: vo2max, fitness_age
+
+Measurement: lactate_threshold  (most recent LT test result)
+  Fields: lt_hr_bpm, lt_pace_s_per_km
 
 Measurement: respiration
   Fields: avg_waking_brpm, avg_sleep_brpm, highest_brpm, lowest_brpm
@@ -168,7 +171,7 @@ Measurement: training_load  (computed by Go on demand, written for Grafana)
 ### Python sync sidecar — `sync/`
 
 - `garminconnect` v0.3.6 with `curl_cffi` Chrome impersonation
-- Syncs all 8 data types above; first run backfills 90 days (configurable via `BACKFILL_DAYS`)
+- Syncs all 9 data types above; first run backfills 90 days (configurable via `BACKFILL_DAYS`)
 - Incremental after first run: per-measurement last-synced date in `/data/sync_state.json`
 - Auth tokens cached in `/data/garmin_auth` (Docker volume); survives container restarts
 - Writes via `influxdb3-python`; skips points with no data (all fields None)

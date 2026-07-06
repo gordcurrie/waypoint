@@ -6,8 +6,6 @@ services:
     volumes:
       - influxdb_data:/var/lib/influxdb3/data
       - influxdb_plugins:/var/lib/influxdb3/plugins
-    environment:
-      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-garmin}
     command:
       - influxdb3
       - serve
