@@ -1,8 +1,34 @@
 package influx
 
 import (
+	"strings"
 	"testing"
+	"time"
 )
+
+func TestNew_MissingHost(t *testing.T) {
+	_, err := New("", "token", "garmin")
+	if err == nil {
+		t.Fatal("expected error for empty host")
+	}
+}
+
+func TestNew_TrimsTrailingSlash(t *testing.T) {
+	c, err := New("http://localhost:8181/", "token", "garmin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.HasSuffix(c.host, "/") {
+		t.Errorf("host should not have trailing slash, got %q", c.host)
+	}
+}
+
+func TestNew_InvalidScheme(t *testing.T) {
+	_, err := New("ftp://localhost:8181", "token", "garmin")
+	if err == nil {
+		t.Fatal("expected error for non-http(s) scheme")
+	}
+}
 
 func TestNewFromEnv_MissingURL(t *testing.T) {
 	t.Setenv("INFLUXDB_URL", "")
@@ -37,7 +63,7 @@ func TestConfigFromEnv_ExplicitDatabase(t *testing.T) {
 }
 
 func TestMeasurementConstants(t *testing.T) {
-	// Ensure measurement names match what sync/sync.py writes (regression guard).
+	// Regression guard: names must match what sync/sync.py writes.
 	cases := map[string]string{
 		"activity":           MeasurementActivity,
 		"daily_stats":        MeasurementDailyStats,
@@ -53,6 +79,29 @@ func TestMeasurementConstants(t *testing.T) {
 	for want, got := range cases {
 		if got != want {
 			t.Errorf("measurement constant mismatch: want %q, got %q", want, got)
+		}
+	}
+}
+
+func TestPointLineProtocol(t *testing.T) {
+	ts := time.Unix(0, 1_700_000_000_000_000_000)
+	p := NewPoint("training_load").
+		SetTag("device", "forerunner").
+		SetField("atl_7day", 42.3).
+		SetField("ctl_42day", 56.1).
+		SetField("tsb", -13.8).
+		SetTimestamp(ts)
+
+	lp := p.LineProtocol()
+	if !strings.HasPrefix(lp, "training_load,device=forerunner ") {
+		t.Errorf("unexpected line protocol prefix: %q", lp)
+	}
+	if !strings.HasSuffix(lp, " 1700000000000000000") {
+		t.Errorf("unexpected line protocol suffix: %q", lp)
+	}
+	for _, field := range []string{"atl_7day=42.3", "ctl_42day=56.1", "tsb=-13.8"} {
+		if !strings.Contains(lp, field) {
+			t.Errorf("line protocol missing %q: %s", field, lp)
 		}
 	}
 }

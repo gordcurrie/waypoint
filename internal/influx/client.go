@@ -1,29 +1,47 @@
 package influx
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
-
-	"github.com/InfluxCommunity/influxdb3-go/v2/influxdb3"
+	"strings"
+	"time"
 )
 
-// Client wraps influxdb3.Client with helpers tuned for this project's env vars and schema.
+// Client talks to InfluxDB 3 Core over HTTP (no gRPC/Arrow Flight required).
+// Writes use /api/v3/write_lp; queries use /api/v3/query_sql (returns JSON).
 type Client struct {
-	db *influxdb3.Client
+	host     string
+	token    string
+	database string
+	http     *http.Client
 }
 
 // New creates a Client from explicit config values.
+// host must be a valid http:// or https:// URL.
 func New(host, token, database string) (*Client, error) {
-	db, err := influxdb3.New(influxdb3.ClientConfig{
-		Host:     host,
-		Token:    token,
-		Database: database,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("influx.New: %w", err)
+	if host == "" {
+		return nil, fmt.Errorf("influx.New: host is required")
 	}
-	return &Client{db: db}, nil
+	parsed, err := url.ParseRequestURI(host)
+	if err != nil {
+		return nil, fmt.Errorf("influx.New: invalid host URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("influx.New: host requires http or https scheme, got %q", parsed.Scheme)
+	}
+	return &Client{
+		// Reconstruct from parsed components to eliminate SSRF taint.
+		host:     parsed.Scheme + "://" + parsed.Host,
+		token:    token,
+		database: database,
+		http:     &http.Client{Timeout: 30 * time.Second},
+	}, nil
 }
 
 // configFromEnv reads InfluxDB connection parameters from environment variables.
@@ -53,54 +71,99 @@ func NewFromEnv() (*Client, error) {
 	return New(host, token, database)
 }
 
-// Close releases resources held by the client.
-func (c *Client) Close() error {
-	if err := c.db.Close(); err != nil {
-		return fmt.Errorf("influx.Close: %w", err)
-	}
-	return nil
-}
+// Close is a no-op — the HTTP client holds no persistent connections that need cleanup.
+func (c *Client) Close() error { return nil }
 
 // Query executes a SQL query and returns all rows as maps.
-// Callers should use the measurement constants in this package for query construction.
 func (c *Client) Query(ctx context.Context, sql string) ([]map[string]any, error) {
-	iter, err := c.db.Query(ctx, sql)
-	if err != nil {
-		return nil, fmt.Errorf("influx query: %w", err)
-	}
-	return collectRows(iter)
+	return c.queryJSON(ctx, sql, nil)
 }
 
-// QueryWithParameters executes a parameterized SQL query and returns all rows as maps.
-func (c *Client) QueryWithParameters(ctx context.Context, sql string, params influxdb3.QueryParameters) ([]map[string]any, error) {
-	iter, err := c.db.QueryWithParameters(ctx, sql, params)
-	if err != nil {
-		return nil, fmt.Errorf("influx query: %w", err)
-	}
-	return collectRows(iter)
+// QueryWithParams executes a parameterized SQL query.
+// Named parameters in the query (e.g. $start) are substituted from params.
+func (c *Client) QueryWithParams(ctx context.Context, sql string, params map[string]any) ([]map[string]any, error) {
+	return c.queryJSON(ctx, sql, params)
 }
 
-// WritePoints writes line-protocol points to InfluxDB.
-func (c *Client) WritePoints(ctx context.Context, points ...*influxdb3.Point) error {
-	if err := c.db.WritePoints(ctx, points); err != nil {
-		return fmt.Errorf("influx write: %w", err)
+// WritePoints writes one or more Points to InfluxDB in line-protocol format.
+func (c *Client) WritePoints(ctx context.Context, points ...*Point) error {
+	if len(points) == 0 {
+		return nil
 	}
-	return nil
-}
-
-func collectRows(iter *influxdb3.QueryIterator) ([]map[string]any, error) {
-	var rows []map[string]any
-	for iter.Next() {
-		row := iter.Value()
-		// Copy to avoid sharing the iterator's internal buffer.
-		copied := make(map[string]any, len(row))
-		for k, v := range row {
-			copied[k] = v
+	var sb strings.Builder
+	for i, p := range points {
+		if i > 0 {
+			sb.WriteByte('\n')
 		}
-		rows = append(rows, copied)
+		sb.WriteString(p.LineProtocol())
 	}
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("influx iterator: %w", err)
+	return c.writeLineProtocol(ctx, sb.String())
+}
+
+func (c *Client) queryJSON(ctx context.Context, sql string, params map[string]any) ([]map[string]any, error) {
+	payload := map[string]any{
+		"q":      sql,
+		"db":     c.database,
+		"format": "json",
+	}
+	if len(params) > 0 {
+		payload["params"] = params
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("influx.Query marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.host+"/api/v3/query_sql", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("influx.Query request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	resp, err := c.http.Do(req) //nolint:gosec // G704: URL built from config validated at New(); not from request input
+	if err != nil {
+		return nil, fmt.Errorf("influx.Query: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("influx.Query read: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("influx.Query: status %d: %s", resp.StatusCode, data)
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal(data, &rows); err != nil {
+		return nil, fmt.Errorf("influx.Query unmarshal: %w", err)
 	}
 	return rows, nil
+}
+
+func (c *Client) writeLineProtocol(ctx context.Context, lp string) error {
+	u := c.host + "/api/v3/write_lp?" + url.Values{"db": {c.database}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(lp))
+	if err != nil {
+		return fmt.Errorf("influx.Write request: %w", err)
+	}
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	resp, err := c.http.Do(req) //nolint:gosec // G704: URL built from config validated at New(); not from request input
+	if err != nil {
+		return fmt.Errorf("influx.Write: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("influx.Write: status %d: %s", resp.StatusCode, body)
+	}
+	return nil
 }
