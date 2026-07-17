@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    name: Python — lint + typecheck + test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sync/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r sync/requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check sync/
+
+      - name: Format check (ruff)
+        run: ruff format --check sync/
+
+      - name: Type check (mypy)
+        run: mypy --config-file sync/pyproject.toml sync/sync.py
+
+      - name: Test (pytest)
+        run: pytest sync/

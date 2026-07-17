@@ -41,13 +41,44 @@ the `training_load` measurement for Grafana. No background worker or separate tr
 
 ## Build order (current: Phase 1)
 
-1. Docker Compose — InfluxDB 3 Core + Grafana + sync placeholder ← **next PR**
-2. Python sync sidecar (`sync/`)
-3. `internal/influx` — InfluxDB client wrapper
+1. ~~Docker Compose — InfluxDB 3 Core + Grafana + sync placeholder~~ ✓ done
+2. ~~Python sync sidecar (`sync/`)~~ ✓ done
+3. `internal/influx` — InfluxDB client wrapper ← **next**
 4. `internal/garmin` — data models
 5. `internal/analysis` — ATL/CTL/TSB computation
 6. `tools/` + `cmd/mcp-server/` — MCP server (Phase 1 complete)
 7. `internal/llm/` + `cmd/cli/` — CLI (Phase 2)
+
+## Garmin auth constraints (don't re-litigate these)
+
+- **Use `--env-file .env`**, not `-e KEY=value`, when running auth or sync containers. `-e` passes literal strings; placeholder values from examples will cause real login attempts with fake credentials.
+- **`skip_strategies` is required** — mobile strategies (`mobile+cffi`, `mobile+requests`) are rate-limited on this account; `widget+cffi` uses `embedWidget=true` which suppresses MFA email delivery. Both `auth.py` and `_garmin_login()` set `garmin.client.skip_strategies = {"mobile+cffi", "mobile+requests", "widget+cffi"}`.
+- **Token save is `garmin.client.dump(path)`**, not `garmin.garth.dump(path)`. The `garth` attribute does not exist on the `Garmin` class in garminconnect 0.3.6.
+- **Auth volume is `waypoint_sync_data`** — podman compose prefixes the declared `sync_data` volume with the project name (`waypoint`), so the actual Podman volume is `waypoint_sync_data`. Use `-v waypoint_sync_data:/data` in manual `podman run` commands.
+
+## Python sync toolchain (`sync/`)
+
+Tools: **ruff** (lint + format), **mypy** (strict type checking), **pytest** + **freezegun** (tests).
+
+Config: `sync/pyproject.toml` — ruff, mypy, and pytest all configured there.
+Dev deps: `sync/requirements-dev.txt` (includes `-r requirements.txt`).
+
+Run commands:
+```bash
+ruff check sync/          # lint
+ruff format --check sync/ # format check
+mypy --config-file sync/pyproject.toml sync/sync.py
+pytest sync/
+```
+
+CI: `.github/workflows/ci.yml` — runs all four checks on push/PR to main.
+
+Key conventions:
+- Tests in `sync/tests/`, discovered via `testpaths = ["tests"]` in pyproject.toml
+- `sync/conftest.py` sets required env vars before `sync` is imported (module-level env reads)
+- `conftest.py` patches `DATA_DIR`/`TOKEN_STORE`/`STATE_FILE` to `tmp_path` — no `/data` volume needed in tests
+- mypy strict with `disable_error_code = ["import-untyped", "no-untyped-call", "no-untyped-def", "no-any-return"]` to suppress third-party untyped-lib noise
+- CI passes `--config-file sync/pyproject.toml` explicitly — mypy won't find it from repo root otherwise
 
 ## Go module
 
@@ -70,6 +101,6 @@ Follow its conventions for client interface, helpers, registration pattern, and 
 
 ## Hosting
 
-Local dev: `docker compose up`, MCP server as local binary (`stdio` transport).
+Local dev: `podman compose up`, MCP server as local binary (`stdio` transport).
 Homelab goal: InfluxDB + Grafana + sync on Proxmox/TrueNAS, MCP server as Docker container
 with `--transport=http`, Claude connects to `http://homelab-ip:8080/mcp`.

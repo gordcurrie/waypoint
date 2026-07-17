@@ -127,18 +127,42 @@ No separate trigger needed. Computation is fast (simple EMA over ~90 data points
 
 ```
 Measurement: activity
-  Tags: sport, device_id
-  Fields: distance_m, duration_s, avg_hr_bpm, max_hr_bpm, calories_kcal,
-          elevation_gain_m, avg_pace_s_per_km, training_load_epoc,
-          aerobic_te, anaerobic_te
+  Tags:   sport
+  Fields: activity_id, distance_m, duration_s, avg_hr_bpm, max_hr_bpm,
+          calories_kcal, elevation_gain_m, avg_speed_m_s, training_load,
+          aerobic_te, anaerobic_te, vo2max
+  Running extras (sport=running/*):
+          cadence_avg_spm, ground_contact_time_ms, vertical_oscillation_mm,
+          stride_length_mm, vertical_ratio_pct, avg_power_w
 
 Measurement: daily_stats
-  Fields: resting_hr_bpm, hrv_ms, body_battery_max, body_battery_min,
-          stress_avg, steps, active_calories, intensity_minutes
+  Fields: steps, resting_hr_bpm, body_battery_max, body_battery_min,
+          stress_avg, active_calories, total_calories, floors_ascended,
+          vigorous_intensity_min, moderate_intensity_min
 
 Measurement: sleep
-  Fields: total_sleep_s, deep_sleep_s, light_sleep_s, rem_sleep_s,
-          sleep_score, avg_hrv_ms, avg_spo2_pct, avg_breathing_rate
+  Fields: total_sleep_s, deep_sleep_s, light_sleep_s, rem_sleep_s, awake_s,
+          sleep_score, avg_hrv_ms, avg_spo2_pct, avg_breathing_rate, avg_stress
+
+Measurement: hrv
+  Fields: weekly_avg_ms, last_night_ms, last_5min_high_ms,
+          status (2=BALANCED 1=UNBALANCED 0=POOR)
+
+Measurement: training_readiness
+  Fields: score, hrv_status, sleep_score, recovery_time_h, acw_ratio
+
+Measurement: training_status
+  Fields: status_num (5=Peaking → 0=Overreaching), vo2max_running,
+          vo2max_cycling, fitness_age
+
+Measurement: performance  (VO2 max / fitness age per day)
+  Fields: vo2max, fitness_age
+
+Measurement: lactate_threshold  (most recent LT test result)
+  Fields: lt_hr_bpm, lt_pace_s_per_km
+
+Measurement: respiration
+  Fields: avg_waking_brpm, avg_sleep_brpm, highest_brpm, lowest_brpm
 
 Measurement: training_load  (computed by Go on demand, written for Grafana)
   Fields: atl_7day, ctl_42day, tsb
@@ -147,9 +171,11 @@ Measurement: training_load  (computed by Go on demand, written for Grafana)
 ### Python sync sidecar — `sync/`
 
 - `garminconnect` v0.3.6 with `curl_cffi` Chrome impersonation
-- Syncs: activities (last 7 days on first run, incremental after), daily stats, sleep, HRV
-- Writes to InfluxDB via `influxdb-client` Python library
-- Runs as a Docker container on cron (default: every 30 min)
+- Syncs all 9 data types above; first run backfills 90 days (configurable via `BACKFILL_DAYS`)
+- Incremental after first run: per-measurement last-synced date in `/data/sync_state.json`
+- Auth tokens cached in `/data/garmin_auth` (Docker volume); survives container restarts
+- Writes via `influxdb3-python`; skips points with no data (all fields None)
+- Runs every 30 min (configurable via `SYNC_SCHEDULE=*/N * * * *`)
 - Credentials via env vars only (never hardcoded)
 
 ### Docker/Podman Compose — Phase 1

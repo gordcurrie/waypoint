@@ -25,11 +25,11 @@ Pulls activity, sleep, HRV, and health data from Garmin Connect. Stores it in In
 cp .env.example .env
 # Edit .env with your credentials
 
+# Podman (used in this project)
+podman compose up -d
+
 # Docker
 docker compose up -d
-
-# Podman
-podman-compose up -d
 ```
 
 Grafana: http://localhost:3001 (admin / see .env)
@@ -54,6 +54,48 @@ grafana/          Provisioning and dashboards
 - **Phase 1** (current): MCP server + Grafana dashboards
 - **Phase 2**: CLI tool
 - **Phase 3**: Web UI (if warranted)
+
+## Development
+
+### Python sync sidecar (`sync/`)
+
+Install dev dependencies:
+
+```bash
+pip install -r sync/requirements-dev.txt
+```
+
+Run linter (ruff):
+```bash
+ruff check sync/
+ruff format --check sync/
+```
+
+Run type checker (mypy):
+```bash
+mypy --config-file sync/pyproject.toml sync/sync.py
+```
+
+Run tests (pytest):
+```bash
+pytest sync/
+```
+
+CI runs all three on every push/PR to `main` via `.github/workflows/ci.yml`.
+
+Config lives in `sync/pyproject.toml` (ruff, mypy, pytest all in one file).
+
+### Interactive Garmin auth
+
+First run (or after token expiry) requires an interactive MFA step:
+
+```bash
+podman run --rm -it --env-file .env \
+  -v waypoint_sync_data:/data \
+  localhost/waypoint_sync python auth.py
+```
+
+This saves a token to `/data/garmin_auth`. Subsequent syncs use the token — no MFA required until it expires.
 
 ## Disclaimer
 

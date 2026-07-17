@@ -6,8 +6,6 @@ services:
     volumes:
       - influxdb_data:/var/lib/influxdb3/data
       - influxdb_plugins:/var/lib/influxdb3/plugins
-    environment:
-      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-garmin}
     command:
       - influxdb3
       - serve
@@ -62,10 +60,14 @@ services:
     environment:
       GARMIN_EMAIL: ${GARMIN_EMAIL}
       GARMIN_PASSWORD: ${GARMIN_PASSWORD}
+      GARMIN_MFA_CODE: ${GARMIN_MFA_CODE:-}
       INFLUXDB_URL: http://influxdb:8181
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
       INFLUXDB_DATABASE: ${INFLUXDB_BUCKET:-garmin}
       SYNC_SCHEDULE: ${SYNC_SCHEDULE:-*/30 * * * *}
+      BACKFILL_DAYS: ${BACKFILL_DAYS:-90}
+    volumes:
+      - sync_data:/data
     depends_on:
       influxdb:
         condition: service_healthy
@@ -75,3 +77,4 @@ volumes:
   influxdb_data:
   influxdb_plugins:
   grafana_data:
+  sync_data:

@@ -1,0 +1,26 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long — handled by formatter
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# Third-party libs (garminconnect, influxdb3) have no stubs — suppress noise from calling them.
+disable_error_code = ["import-untyped", "no-untyped-call", "no-untyped-def", "no-any-return"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
