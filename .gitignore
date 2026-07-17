@@ -21,6 +21,8 @@ __pycache__/
 *.pyc
 .venv/
 sync/.venv/
+uv.lock
+sync/uv.lock
 
 # OS
 .DS_Store

@@ -25,11 +25,11 @@ Pulls activity, sleep, HRV, and health data from Garmin Connect. Stores it in In
 cp .env.example .env
 # Edit .env with your credentials
 
+# Podman (used in this project)
+podman compose up -d
+
 # Docker
 docker compose up -d
-
-# Podman
-podman-compose up -d
 ```
 
 Grafana: http://localhost:3001 (admin / see .env)
@@ -90,10 +90,8 @@ Config lives in `sync/pyproject.toml` (ruff, mypy, pytest all in one file).
 First run (or after token expiry) requires an interactive MFA step:
 
 ```bash
-podman run --rm -it \
+podman run --rm -it --env-file .env \
   -v waypoint_sync_data:/data \
-  -e GARMIN_EMAIL=you@example.com \
-  -e GARMIN_PASSWORD=yourpassword \
   localhost/waypoint_sync python auth.py
 ```
 

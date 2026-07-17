@@ -48,6 +48,11 @@ _cron = os.environ.get("SYNC_SCHEDULE", "*/30 * * * *")
 _cron_parts = _cron.split()
 _interval_match = re.match(r"\*/(\d+)", _cron_parts[0]) if _cron_parts else None
 SYNC_INTERVAL_S = int(_interval_match.group(1)) * 60 if _interval_match else 1800
+_sync_schedule_warning = (
+    None
+    if _interval_match
+    else f"SYNC_SCHEDULE={_cron!r} not in */N minute format — defaulting to {SYNC_INTERVAL_S}s interval"
+)
 
 log = logging.getLogger(__name__)
 
@@ -96,8 +101,11 @@ def _garmin_login() -> Garmin:
     log.info("No valid token — authenticating with credentials")
     mfa_cb = (lambda: GARMIN_MFA_CODE) if GARMIN_MFA_CODE else None
     garmin = Garmin(email=GARMIN_EMAIL, password=GARMIN_PASSWORD, prompt_mfa=mfa_cb)
+    # Skip mobile strategies (rate-limited) and widget+cffi (suppresses MFA email).
+    # Mirrors auth.py — portal+cffi uses clientId=GarminConnect and triggers email MFA.
+    garmin.client.skip_strategies = {"mobile+cffi", "mobile+requests", "widget+cffi"}
     garmin.login()
-    garmin.garth.dump(TOKEN_STORE)
+    garmin.client.dump(TOKEN_STORE)
     log.info("Saved auth token to %s", TOKEN_STORE)
     return garmin
 
@@ -610,6 +618,8 @@ if __name__ == "__main__":
         SYNC_INTERVAL_S,
         BACKFILL_DAYS,
     )
+    if _sync_schedule_warning:
+        log.warning(_sync_schedule_warning)
 
     client = _influx_client()
 

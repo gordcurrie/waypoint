@@ -220,7 +220,7 @@ def test_garmin_login_falls_back_to_credentials_on_missing_token():
     with patch("sync.Garmin", return_value=mock_garmin):
         result = sync._garmin_login()
     assert mock_garmin.login.call_count == 2
-    mock_garmin.garth.dump.assert_called_once()
+    mock_garmin.client.dump.assert_called_once_with(sync.TOKEN_STORE)
     assert result is mock_garmin
 
 
