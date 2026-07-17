@@ -45,7 +45,10 @@ func NewFromEnv() (*Client, error) {
 
 // Close releases resources held by the client.
 func (c *Client) Close() error {
-	return c.db.Close()
+	if err := c.db.Close(); err != nil {
+		return fmt.Errorf("influx.Close: %w", err)
+	}
+	return nil
 }
 
 // Query executes a SQL query and returns all rows as maps.

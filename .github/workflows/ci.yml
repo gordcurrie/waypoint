@@ -34,3 +34,35 @@ jobs:
 
       - name: Test (pytest)
         run: pytest sync/
+
+  go:
+    name: Go — build + test + lint + vuln
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test (race detector)
+        run: go test -race -count=1 ./...
+
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      - name: Vulnerability check (govulncheck)
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: go.mod
+          go-package: ./...

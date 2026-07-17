@@ -1,0 +1,55 @@
+version: 2
+
+linters:
+  enable:
+    # Default set (explicit)
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck   # includes gosimple
+    - unused
+
+    # Error handling
+    - wrapcheck     # external errors must be wrapped with context
+
+    # Context propagation
+    - noctx         # http.NewRequest without context
+    - contextcheck  # missing context.Context propagation
+
+    # HTTP / IO safety
+    - bodyclose     # http response body must be closed
+
+    # Code quality
+    - revive        # golint successor
+    - gocritic      # diagnostics, performance, style
+    - misspell      # typos in comments and strings
+
+    # Security
+    - gosec         # common security pitfalls
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - "checkPrivateReceivers"
+            - "sayRepetitiveInsteadOfStutters"
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+    gosec:
+      excludes:
+        - G104  # unhandled errors — covered by errcheck
+    wrapcheck:
+      ignore-sigs:
+        - "fmt.Errorf("
+
+issues:
+  exclude-rules:
+    # Relax error-wrapping and security rules in tests
+    - path: _test\.go
+      linters:
+        - wrapcheck
+        - gosec
+        - errcheck
