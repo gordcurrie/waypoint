@@ -92,10 +92,17 @@ func (c *Client) WritePoints(ctx context.Context, points ...*Point) error {
 	}
 	var sb strings.Builder
 	for i, p := range points {
+		if p == nil {
+			return fmt.Errorf("influx.WritePoints: point at index %d is nil", i)
+		}
+		lp := p.LineProtocol()
+		if lp == "" {
+			return fmt.Errorf("influx.WritePoints: point at index %d has empty measurement or no fields", i)
+		}
 		if i > 0 {
 			sb.WriteByte('\n')
 		}
-		sb.WriteString(p.LineProtocol())
+		sb.WriteString(lp)
 	}
 	return c.writeLineProtocol(ctx, sb.String())
 }
@@ -130,17 +137,17 @@ func (c *Client) queryJSON(ctx context.Context, sql string, params map[string]an
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("influx.Query read: %w", err)
-	}
 	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("influx.Query: status %d: %s", resp.StatusCode, data)
 	}
 
 	var rows []map[string]any
-	if err := json.Unmarshal(data, &rows); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
 		return nil, fmt.Errorf("influx.Query unmarshal: %w", err)
+	}
+	if rows == nil {
+		rows = []map[string]any{}
 	}
 	return rows, nil
 }

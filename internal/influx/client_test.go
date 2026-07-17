@@ -134,6 +134,20 @@ func TestPointLineProtocol_SpecialCharsEscaped(t *testing.T) {
 	}
 }
 
+func TestPointLineProtocol_EmptyFields(t *testing.T) {
+	p := NewPoint("training_load").SetTimestamp(time.Now())
+	if got := p.LineProtocol(); got != "" {
+		t.Errorf("expected empty string for no-field point, got %q", got)
+	}
+}
+
+func TestPointLineProtocol_EmptyMeasurement(t *testing.T) {
+	p := NewPoint("").SetField("x", 1.0).SetTimestamp(time.Now())
+	if got := p.LineProtocol(); got != "" {
+		t.Errorf("expected empty string for empty-measurement point, got %q", got)
+	}
+}
+
 func TestPointLineProtocol_FieldsSortedAlphabetically(t *testing.T) {
 	ts := time.Unix(0, 1_700_000_000_000_000_000)
 	p := NewPoint("m").

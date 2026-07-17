@@ -84,11 +84,25 @@ Key conventions:
 
 `github.com/gordcurrie/waypoint`
 
-Required dependencies (add as needed):
-- `github.com/modelcontextprotocol/go-sdk` — MCP server
-- `github.com/InfluxCommunity/influxdb3-go/v2` — InfluxDB 3 client
-- `github.com/spf13/viper` — config
-- `github.com/anthropics/anthropic-sdk-go` — Claude provider (optional, CLI only)
+Approved dependencies (the full list — do not add others without justification):
+- `github.com/modelcontextprotocol/go-sdk` — MCP server (no stdlib alternative)
+- `github.com/spf13/viper` — config (env + file merging; stdlib env is insufficient)
+- `github.com/anthropics/anthropic-sdk-go` — Claude provider (optional, CLI only; official SDK required)
+
+### Dependency policy — be skeptical
+
+Before adding any Go or Python dependency, ask: **can stdlib do this?**
+
+Past example: `influxdb3-go/v2` pulled in 17 transitive deps (arrow, grpc, protobuf,
+flatbuffers, lz4, xxh3, …). InfluxDB 3 Core's HTTP API (`/api/v3/query_sql`,
+`/api/v3/write_lp`) works fine with `net/http` + `encoding/json`. The SDK was dropped.
+
+Default to stdlib. Add a dep only when:
+- The API is genuinely unavailable in stdlib (e.g., TLS fingerprinting, MCP wire protocol), OR
+- The dep is an official SDK for a third-party service (Anthropic, etc.), OR
+- Implementing it correctly in stdlib would take materially longer than the feature warrants.
+
+When a dep is proposed, name what it replaces and why stdlib falls short.
 
 ## Skill to invoke for MCP server work
 

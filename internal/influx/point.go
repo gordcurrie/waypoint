@@ -46,7 +46,11 @@ func (p *Point) SetTimestamp(t time.Time) *Point {
 }
 
 // LineProtocol returns the InfluxDB line-protocol representation.
+// Returns empty string if the measurement name is empty or no fields are set.
 func (p *Point) LineProtocol() string {
+	if p.measurement == "" || len(p.fields) == 0 {
+		return ""
+	}
 	var sb strings.Builder
 	sb.WriteString(escapeMeasurement(p.measurement))
 

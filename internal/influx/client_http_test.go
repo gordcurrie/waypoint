@@ -211,6 +211,63 @@ func TestWritePoints_ErrorStatus(t *testing.T) {
 	}
 }
 
+func TestQuery_NullBodyReturnsEmptySlice(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`null`))
+	}))
+	defer srv.Close()
+
+	rows, err := newTestClient(t, srv, "").Query(context.Background(), "SELECT 1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rows == nil {
+		t.Error("rows should be non-nil empty slice, not nil")
+	}
+	if len(rows) != 0 {
+		t.Errorf("expected 0 rows, got %d", len(rows))
+	}
+}
+
+func TestWritePoints_NilPointReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	var p *Point
+	err := newTestClient(t, srv, "").WritePoints(context.Background(), p)
+	if err == nil {
+		t.Fatal("expected error for nil *Point")
+	}
+}
+
+func TestWritePoints_EmptyFieldsReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	p := NewPoint("training_load")
+	err := newTestClient(t, srv, "").WritePoints(context.Background(), p)
+	if err == nil {
+		t.Fatal("expected error for point with no fields")
+	}
+}
+
+func TestWritePoints_EmptyMeasurementReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	p := NewPoint("").SetField("x", 1.0)
+	err := newTestClient(t, srv, "").WritePoints(context.Background(), p)
+	if err == nil {
+		t.Fatal("expected error for point with empty measurement")
+	}
+}
+
 func TestWritePoints_NoOpOnEmpty(t *testing.T) {
 	var called bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
