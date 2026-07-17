@@ -105,3 +105,48 @@ func TestPointLineProtocol(t *testing.T) {
 		}
 	}
 }
+
+func TestPointLineProtocol_NoTags(t *testing.T) {
+	ts := time.Unix(0, 1_700_000_000_000_000_000)
+	p := NewPoint("training_load").SetField("atl_7day", 42.3).SetTimestamp(ts)
+	lp := p.LineProtocol()
+	// No comma after measurement name when there are no tags.
+	if !strings.HasPrefix(lp, "training_load ") {
+		t.Errorf("expected 'training_load <space>' prefix, got: %q", lp)
+	}
+}
+
+func TestPointLineProtocol_SpecialCharsEscaped(t *testing.T) {
+	ts := time.Unix(0, 1_700_000_000_000_000_000)
+	p := NewPoint("my measurement"). // space in measurement name
+					SetTag("key=eq", "val,comma").
+					SetField("f", 1.0).
+					SetTimestamp(ts)
+	lp := p.LineProtocol()
+	if !strings.Contains(lp, `my\ measurement`) {
+		t.Errorf("space in measurement not escaped: %q", lp)
+	}
+	if !strings.Contains(lp, `key\=eq`) {
+		t.Errorf("equals in tag key not escaped: %q", lp)
+	}
+	if !strings.Contains(lp, `val\,comma`) {
+		t.Errorf("comma in tag value not escaped: %q", lp)
+	}
+}
+
+func TestPointLineProtocol_FieldsSortedAlphabetically(t *testing.T) {
+	ts := time.Unix(0, 1_700_000_000_000_000_000)
+	p := NewPoint("m").
+		SetField("zzz", 3.0).
+		SetField("aaa", 1.0).
+		SetField("mmm", 2.0).
+		SetTimestamp(ts)
+	lp := p.LineProtocol()
+	// Fields must appear in sorted order for deterministic output.
+	idxA := strings.Index(lp, "aaa=")
+	idxM := strings.Index(lp, "mmm=")
+	idxZ := strings.Index(lp, "zzz=")
+	if idxA >= idxM || idxM >= idxZ {
+		t.Errorf("fields not in alphabetical order: %q", lp)
+	}
+}
