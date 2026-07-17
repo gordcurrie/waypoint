@@ -26,19 +26,29 @@ func New(host, token, database string) (*Client, error) {
 	return &Client{db: db}, nil
 }
 
+// configFromEnv reads InfluxDB connection parameters from environment variables.
+// It returns an error if INFLUXDB_URL is not set.
+func configFromEnv() (host, token, database string, err error) {
+	host = os.Getenv("INFLUXDB_URL")
+	if host == "" {
+		return "", "", "", fmt.Errorf("INFLUXDB_URL not set")
+	}
+	token = os.Getenv("INFLUXDB_TOKEN")
+	database = os.Getenv("INFLUXDB_DATABASE")
+	if database == "" {
+		database = "garmin"
+	}
+	return host, token, database, nil
+}
+
 // NewFromEnv creates a Client from environment variables:
 //   - INFLUXDB_URL      (required)
 //   - INFLUXDB_TOKEN    (required for auth; empty string works with --without-auth)
 //   - INFLUXDB_DATABASE (defaults to "garmin")
 func NewFromEnv() (*Client, error) {
-	host := os.Getenv("INFLUXDB_URL")
-	if host == "" {
-		return nil, fmt.Errorf("INFLUXDB_URL not set")
-	}
-	token := os.Getenv("INFLUXDB_TOKEN")
-	database := os.Getenv("INFLUXDB_DATABASE")
-	if database == "" {
-		database = "garmin"
+	host, token, database, err := configFromEnv()
+	if err != nil {
+		return nil, err
 	}
 	return New(host, token, database)
 }

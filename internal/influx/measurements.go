@@ -1,6 +1,9 @@
 package influx
 
-// Measurement names — must match what sync/sync.py writes.
+// Measurement names used when querying or writing InfluxDB.
+// The first 9 constants match what sync/sync.py writes.
+// MeasurementTrainingLoad is written by the MCP server's get_training_load tool
+// (computed from activity data on demand) and is not written by the Python sync.
 const (
 	MeasurementActivity           = "activity"
 	MeasurementDailyStats         = "daily_stats"

@@ -1,7 +1,6 @@
 package influx
 
 import (
-	"os"
 	"testing"
 )
 
@@ -13,26 +12,24 @@ func TestNewFromEnv_MissingURL(t *testing.T) {
 	}
 }
 
-func TestNewFromEnv_DefaultDatabase(t *testing.T) {
-	// New() itself validates the host by connecting; we can't call it without a server.
-	// Test just that the env-reading logic picks the default database correctly.
-	// We intercept before New() by temporarily replacing the factory — instead, we verify
-	// the constant is "garmin" since that's the only observable contract at unit-test level.
+func TestConfigFromEnv_DefaultDatabase(t *testing.T) {
+	t.Setenv("INFLUXDB_URL", "http://localhost:8086")
 	t.Setenv("INFLUXDB_DATABASE", "")
-	db := os.Getenv("INFLUXDB_DATABASE")
-	if db == "" {
-		db = "garmin"
+	_, _, db, err := configFromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if db != "garmin" {
 		t.Errorf("expected default database 'garmin', got %q", db)
 	}
 }
 
-func TestNewFromEnv_ExplicitDatabase(t *testing.T) {
+func TestConfigFromEnv_ExplicitDatabase(t *testing.T) {
+	t.Setenv("INFLUXDB_URL", "http://localhost:8086")
 	t.Setenv("INFLUXDB_DATABASE", "custom")
-	db := os.Getenv("INFLUXDB_DATABASE")
-	if db == "" {
-		db = "garmin"
+	_, _, db, err := configFromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if db != "custom" {
 		t.Errorf("expected database 'custom', got %q", db)
