@@ -171,7 +171,7 @@ def _add_fields(p: Point, fields: dict[str, Any]) -> tuple[Point, int]:
 def _advance_state(state: dict[str, Any], key: str, end: date, *, had_error: bool = False) -> None:
     """Advance watermark to end unless it would regress."""
     existing_str = state.get(key)
-    if existing_str is not None and date.fromisoformat(existing_str) >= end:
+    if existing_str and date.fromisoformat(existing_str) >= end:
         return  # regression guard: never move watermark backward
     state[key] = end.isoformat()
     _save_state(state)

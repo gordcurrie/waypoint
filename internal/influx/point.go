@@ -92,11 +92,13 @@ func (p *Point) LineProtocol() string {
 // Line protocol escaping: commas, spaces, and equals signs are special in
 // measurement names, tag keys, and tag values.
 func escapeMeasurement(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, ",", `\,`)
 	return strings.ReplaceAll(s, " ", `\ `)
 }
 
 func escapeTagKey(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, ",", `\,`)
 	s = strings.ReplaceAll(s, "=", `\=`)
 	return strings.ReplaceAll(s, " ", `\ `)

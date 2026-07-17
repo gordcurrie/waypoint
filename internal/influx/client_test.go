@@ -30,6 +30,20 @@ func TestNew_InvalidScheme(t *testing.T) {
 	}
 }
 
+func TestNew_EmptyDatabase(t *testing.T) {
+	_, err := New("http://localhost:8181", "token", "")
+	if err == nil {
+		t.Fatal("expected error for empty database")
+	}
+}
+
+func TestNew_HostWithPath(t *testing.T) {
+	_, err := New("http://localhost:8181/influxdb", "token", "garmin")
+	if err == nil {
+		t.Fatal("expected error for host with path component")
+	}
+}
+
 func TestNewFromEnv_MissingURL(t *testing.T) {
 	t.Setenv("INFLUXDB_URL", "")
 	_, err := NewFromEnv()
@@ -131,6 +145,24 @@ func TestPointLineProtocol_SpecialCharsEscaped(t *testing.T) {
 	}
 	if !strings.Contains(lp, `val\,comma`) {
 		t.Errorf("comma in tag value not escaped: %q", lp)
+	}
+}
+
+func TestPointLineProtocol_BackslashEscaped(t *testing.T) {
+	ts := time.Unix(0, 1_700_000_000_000_000_000)
+	p := NewPoint(`my\measure`).
+		SetTag(`tag\key`, `tag\val`).
+		SetField("f", 1.0).
+		SetTimestamp(ts)
+	lp := p.LineProtocol()
+	if !strings.Contains(lp, `my\\measure`) {
+		t.Errorf("backslash in measurement not escaped: %q", lp)
+	}
+	if !strings.Contains(lp, `tag\\key`) {
+		t.Errorf("backslash in tag key not escaped: %q", lp)
+	}
+	if !strings.Contains(lp, `tag\\val`) {
+		t.Errorf("backslash in tag value not escaped: %q", lp)
 	}
 }
 

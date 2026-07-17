@@ -23,10 +23,13 @@ type Client struct {
 }
 
 // New creates a Client from explicit config values.
-// host must be a valid http:// or https:// URL.
+// host must be a bare http:// or https:// URL with no path (e.g. "http://localhost:8181").
 func New(host, token, database string) (*Client, error) {
 	if host == "" {
 		return nil, fmt.Errorf("influx.New: host is required")
+	}
+	if database == "" {
+		return nil, fmt.Errorf("influx.New: database is required")
 	}
 	parsed, err := url.ParseRequestURI(host)
 	if err != nil {
@@ -34,6 +37,9 @@ func New(host, token, database string) (*Client, error) {
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return nil, fmt.Errorf("influx.New: host requires http or https scheme, got %q", parsed.Scheme)
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return nil, fmt.Errorf("influx.New: host must not include a path, got %q; use scheme://host[:port] only", host)
 	}
 	return &Client{
 		// Reconstruct from parsed components to eliminate SSRF taint.
