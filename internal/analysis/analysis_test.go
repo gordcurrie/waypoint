@@ -71,7 +71,7 @@ func TestCompute_EMASteps(t *testing.T) {
 		t.Errorf("result date: want %s, got %s", today.Format("2006-01-02"), r.Date.Format("2006-01-02"))
 	}
 
-	wantATL := (70.0 / atlDays) * (1 - 1.0/atlDays) // 10 * (6/7) = 60/7
+	wantATL := (70.0 / atlDays) * (1 - 1.0/atlDays) // day -1 raises ATL, day 0 decays it one step
 	if abs(r.ATL-wantATL) > 1e-9 {
 		t.Errorf("ATL: want %.9f, got %.9f", wantATL, r.ATL)
 	}
