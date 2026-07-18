@@ -1,6 +1,10 @@
-package garmin
+package garmin_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gordcurrie/waypoint/internal/garmin"
+)
 
 func TestTrainingReadinessFrom(t *testing.T) {
 	row := map[string]any{
@@ -11,7 +15,7 @@ func TestTrainingReadinessFrom(t *testing.T) {
 		"recovery_time_h": float64(16),
 		"acw_ratio":       float64(0.85),
 	}
-	tr := TrainingReadinessFrom(row)
+	tr := garmin.TrainingReadinessFrom(row)
 	if tr.Score != 74 {
 		t.Errorf("Score: got %v, want 74", tr.Score)
 	}
@@ -37,7 +41,7 @@ func TestTrainingStatusFrom(t *testing.T) {
 		"vo2max_cycling": float64(49.1),
 		"fitness_age":    float64(32),
 	}
-	ts := TrainingStatusFrom(row)
+	ts := garmin.TrainingStatusFrom(row)
 	if ts.StatusNum == nil || *ts.StatusNum != 3 {
 		t.Errorf("StatusNum: got %v, want 3 (productive)", ts.StatusNum)
 	}
@@ -54,7 +58,7 @@ func TestTrainingStatusFrom(t *testing.T) {
 
 func TestTrainingStatusFrom_StatusNumAbsent(t *testing.T) {
 	row := map[string]any{"time": "2026-07-06T00:00:00Z"}
-	ts := TrainingStatusFrom(row)
+	ts := garmin.TrainingStatusFrom(row)
 	if ts.StatusNum != nil {
 		t.Errorf("StatusNum: got %v, want nil for absent field", ts.StatusNum)
 	}
@@ -66,7 +70,7 @@ func TestPerformanceFrom(t *testing.T) {
 		"vo2max":      float64(53.2),
 		"fitness_age": float64(31),
 	}
-	p := PerformanceFrom(row)
+	p := garmin.PerformanceFrom(row)
 	if p.VO2Max != 53.2 {
 		t.Errorf("VO2Max: got %v, want 53.2", p.VO2Max)
 	}
@@ -81,7 +85,7 @@ func TestLactateThresholdFrom(t *testing.T) {
 		"lt_hr_bpm":        float64(168),
 		"lt_pace_s_per_km": float64(272),
 	}
-	lt := LactateThresholdFrom(row)
+	lt := garmin.LactateThresholdFrom(row)
 	if lt.LTHeartRate != 168 {
 		t.Errorf("LTHeartRate: got %v, want 168", lt.LTHeartRate)
 	}
@@ -97,7 +101,7 @@ func TestTrainingLoadFrom(t *testing.T) {
 		"ctl_42day": float64(58.8),
 		"tsb":       float64(-6.4),
 	}
-	tl := TrainingLoadFrom(row)
+	tl := garmin.TrainingLoadFrom(row)
 	if tl.ATL != 65.2 {
 		t.Errorf("ATL: got %v, want 65.2", tl.ATL)
 	}

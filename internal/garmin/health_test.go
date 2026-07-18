@@ -1,6 +1,10 @@
-package garmin
+package garmin_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gordcurrie/waypoint/internal/garmin"
+)
 
 func TestDailyStatsFrom(t *testing.T) {
 	row := map[string]any{
@@ -11,7 +15,7 @@ func TestDailyStatsFrom(t *testing.T) {
 		"body_battery_min": float64(20),
 		"stress_avg":       float64(28),
 	}
-	s := DailyStatsFrom(row)
+	s := garmin.DailyStatsFrom(row)
 	if s.Steps != 8500 {
 		t.Errorf("Steps: got %v, want 8500", s.Steps)
 	}
@@ -31,7 +35,7 @@ func TestSleepFrom(t *testing.T) {
 		"sleep_score":   float64(78),
 		"avg_hrv_ms":    float64(62),
 	}
-	s := SleepFrom(row)
+	s := garmin.SleepFrom(row)
 	if s.TotalSleepS != 27000 {
 		t.Errorf("TotalSleepS: got %v, want 27000", s.TotalSleepS)
 	}
@@ -45,13 +49,13 @@ func TestSleepFrom(t *testing.T) {
 
 func TestRespirationFrom(t *testing.T) {
 	row := map[string]any{
-		"time":              "2026-07-06T00:00:00Z",
-		"avg_waking_brpm":   float64(14.5),
-		"avg_sleep_brpm":    float64(13.2),
-		"highest_brpm":      float64(18),
-		"lowest_brpm":       float64(11),
+		"time":            "2026-07-06T00:00:00Z",
+		"avg_waking_brpm": float64(14.5),
+		"avg_sleep_brpm":  float64(13.2),
+		"highest_brpm":    float64(18),
+		"lowest_brpm":     float64(11),
 	}
-	r := RespirationFrom(row)
+	r := garmin.RespirationFrom(row)
 	if r.AvgWakingBRPM != 14.5 {
 		t.Errorf("AvgWakingBRPM: got %v, want 14.5", r.AvgWakingBRPM)
 	}

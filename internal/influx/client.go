@@ -144,7 +144,10 @@ func (c *Client) queryJSON(ctx context.Context, sql string, params map[string]an
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		data, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if readErr != nil {
+			return nil, fmt.Errorf("influx.Query: status %d (body unreadable: %v)", resp.StatusCode, readErr)
+		}
 		return nil, fmt.Errorf("influx.Query: status %d: %s", resp.StatusCode, data)
 	}
 
@@ -175,7 +178,10 @@ func (c *Client) writeLineProtocol(ctx context.Context, lp string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if readErr != nil {
+			return fmt.Errorf("influx.Write: status %d (body unreadable: %v)", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("influx.Write: status %d: %s", resp.StatusCode, body)
 	}
 	return nil

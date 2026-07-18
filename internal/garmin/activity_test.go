@@ -1,8 +1,10 @@
-package garmin
+package garmin_test
 
 import (
 	"testing"
 	"time"
+
+	"github.com/gordcurrie/waypoint/internal/garmin"
 )
 
 func TestActivityFrom(t *testing.T) {
@@ -29,7 +31,7 @@ func TestActivityFrom(t *testing.T) {
 		"avg_power_w":             float64(215),
 	}
 
-	a := ActivityFrom(row)
+	a := garmin.ActivityFrom(row)
 
 	want := time.Date(2026, 7, 6, 10, 30, 0, 0, time.UTC)
 	if !a.Time.Equal(want) {
@@ -100,7 +102,7 @@ func TestActivityFrom_MissingFields(t *testing.T) {
 		"time":  "2026-07-06T10:30:00Z",
 		"sport": "cycling",
 	}
-	a := ActivityFrom(row)
+	a := garmin.ActivityFrom(row)
 	if a.Sport != "cycling" {
 		t.Errorf("Sport: got %q, want %q", a.Sport, "cycling")
 	}

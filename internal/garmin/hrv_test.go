@@ -1,6 +1,10 @@
-package garmin
+package garmin_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gordcurrie/waypoint/internal/garmin"
+)
 
 func TestHRVFrom(t *testing.T) {
 	row := map[string]any{
@@ -10,7 +14,7 @@ func TestHRVFrom(t *testing.T) {
 		"last_5min_high_ms": float64(72),
 		"status":            float64(2), // BALANCED
 	}
-	h := HRVFrom(row)
+	h := garmin.HRVFrom(row)
 	if h.WeeklyAvgMS != 58 {
 		t.Errorf("WeeklyAvgMS: got %v, want 58", h.WeeklyAvgMS)
 	}
@@ -30,7 +34,7 @@ func TestHRVFrom_StatusAbsent(t *testing.T) {
 		"time":          "2026-07-06T00:00:00Z",
 		"weekly_avg_ms": float64(45),
 	}
-	h := HRVFrom(row)
+	h := garmin.HRVFrom(row)
 	if h.Status != nil {
 		t.Errorf("Status: got %v, want nil for absent field", h.Status)
 	}
