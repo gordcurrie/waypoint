@@ -1,0 +1,29 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - wrapcheck
+    - noctx
+    - contextcheck
+    - bodyclose
+    - revive
+    - gocritic
+    - misspell
+    - gosec
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - "checkPrivateReceivers"
+            - "sayRepetitiveInsteadOfStutters"
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance

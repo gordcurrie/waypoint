@@ -12,9 +12,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -34,3 +34,35 @@ jobs:
 
       - name: Test (pytest)
         run: pytest sync/
+
+  go:
+    name: Go — build + test + lint + vuln
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test (race detector)
+        run: go test -race -count=1 ./...
+
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.10.1
+
+      - name: Vulnerability check (govulncheck)
+        uses: golang/govulncheck-action@v1.1.0
+        with:
+          go-version-file: go.mod
+          go-package: ./...

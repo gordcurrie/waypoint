@@ -3,7 +3,9 @@
 from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
 from freezegun import freeze_time
+from garminconnect import GarminConnectConnectionError
 
 import sync
 
@@ -245,3 +247,96 @@ def test_garmin_login_no_mfa_callback_when_code_empty(monkeypatch):
         sync._garmin_login()
     _, kwargs = mock_cls.call_args
     assert kwargs.get("prompt_mfa") is None
+
+
+def test_garmin_login_token_path_sets_skip_strategies():
+    """skip_strategies must be set before token login, not only on credential fallback."""
+    mock_garmin = MagicMock()
+    with patch("sync.Garmin", return_value=mock_garmin):
+        sync._garmin_login()
+    assert mock_garmin.client.skip_strategies == {
+        "mobile+cffi",
+        "mobile+requests",
+        "widget+cffi",
+    }
+
+
+# ── activity_id precision ──────────────────────────────────────────────────────
+
+
+@freeze_time("2026-07-06")
+def test_activities_activity_id_stored_as_int():
+    """activity_id must be int, not float — 16-digit IDs exceed float64 precision."""
+    garmin = _make_garmin(
+        [
+            {
+                "startTimeGMT": "2026-07-06 10:00:00",
+                "activityId": 1234567890123456,
+                "activityType": {"typeKey": "running"},
+            }
+        ]
+    )
+    client = MagicMock()
+    captured: dict = {}
+    original = sync._add_fields
+
+    def capturing(p, fields):
+        captured.update(fields)
+        return original(p, fields)
+
+    with (
+        patch.object(sync, "_add_fields", side_effect=capturing),
+        patch.object(sync, "_save_state"),
+    ):
+        sync.sync_activities(garmin, client, {})
+
+    assert isinstance(captured.get("activity_id"), int), (
+        f"activity_id should be int, got {type(captured.get('activity_id'))}"
+    )
+
+
+# ── watermark not advanced on parse error ──────────────────────────────────────
+
+
+@freeze_time("2026-07-06")
+def test_activities_watermark_not_advanced_on_parse_error():
+    """Parse errors must leave watermark unchanged so failed activities retry next run."""
+    garmin = _make_garmin([{"startTimeGMT": "NOT_A_DATE", "activityId": 1}])
+    client = MagicMock()
+    state: dict = {}
+    with patch.object(sync, "_save_state"):
+        sync.sync_activities(garmin, client, state)
+    assert "activities" not in state
+
+
+# ── GarminConnectConnectionError propagation ───────────────────────────────────
+
+
+@freeze_time("2026-07-06")
+def test_daily_stats_connection_error_propagates():
+    """Connection errors inside day-loop must propagate — not be swallowed as per-day warnings."""
+    garmin = MagicMock()
+    garmin.get_stats.side_effect = GarminConnectConnectionError("timeout")
+    client = MagicMock()
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_daily_stats(garmin, client, {"daily_stats": "2026-07-05"})
+
+
+@freeze_time("2026-07-06")
+def test_sleep_connection_error_propagates():
+    garmin = MagicMock()
+    garmin.get_sleep_data.side_effect = GarminConnectConnectionError("timeout")
+    client = MagicMock()
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_sleep(garmin, client, {"sleep": "2026-07-05"})
+
+
+# ── _advance_state first-run regression guard ──────────────────────────────────
+
+
+def test_advance_state_first_run_none_existing_allows_write():
+    """On first run (existing_str is None), watermark is always written."""
+    state: dict = {}
+    with patch.object(sync, "_save_state"):
+        sync._advance_state(state, "daily_stats", date(2026, 4, 6))
+    assert state["daily_stats"] == "2026-04-06"

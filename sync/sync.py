@@ -90,6 +90,8 @@ def _garmin_login() -> Garmin:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     try:
         garmin = Garmin()
+        # Must set before login — matches credential fallback below.
+        garmin.client.skip_strategies = {"mobile+cffi", "mobile+requests", "widget+cffi"}
         garmin.login(TOKEN_STORE)
         log.info("Logged in via saved token")
         return garmin
@@ -190,6 +192,7 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, An
     activities = garmin.get_activities_by_date(start.isoformat(), end.isoformat())
 
     points = []
+    _had_error = False
     for a in activities:
         try:
             ts_str = a.get("startTimeGMT")
@@ -201,7 +204,7 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, An
 
             # Use is not None check to handle activityId=0 correctly
             fields: dict[str, Any] = {
-                "activity_id": float(a["activityId"]) if a.get("activityId") is not None else None,
+                "activity_id": int(a["activityId"]) if a.get("activityId") is not None else None,
                 "distance_m": _fval(a, "distance"),
                 "duration_s": _fval(a, "duration"),
                 "avg_hr_bpm": _fval(a, "averageHR"),
@@ -229,13 +232,21 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, An
             p, n = _add_fields(p, fields)
             if n:
                 points.append(p)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise
         except Exception as exc:
+            _had_error = True
             log.warning("activity %s: %s", a.get("activityId"), exc)
 
     _write(client, points)
-    _advance_state(state, "activities", end)
+    if _had_error:
+        log.warning("activities: parse errors — watermark not advanced, will retry next run")
+    else:
+        _advance_state(state, "activities", end)
     log.info("activities: wrote %d points", len(points))
 
 
@@ -267,7 +278,11 @@ def sync_daily_stats(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise
         except Exception as exc:
             if _first_err is None:
@@ -316,7 +331,11 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise
         except Exception as exc:
             if _first_err is None:
@@ -357,7 +376,11 @@ def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> 
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise
         except Exception as exc:
             if _first_err is None:
@@ -396,7 +419,11 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise
         except Exception as exc:
             if _first_err is None:
@@ -449,7 +476,11 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise
         except Exception as exc:
             if _first_err is None:
@@ -487,7 +518,11 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise
         except Exception as exc:
             if _first_err is None:
@@ -535,7 +570,11 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[
             state["lactate_threshold"] = test_date.isoformat()
             _save_state(state)
             log.info("lactate_threshold: wrote 1 point at %s", test_date)
-    except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+    except (
+        GarminConnectAuthenticationError,
+        GarminConnectTooManyRequestsError,
+        GarminConnectConnectionError,
+    ):
         raise
     except Exception as exc:
         log.warning("lactate_threshold: %s", exc)
@@ -563,7 +602,11 @@ def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
-        except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError):
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
             raise
         except Exception as exc:
             if _first_err is None:
