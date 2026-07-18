@@ -81,11 +81,11 @@ func (p *Point) LineProtocol() string {
 		}
 		sb.WriteString(escapeFieldKey(k))
 		sb.WriteByte('=')
-		fmt.Fprintf(&sb, "%g", p.fields[k])
+		_, _ = fmt.Fprintf(&sb, "%g", p.fields[k])
 	}
 
 	sb.WriteByte(' ')
-	fmt.Fprintf(&sb, "%d", p.ts.UnixNano())
+	_, _ = fmt.Fprintf(&sb, "%d", p.ts.UnixNano())
 	return sb.String()
 }
 
