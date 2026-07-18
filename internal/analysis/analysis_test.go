@@ -1,12 +1,24 @@
 package analysis
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/gordcurrie/waypoint/internal/influx"
 )
 
 // baseDate is a fixed Monday used across tests.
 var baseDate = time.Date(2026, 1, 12, 0, 0, 0, 0, time.UTC)
+
+func TestCompute_InvalidWindowDays(t *testing.T) {
+	for _, w := range []int{0, -1, -100} {
+		_, err := Compute(context.Background(), (*influx.Client)(nil), w)
+		if err == nil {
+			t.Errorf("windowDays=%d: want error, got nil", w)
+		}
+	}
+}
 
 func TestCompute_NoLoad(t *testing.T) {
 	start := baseDate.AddDate(0, 0, -9)
@@ -42,6 +54,9 @@ func TestCompute_WindowDates(t *testing.T) {
 		baseDate.AddDate(0, 0, -2),
 		baseDate.AddDate(0, 0, -1),
 		baseDate,
+	}
+	if len(results) != len(want) {
+		t.Fatalf("want %d results, got %d", len(want), len(results))
 	}
 	for i, r := range results {
 		if !r.Date.Equal(want[i]) {

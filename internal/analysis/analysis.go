@@ -28,6 +28,9 @@ type Result struct {
 // day in [today-windowDays+1, today]. Queries warmupDays of extra history
 // automatically to converge the EMAs before the output window.
 func Compute(ctx context.Context, client *influx.Client, windowDays int) ([]Result, error) {
+	if windowDays < 1 {
+		return nil, fmt.Errorf("analysis.Compute: windowDays must be >= 1, got %d", windowDays)
+	}
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 	start := today.AddDate(0, 0, -(windowDays - 1 + warmupDays))
 
