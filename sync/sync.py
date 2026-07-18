@@ -79,7 +79,12 @@ def _save_state(state: dict[str, Any]) -> None:
 
 def _last_synced(state: dict[str, Any], key: str) -> date:
     if key in state:
-        return date.fromisoformat(state[key])
+        try:
+            return date.fromisoformat(state[key])
+        except ValueError:
+            log.warning(
+                "State key %r has invalid date %r — resetting to backfill start", key, state[key]
+            )
     return date.today() - timedelta(days=BACKFILL_DAYS)
 
 
@@ -107,8 +112,15 @@ def _garmin_login() -> Garmin:
     # Mirrors auth.py — portal+cffi uses clientId=GarminConnect and triggers email MFA.
     garmin.client.skip_strategies = {"mobile+cffi", "mobile+requests", "widget+cffi"}
     garmin.login()
-    garmin.client.dump(TOKEN_STORE)
-    log.info("Saved auth token to %s", TOKEN_STORE)
+    try:
+        garmin.client.dump(TOKEN_STORE)
+        log.info("Saved auth token to %s", TOKEN_STORE)
+    except Exception as exc:
+        log.warning(
+            "Failed to save auth token to %s: %s — will re-authenticate next restart",
+            TOKEN_STORE,
+            exc,
+        )
     return garmin
 
 
@@ -132,11 +144,9 @@ def _write(client: InfluxDBClient3, points: list[Any]) -> None:
 
 
 def _parse_gmt(ts: str) -> datetime:
-    # Garmin sometimes appends fractional seconds; strip before parsing.
-    # Replace T separator so both "2026-07-06 10:30:00" and "2026-07-06T10:30:00" work.
-    return datetime.strptime(ts.split(".")[0].replace("T", " "), "%Y-%m-%d %H:%M:%S").replace(
-        tzinfo=UTC
-    )
+    # Take first 19 chars (YYYY-MM-DDTHH:MM:SS) to strip fractional seconds and TZ offsets
+    # (Garmin returns both "...T10:30:00.000" and "...T10:30:00+00:00" forms).
+    return datetime.strptime(ts[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
 
 
 def _day_ts(d: date) -> datetime:
@@ -171,8 +181,12 @@ def _add_fields(p: Point, fields: dict[str, Any]) -> tuple[Point, int]:
 def _advance_state(state: dict[str, Any], key: str, end: date, *, had_error: bool = False) -> None:
     """Advance watermark to end unless it would regress."""
     existing_str = state.get(key)
-    if existing_str and date.fromisoformat(existing_str) >= end:
-        return  # regression guard: never move watermark backward
+    if existing_str:
+        try:
+            if date.fromisoformat(existing_str) >= end:
+                return  # regression guard: never move watermark backward
+        except ValueError:
+            log.warning("State key %r has invalid date %r — overwriting", key, existing_str)
     state[key] = end.isoformat()
     _save_state(state)
     if had_error:
@@ -189,7 +203,7 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, An
     end = date.today()
     log.info("activities: %s → %s", start, end)
 
-    activities = garmin.get_activities_by_date(start.isoformat(), end.isoformat())
+    activities = garmin.get_activities_by_date(start.isoformat(), end.isoformat()) or []
 
     points = []
     _had_error = False
@@ -243,10 +257,7 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, An
             log.warning("activity %s: %s", a.get("activityId"), exc)
 
     _write(client, points)
-    if _had_error:
-        log.warning("activities: parse errors — watermark not advanced, will retry next run")
-    else:
-        _advance_state(state, "activities", end)
+    _advance_state(state, "activities", end, had_error=_had_error)
     log.info("activities: wrote %d points", len(points))
 
 
@@ -291,7 +302,7 @@ def sync_daily_stats(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
         d += timedelta(days=1)
         time.sleep(0.2)
 
-    watermark = (_first_err - timedelta(days=1)) if _first_err else end
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)
     _advance_state(state, "daily_stats", watermark, had_error=_first_err is not None)
     log.info("daily_stats: wrote %d points", len(points))
@@ -344,7 +355,7 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -
         d += timedelta(days=1)
         time.sleep(0.2)
 
-    watermark = (_first_err - timedelta(days=1)) if _first_err else end
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)
     _advance_state(state, "sleep", watermark, had_error=_first_err is not None)
     log.info("sleep: wrote %d points", len(points))
@@ -389,7 +400,7 @@ def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> 
         d += timedelta(days=1)
         time.sleep(0.2)
 
-    watermark = (_first_err - timedelta(days=1)) if _first_err else end
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)
     _advance_state(state, "hrv", watermark, had_error=_first_err is not None)
     log.info("hrv: wrote %d points", len(points))
@@ -432,7 +443,7 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
         d += timedelta(days=1)
         time.sleep(0.2)
 
-    watermark = (_first_err - timedelta(days=1)) if _first_err else end
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)
     _advance_state(state, "training_readiness", watermark, had_error=_first_err is not None)
     log.info("training_readiness: wrote %d points", len(points))
@@ -489,7 +500,7 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
         d += timedelta(days=1)
         time.sleep(0.2)
 
-    watermark = (_first_err - timedelta(days=1)) if _first_err else end
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)
     _advance_state(state, "training_status", watermark, had_error=_first_err is not None)
     log.info("training_status: wrote %d points", len(points))
@@ -531,7 +542,7 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
         d += timedelta(days=1)
         time.sleep(0.2)
 
-    watermark = (_first_err - timedelta(days=1)) if _first_err else end
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)
     _advance_state(state, "performance", watermark, had_error=_first_err is not None)
     log.info("performance: wrote %d points", len(points))
@@ -615,7 +626,7 @@ def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
         d += timedelta(days=1)
         time.sleep(0.2)
 
-    watermark = (_first_err - timedelta(days=1)) if _first_err else end
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)
     _advance_state(state, "respiration", watermark, had_error=_first_err is not None)
     log.info("respiration: wrote %d points", len(points))

@@ -14,7 +14,7 @@ type Activity struct {
 	MaxHRBPM     float64
 	CaloriesKcal float64
 	ElevationGainM float64
-	AvgSpeedMS   float64
+	AvgSpeedMpS   float64
 	TrainingLoad float64
 	AerobicTE    float64
 	AnaerobicTE  float64
@@ -40,7 +40,7 @@ func ActivityFrom(row map[string]any) Activity {
 		MaxHRBPM:              floatFrom(row, "max_hr_bpm"),
 		CaloriesKcal:          floatFrom(row, "calories_kcal"),
 		ElevationGainM:        floatFrom(row, "elevation_gain_m"),
-		AvgSpeedMS:            floatFrom(row, "avg_speed_m_s"),
+		AvgSpeedMpS:            floatFrom(row, "avg_speed_m_s"),
 		TrainingLoad:          floatFrom(row, "training_load"),
 		AerobicTE:             floatFrom(row, "aerobic_te"),
 		AnaerobicTE:           floatFrom(row, "anaerobic_te"),

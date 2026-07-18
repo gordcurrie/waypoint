@@ -299,14 +299,14 @@ def test_activities_activity_id_stored_as_int():
 
 
 @freeze_time("2026-07-06")
-def test_activities_watermark_not_advanced_on_parse_error():
-    """Parse errors must leave watermark unchanged so failed activities retry next run."""
+def test_activities_watermark_advanced_on_parse_error():
+    """Parse errors are permanent data issues; watermark advances so the run doesn't loop forever."""
     garmin = _make_garmin([{"startTimeGMT": "NOT_A_DATE", "activityId": 1}])
     client = MagicMock()
     state: dict = {}
     with patch.object(sync, "_save_state"):
         sync.sync_activities(garmin, client, state)
-    assert "activities" not in state
+    assert state.get("activities") == "2026-07-06"
 
 
 # ── GarminConnectConnectionError propagation ───────────────────────────────────

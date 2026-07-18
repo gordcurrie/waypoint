@@ -1,6 +1,8 @@
 package influx
 
 import (
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -98,6 +100,41 @@ func TestPointLineProtocol_FieldsSortedAlphabetically(t *testing.T) {
 	idxZ := strings.Index(lp, "zzz=")
 	if idxA >= idxM || idxM >= idxZ {
 		t.Errorf("fields not in alphabetical order: %q", lp)
+	}
+}
+
+func TestPointLineProtocol_NaNFieldDropped(t *testing.T) {
+	p := NewPoint("m").SetField("valid", 1.0).SetField("nan_val", math.NaN()).SetTimestamp(lpTimestamp)
+	lp := p.LineProtocol()
+	if strings.Contains(lp, "nan_val") {
+		t.Errorf("NaN field must be dropped from line protocol: %q", lp)
+	}
+	if !strings.Contains(lp, "valid=1") {
+		t.Errorf("valid field must be present: %q", lp)
+	}
+}
+
+func TestPointLineProtocol_InfFieldDropped(t *testing.T) {
+	p := NewPoint("m").SetField("inf_val", math.Inf(1)).SetField("ok", 2.0).SetTimestamp(lpTimestamp)
+	lp := p.LineProtocol()
+	if strings.Contains(lp, "inf_val") {
+		t.Errorf("Inf field must be dropped from line protocol: %q", lp)
+	}
+}
+
+func TestPointSetTimestamp_ZeroIgnored(t *testing.T) {
+	before := time.Now()
+	p := NewPoint("m").SetField("f", 1.0).SetTimestamp(time.Time{})
+	lp := p.LineProtocol()
+	after := time.Now()
+	// timestamp must be between before and after (i.e. time.Now() from NewPoint)
+	var ns int64
+	if _, err := fmt.Sscanf(lp[strings.LastIndex(lp, " ")+1:], "%d", &ns); err != nil {
+		t.Fatalf("could not parse timestamp from %q: %v", lp, err)
+	}
+	ts := time.Unix(0, ns)
+	if ts.Before(before) || ts.After(after) {
+		t.Errorf("zero SetTimestamp should keep NewPoint default; got %v", ts)
 	}
 }
 

@@ -27,9 +27,10 @@ func TrainingReadinessFrom(row map[string]any) TrainingReadiness {
 // TrainingStatus represents one row from the "training_status" measurement.
 // StatusNum encodes the label: 5.0=peaking, 4.0=maintaining, 3.0=productive,
 // 2.0=recovery, 1.0=detraining, 0.0=overreaching.
+// StatusNum is a pointer so nil (absent) can be distinguished from 0.0 (overreaching).
 type TrainingStatus struct {
 	Time          time.Time
-	StatusNum     float64
+	StatusNum     *float64
 	VO2MaxRunning float64
 	VO2MaxCycling float64
 	FitnessAge    float64
@@ -39,7 +40,7 @@ type TrainingStatus struct {
 func TrainingStatusFrom(row map[string]any) TrainingStatus {
 	return TrainingStatus{
 		Time:          timeFrom(row, "time"),
-		StatusNum:     floatFrom(row, "status_num"),
+		StatusNum:     floatPtrFrom(row, "status_num"),
 		VO2MaxRunning: floatFrom(row, "vo2max_running"),
 		VO2MaxCycling: floatFrom(row, "vo2max_cycling"),
 		FitnessAge:    floatFrom(row, "fitness_age"),

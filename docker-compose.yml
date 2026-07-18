@@ -26,11 +26,13 @@ services:
   influxdb-init:
     image: influxdb:3-core
     restart: "no"
+    environment:
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-garmin}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        until influxdb3 show databases --host http://influxdb:8181 2>/dev/null | grep -q "${INFLUXDB_BUCKET:-garmin}"; do
-          influxdb3 create database "${INFLUXDB_BUCKET:-garmin}" --host http://influxdb:8181 2>/dev/null || true
+        until influxdb3 show databases --host http://influxdb:8181 2>/dev/null | grep -q "$INFLUXDB_BUCKET"; do
+          influxdb3 create database "$INFLUXDB_BUCKET" --host http://influxdb:8181 2>/dev/null || true
           sleep 1
         done
     depends_on:

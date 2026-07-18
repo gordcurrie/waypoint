@@ -66,6 +66,46 @@ func TestStringFrom_Missing(t *testing.T) {
 	}
 }
 
+func TestStringFrom_WrongType(t *testing.T) {
+	// Non-string value must return "" rather than panicking or returning garbage.
+	row := map[string]any{"sport": float64(42)}
+	if got := stringFrom(row, "sport"); got != "" {
+		t.Errorf("got %q, want %q for non-string value", got, "")
+	}
+}
+
+func TestFloatPtrFrom_Present(t *testing.T) {
+	row := map[string]any{"status": float64(2)}
+	got := floatPtrFrom(row, "status")
+	if got == nil || *got != 2 {
+		t.Errorf("got %v, want 2.0", got)
+	}
+}
+
+func TestFloatPtrFrom_Zero(t *testing.T) {
+	// 0.0 is a valid sentinel (e.g. POOR HRV) — must return non-nil pointer to 0.
+	row := map[string]any{"status": float64(0)}
+	got := floatPtrFrom(row, "status")
+	if got == nil || *got != 0 {
+		t.Errorf("got %v, want pointer to 0.0", got)
+	}
+}
+
+func TestFloatPtrFrom_Missing(t *testing.T) {
+	got := floatPtrFrom(map[string]any{}, "status")
+	if got != nil {
+		t.Errorf("got %v, want nil for absent field", got)
+	}
+}
+
+func TestFloatPtrFrom_Nil(t *testing.T) {
+	row := map[string]any{"status": nil}
+	got := floatPtrFrom(row, "status")
+	if got != nil {
+		t.Errorf("got %v, want nil for nil value", got)
+	}
+}
+
 func TestTimeFrom_RFC3339Nano(t *testing.T) {
 	row := map[string]any{"time": "2026-07-06T10:30:00.000000000Z"}
 	want := time.Date(2026, 7, 6, 10, 30, 0, 0, time.UTC)

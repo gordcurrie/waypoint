@@ -2,6 +2,7 @@ package influx
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -33,15 +34,22 @@ func (p *Point) SetTag(k, v string) *Point {
 	return p
 }
 
-// SetField adds a float64 field.
+// SetField adds a float64 field. NaN and Inf values are silently dropped —
+// InfluxDB line protocol has no representation for them.
 func (p *Point) SetField(k string, v float64) *Point {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return p
+	}
 	p.fields[k] = v
 	return p
 }
 
-// SetTimestamp sets the point timestamp.
+// SetTimestamp sets the point timestamp. Zero time is ignored — NewPoint
+// defaults to time.Now(), which is the correct fallback.
 func (p *Point) SetTimestamp(t time.Time) *Point {
-	p.ts = t
+	if !t.IsZero() {
+		p.ts = t
+	}
 	return p
 }
 
