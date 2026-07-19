@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/gordcurrie/waypoint/internal/influx"
 )
 
 // baseDate is a fixed Monday used across tests.
@@ -13,7 +11,7 @@ var baseDate = time.Date(2026, 1, 12, 0, 0, 0, 0, time.UTC)
 
 func TestCompute_InvalidWindowDays(t *testing.T) {
 	for _, w := range []int{0, -1, -100} {
-		_, err := Compute(context.Background(), (*influx.Client)(nil), w)
+		_, err := Compute(context.Background(), nil, w)
 		if err == nil {
 			t.Errorf("windowDays=%d: want error, got nil", w)
 		}
