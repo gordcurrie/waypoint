@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gordcurrie/waypoint/internal/garmin"
 	"github.com/gordcurrie/waypoint/internal/influx"
 )
 
@@ -15,19 +14,29 @@ const (
 	warmupDays = ctlDays * 3 // pre-window history needed to converge CTL EMA
 )
 
+// querier is the subset of influx.Client required by Compute.
+type querier interface {
+	Query(ctx context.Context, sql string) ([]map[string]any, error)
+}
+
+// writer is the subset of influx.Client required by WriteResults.
+type writer interface {
+	WritePoints(ctx context.Context, points ...*influx.Point) error
+}
+
 // Result holds ATL/CTL/TSB for one calendar day.
 type Result struct {
-	Date time.Time
-	ATL  float64 // 7-day EMA of daily training load (acute)
-	CTL  float64 // 42-day EMA of daily training load (chronic)
-	TSB  float64 // training stress balance: CTL - ATL
-	Load float64 // raw total training load for this day
+	Date time.Time `json:"date"`
+	ATL  float64   `json:"atl"` // 7-day EMA of daily training load (acute)
+	CTL  float64   `json:"ctl"` // 42-day EMA of daily training load (chronic)
+	TSB  float64   `json:"tsb"` // training stress balance: CTL - ATL
+	Load float64   `json:"load"` // raw total training load for this day
 }
 
 // Compute queries activities from InfluxDB and returns ATL/CTL/TSB for each
 // day in [today-windowDays+1, today]. Queries warmupDays of extra history
 // automatically to converge the EMAs before the output window.
-func Compute(ctx context.Context, client *influx.Client, windowDays int) ([]Result, error) {
+func Compute(ctx context.Context, client querier, windowDays int) ([]Result, error) {
 	if windowDays < 1 {
 		return nil, fmt.Errorf("analysis.Compute: windowDays must be >= 1, got %d", windowDays)
 	}
@@ -46,12 +55,27 @@ func Compute(ctx context.Context, client *influx.Client, windowDays int) ([]Resu
 
 	dayLoads := make(map[string]float64, len(rows))
 	for _, row := range rows {
-		a := garmin.ActivityFrom(row)
-		if a.TrainingLoad == 0 {
+		var ts time.Time
+		switch t := row["time"].(type) {
+		case string:
+			ts, _ = time.Parse(time.RFC3339Nano, t)
+		case float64:
+			ts = time.Unix(0, int64(t)).UTC()
+		case int64:
+			ts = time.Unix(0, t).UTC()
+		}
+		var load float64
+		switch v := row["training_load"].(type) {
+		case float64:
+			load = v
+		case int64:
+			load = float64(v)
+		}
+		if load == 0 || ts.IsZero() {
 			continue
 		}
-		day := a.Time.UTC().Truncate(24 * time.Hour).Format("2006-01-02")
-		dayLoads[day] += a.TrainingLoad
+		day := ts.UTC().Truncate(24 * time.Hour).Format("2006-01-02")
+		dayLoads[day] += load
 	}
 
 	return compute(dayLoads, start, today, windowDays), nil
@@ -88,7 +112,7 @@ func compute(dayLoads map[string]float64, start, today time.Time, windowDays int
 }
 
 // WriteResults writes computed ATL/CTL/TSB to the training_load measurement.
-func WriteResults(ctx context.Context, client *influx.Client, results []Result) error {
+func WriteResults(ctx context.Context, client writer, results []Result) error {
 	if len(results) == 0 {
 		return nil
 	}
