@@ -37,8 +37,10 @@ func registerActivityTools(s *mcp.Server, client influxClient) {
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input listActivitiesInput) (*mcp.CallToolResult, any, error) {
 		limit := input.Limit
-		if limit <= 0 || limit > 50 {
+		if limit <= 0 {
 			limit = 10
+		} else if limit > 50 {
+			limit = 50
 		}
 		days := input.Days
 		if days <= 0 {
@@ -81,6 +83,9 @@ func registerActivityTools(s *mcp.Server, client influxClient) {
 }
 
 func queryActivities(ctx context.Context, client influxClient, days, limit int, sport string) ([]garmin.Activity, error) {
+	if sport != "" && !validSport.MatchString(sport) {
+		return nil, fmt.Errorf("get_recent_activities: invalid sport %q — use lowercase letters, digits, and underscores only", sport)
+	}
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 
 	sportClause := ""
@@ -89,9 +94,7 @@ func queryActivities(ctx context.Context, client influxClient, days, limit int, 
 	}
 
 	sql := fmt.Sprintf(
-		"SELECT time, sport, activity_id, distance_m, duration_s, avg_hr_bpm, max_hr_bpm,"+
-			" calories_kcal, elevation_gain_m, avg_speed_m_s, training_load, aerobic_te, anaerobic_te, vo2max"+
-			" FROM %s WHERE time >= '%s'%s ORDER BY time DESC LIMIT %d",
+		"SELECT * FROM %s WHERE time >= '%s'%s ORDER BY time DESC LIMIT %d",
 		influx.MeasurementActivity, start.Format(time.RFC3339), sportClause, limit,
 	)
 
@@ -111,8 +114,7 @@ func queryWeeklyVolume(ctx context.Context, client influxClient, weeks int) ([]W
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -weeks*7)
 
 	sql := fmt.Sprintf(
-		"SELECT time, sport, distance_m, duration_s, training_load"+
-			" FROM %s WHERE time >= '%s' AND distance_m > 0 ORDER BY time ASC",
+		"SELECT * FROM %s WHERE time >= '%s' AND training_load IS NOT NULL ORDER BY time ASC",
 		influx.MeasurementActivity, start.Format(time.RFC3339),
 	)
 

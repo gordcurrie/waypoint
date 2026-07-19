@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gordcurrie/waypoint/internal/garmin"
 	"github.com/gordcurrie/waypoint/internal/influx"
 )
 
@@ -56,12 +55,27 @@ func Compute(ctx context.Context, client querier, windowDays int) ([]Result, err
 
 	dayLoads := make(map[string]float64, len(rows))
 	for _, row := range rows {
-		a := garmin.ActivityFrom(row)
-		if a.TrainingLoad == 0 {
+		var ts time.Time
+		switch t := row["time"].(type) {
+		case string:
+			ts, _ = time.Parse(time.RFC3339Nano, t)
+		case float64:
+			ts = time.Unix(0, int64(t)).UTC()
+		case int64:
+			ts = time.Unix(0, t).UTC()
+		}
+		var load float64
+		switch v := row["training_load"].(type) {
+		case float64:
+			load = v
+		case int64:
+			load = float64(v)
+		}
+		if load == 0 || ts.IsZero() {
 			continue
 		}
-		day := a.Time.UTC().Truncate(24 * time.Hour).Format("2006-01-02")
-		dayLoads[day] += a.TrainingLoad
+		day := ts.UTC().Truncate(24 * time.Hour).Format("2006-01-02")
+		dayLoads[day] += load
 	}
 
 	return compute(dayLoads, start, today, windowDays), nil

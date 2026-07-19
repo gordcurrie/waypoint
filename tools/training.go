@@ -36,7 +36,11 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 
 		if input.WriteBack {
 			if werr := analysis.WriteResults(ctx, client, results); werr != nil {
-				return nil, nil, fmt.Errorf("get_training_load write_back: %w", werr)
+				type response struct {
+					Results    []analysis.Result `json:"results"`
+					WriteError string            `json:"write_error"`
+				}
+				return jsonResult(response{Results: results, WriteError: werr.Error()})
 			}
 		}
 
@@ -55,6 +59,8 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 		days := input.Days
 		if days <= 0 {
 			days = 7
+		} else if days > 365 {
+			days = 365
 		}
 		readiness, err := queryTrainingReadiness(ctx, client, days)
 		if err != nil {
@@ -67,8 +73,8 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 func queryTrainingReadiness(ctx context.Context, client influxClient, days int) ([]garmin.TrainingReadiness, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
-		influx.MeasurementTrainingReadiness, start.Format(time.RFC3339),
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
+		influx.MeasurementTrainingReadiness, start.Format(time.RFC3339), days,
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
