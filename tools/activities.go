@@ -52,7 +52,7 @@ func registerActivityTools(s *mcp.Server, client influxClient) {
 
 		activities, err := queryActivities(ctx, client, days, limit, input.Sport)
 		if err != nil {
-			return nil, nil, err
+			return errorResult(err)
 		}
 		return jsonResult(activities)
 	})
@@ -76,7 +76,7 @@ func registerActivityTools(s *mcp.Server, client influxClient) {
 
 		vol, err := queryWeeklyVolume(ctx, client, weeks)
 		if err != nil {
-			return nil, nil, err
+			return errorResult(err)
 		}
 		return jsonResult(vol)
 	})

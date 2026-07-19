@@ -66,7 +66,9 @@ func run() error {
 			<-ctx.Done()
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			_ = httpServer.Shutdown(shutdownCtx) //nolint:contextcheck // parent ctx is done; need fresh context for graceful shutdown
+			if err := httpServer.Shutdown(shutdownCtx); err != nil { //nolint:contextcheck // parent ctx is done; need fresh context for graceful shutdown
+				slog.Error("shutdown", "err", err)
+			}
 		}()
 		slog.Warn("HTTP transport has no authentication — bind to localhost or protect with a reverse proxy")
 		slog.Info("listening", "addr", addr)

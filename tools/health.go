@@ -29,7 +29,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		}
 		stats, err := queryDailyStats(ctx, client, days)
 		if err != nil {
-			return nil, nil, err
+			return errorResult(err)
 		}
 		return jsonResult(stats)
 	})
@@ -47,7 +47,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		}
 		sleep, err := querySleep(ctx, client, days)
 		if err != nil {
-			return nil, nil, err
+			return errorResult(err)
 		}
 		return jsonResult(sleep)
 	})
@@ -69,7 +69,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		}
 		hrv, err := queryHRV(ctx, client, days)
 		if err != nil {
-			return nil, nil, err
+			return errorResult(err)
 		}
 		return jsonResult(hrv)
 	})

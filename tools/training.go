@@ -31,7 +31,7 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 
 		results, err := analysis.Compute(ctx, client, windowDays)
 		if err != nil {
-			return nil, nil, fmt.Errorf("get_training_load: %w", err)
+			return errorResult(fmt.Errorf("get_training_load: %w", err))
 		}
 
 		if input.WriteBack {
@@ -64,7 +64,7 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 		}
 		readiness, err := queryTrainingReadiness(ctx, client, days)
 		if err != nil {
-			return nil, nil, err
+			return errorResult(err)
 		}
 		return jsonResult(readiness)
 	})
