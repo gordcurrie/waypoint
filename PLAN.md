@@ -91,37 +91,38 @@ Follows `gordcurrie/agent-skills` → `generate-mcp` skill conventions:
 - `stdio` (default) — Claude Desktop/Code spawns it as subprocess. Local dev.
 - `http` — Streamable HTTP via `mcp.NewStreamableHTTPHandler`. Homelab deployment.
 
-**Tools to expose (data only — no LLM calls):**
+**Tools (data only — no LLM calls):**
 
 | Tool | Description |
 |------|-------------|
 | `get_recent_activities` | Last N activities with type, distance, duration, HR, training load |
-| `get_training_load` | ATL (7-day), CTL (42-day), TSB — computed on demand from activity data |
-| `get_sleep_summary` | Recent sleep scores, HRV, sleep stages |
-| `get_hrv_trend` | HRV readings over time window, baseline comparison |
 | `get_weekly_volume` | Distance/time by sport for last N weeks |
 | `get_daily_stats` | Body Battery, resting HR, stress, steps for date range |
-| `analyze_readiness` | Synthesizes sleep + HRV + TSB → readiness score + explanation |
+| `get_sleep_summary` | Recent sleep data: duration, stages, HRV, SpO2 |
+| `get_hrv_trend` | HRV weekly average and status over time |
+| `get_training_load` | ATL (7-day EMA), CTL (42-day EMA), TSB — computed on demand; optional write-back to InfluxDB |
+| `get_training_readiness` | Training readiness scores: HRV status, sleep score, acute/chronic ratio |
 
-Claude calls these tools and does its own analysis. No chained API calls from Go.
+Claude calls these tools and does its own analysis. No chained LLM calls from Go.
 
 ### Training load computation
 
 ATL/CTL/TSB computed **on demand** when `get_training_load` is called:
-1. Query `activity` measurement from InfluxDB (last 90 days)
+1. Query `activity` measurement from InfluxDB (fetches warmup history: `ctlDays × 3 = 126 days`)
 2. Compute exponential moving averages (ATL=7d, CTL=42d, TSB=CTL-ATL)
-3. Return result; optionally write back to `training_load` measurement for Grafana
+3. Return `window_days` results (default 42); optionally write back to `training_load` measurement for Grafana
 
-No separate trigger needed. Computation is fast (simple EMA over ~90 data points).
+No separate trigger needed. Computation is fast (simple EMA loop).
 
 ### Go libraries
 
 | Package | Purpose |
 |---------|---------|
 | `github.com/modelcontextprotocol/go-sdk` | MCP server framework (official SDK) |
-| `github.com/InfluxCommunity/influxdb3-go/v2` | InfluxDB 3 client |
 | `github.com/spf13/viper` | Config (env vars + config file) |
 | `github.com/anthropics/anthropic-sdk-go` | Claude provider (CLI only, optional) |
+
+InfluxDB 3 Core HTTP API (`/api/v3/query_sql`, `/api/v3/write_lp`) is called directly via stdlib `net/http` + `encoding/json` — no SDK needed. `influxdb3-go/v2` was evaluated and dropped (17 transitive deps for no benefit over raw HTTP).
 
 ### InfluxDB Schema
 
@@ -194,8 +195,8 @@ podman-compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
 ```
 
 Grafana bootstraps with:
-- Data source: InfluxDB
-- Dashboard: import JSON from grafana.com ID 23245 (Garmin Stats)
+- Data source: InfluxDB (provisioned via `grafana/provisioning/datasources/influxdb.yaml`, uid=`garmin-influxdb`, InfluxQL, db=`garmin`)
+- Dashboard: `grafana/provisioning/dashboards/fitness.json` — 8 panels (readiness, body battery, HRV, resting HR, training load, activity distance, sleep breakdown, steps)
 
 ### Claude MCP registration
 
@@ -226,17 +227,15 @@ Add to `~/.config/claude/mcp_servers.json`:
 
 ---
 
-## Phase 2: CLI Tool
+## Phase 2: CLI Tool ✓ done
 
-Reuses all `internal/` packages. New surface only.
+Reuses all `internal/` packages.
 
 ```
-waypoint sync          # trigger Garmin sync now
+waypoint status        # ATL/CTL/TSB + latest readiness
 waypoint analyze week  # AI analysis of last 7 days
 waypoint analyze month # AI analysis of last 30 days
-waypoint plan [weeks]  # generate training plan
-waypoint report        # generate weekly PDF/markdown report
-waypoint status        # show current ATL/CTL/TSB + readiness
+waypoint plan          # generate a training plan
 ```
 
 ### LLM Provider Interface — `internal/llm/`
@@ -260,14 +259,13 @@ LLM_PROVIDER=claude
 LLM_PROVIDER=openai
 
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.3:70b      # 70B minimum recommended for fitness coaching quality
+OLLAMA_MODEL=gemma4:latest     # any capable model; gemma4 / qwen3 work well locally
 ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1  # override for Gemini, etc.
-OPENAI_MODEL=gpt-4o
 ```
 
-**Model quality note:** Fitness coaching (HRV interpretation, periodization, ATL/CTL/TSB) requires a capable model. Minimum: Llama 3.3 70B locally or Claude Sonnet / GPT-4o via API. Smaller models may give poor or unsafe advice.
+**OpenAI provider** (`LLM_PROVIDER=openai`) is stubbed — returns an error. Not yet implemented.
+
+**Model quality note:** Fitness coaching (HRV interpretation, periodization, ATL/CTL/TSB) benefits from a capable model. Smaller models (≤7B) may give shallow or low-quality advice.
 
 System prompt defines a fitness coach persona with access to user's training history.
 
@@ -315,10 +313,11 @@ Single `config.yaml` + env var overrides via Viper. Supports:
 
 ## Verification Plan
 
-1. `docker compose up` / `podman-compose up` → Grafana at :3001, InfluxDB at :8181
-2. Python sync runs → data appears in InfluxDB
-3. Grafana dashboard 23245 shows real data
-4. `waypoint-mcp` binary starts (stdio), registers with Claude Desktop/Code
-5. Ask Claude: "How was my training last week?" → calls `get_recent_activities`, returns real data
-6. Ask Claude: "What's my readiness today?" → calls `get_training_load` + `analyze_readiness`
-7. Phase 2: `waypoint analyze week` returns markdown report to terminal via Ollama
+1. `podman compose up -d` → Grafana at :3001, InfluxDB at :8181 ✓
+2. Python sync runs → data appears in InfluxDB ✓
+3. Grafana "Garmin Fitness" dashboard shows real data ✓
+4. `waypoint-mcp --transport=http` responds to JSON-RPC initialize + tools/list ✓
+5. Ask Claude: "How was my training last week?" → calls `get_recent_activities`, returns real data ✓
+6. Ask Claude: "What's my readiness today?" → calls `get_training_load` + `get_training_readiness` ✓
+7. `waypoint analyze week` returns coaching analysis to terminal via Ollama ✓
+8. `waypoint status` shows ATL/CTL/TSB + readiness date ✓
