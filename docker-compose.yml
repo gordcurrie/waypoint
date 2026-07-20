@@ -1,15 +1,4 @@
 services:
-  # influxdb:3-core runs as fixed non-root uid 1500 with no entrypoint chown,
-  # so a fresh named volume (created root:root) fails catalog init on first run.
-  influxdb-init-perms:
-    image: influxdb:3-core
-    user: root
-    entrypoint: ["/bin/sh", "-c", "chown -R 1500:1500 /var/lib/influxdb3/data /var/lib/influxdb3/plugins"]
-    volumes:
-      - influxdb_data:/var/lib/influxdb3/data
-      - influxdb_plugins:/var/lib/influxdb3/plugins
-    restart: "no"
-
   influxdb:
     image: influxdb:3-core
     ports:
@@ -32,9 +21,6 @@ services:
       timeout: 10s
       retries: 12
       start_period: 15s
-    depends_on:
-      influxdb-init-perms:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   influxdb-init:
