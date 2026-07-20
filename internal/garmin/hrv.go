@@ -6,11 +6,11 @@ import "time"
 // Status is numerically encoded: 2.0=BALANCED, 1.0=UNBALANCED, 0.0=POOR.
 // Status is a pointer so nil (absent) can be distinguished from 0.0 (POOR).
 type HRV struct {
-	Time           time.Time
-	WeeklyAvgMS    float64
-	LastNightMS    float64
-	Last5MinHighMS float64
-	Status         *float64
+	Time           time.Time `json:"time"`
+	WeeklyAvgMS    float64   `json:"weekly_avg_ms"`
+	LastNightMS    float64   `json:"last_night_ms"`
+	Last5MinHighMS float64   `json:"last_5min_high_ms"`
+	Status         *float64  `json:"status"`
 }
 
 // HRVFrom converts a query row from the "hrv" measurement.

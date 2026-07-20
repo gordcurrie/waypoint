@@ -168,6 +168,15 @@ def _fval(data: Any, *keys: str) -> float | None:
         return None
 
 
+def _scale(v: float | None, factor: float) -> float | None:
+    """Multiply v by factor; propagate None."""
+    return v * factor if v is not None else None
+
+
+# Garmin returns HRV status as a string enum; map to float for InfluxDB.
+_HRV_STATUS: dict[str, float] = {"BALANCED": 2.0, "UNBALANCED": 1.0, "POOR": 0.0}
+
+
 def _add_fields(p: Point, fields: dict[str, Any]) -> tuple[Point, int]:
     """Add non-None fields to point; return (point, count_added)."""
     count = 0
@@ -236,8 +245,8 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, An
                     {
                         "cadence_avg_spm": _fval(a, "averageRunningCadenceInStepsPerMinute"),
                         "ground_contact_time_ms": _fval(a, "avgGroundContactTime"),
-                        "vertical_oscillation_mm": _fval(a, "avgVerticalOscillation"),
-                        "stride_length_mm": _fval(a, "avgStrideLength"),
+                        "vertical_oscillation_mm": _scale(_fval(a, "avgVerticalOscillation"), 10.0),
+                        "stride_length_mm": _scale(_fval(a, "avgStrideLength"), 10.0),
                         "vertical_ratio_pct": _fval(a, "avgVerticalRatio"),
                         "avg_power_w": _fval(a, "avgPower"),
                     }
@@ -422,9 +431,9 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
                 p = Point("training_readiness").time(_day_ts(d))
                 fields = {
                     "score": _fval(item, "score"),
-                    "hrv_status": _fval(item, "hrvStatus"),
+                    "hrv_status": _HRV_STATUS.get(str(item.get("hrvStatus", "")), None),
                     "sleep_score": _fval(item, "sleepScore"),
-                    "recovery_time_h": _fval(item, "recoveryTime"),
+                    "recovery_time_h": _scale(_fval(item, "recoveryTime"), 1.0 / 60.0),
                     "acw_ratio": _fval(item, "acwRatio"),
                 }
                 p, n = _add_fields(p, fields)
@@ -571,9 +580,12 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[
             return
 
         p = Point("lactate_threshold").time(_day_ts(test_date))
+        # paceThreshold unit: garmin biometric-service returns s/m; multiply by 1000
+        # to convert to s/km (matching the field name). Verify against a real payload
+        # if this account ever completes an LT test.
         fields = {
             "lt_hr_bpm": _fval(lt, "heartRateThreshold"),
-            "lt_pace_s_per_km": _fval(lt, "paceThreshold"),
+            "lt_pace_s_per_km": _scale(_fval(lt, "paceThreshold"), 1000.0),
         }
         p, n = _add_fields(p, fields)
         if n:

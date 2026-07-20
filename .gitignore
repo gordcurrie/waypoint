@@ -8,6 +8,8 @@ garmin_tokens.json
 
 # Go
 bin/
+/cli
+/mcp-server
 *.test
 *.out
 

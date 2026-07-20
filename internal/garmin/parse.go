@@ -78,8 +78,12 @@ func timeFrom(row map[string]any, key string) time.Time {
 	}
 	switch t := v.(type) {
 	case string:
-		if ts, err := time.Parse(time.RFC3339Nano, t); err == nil {
-			return ts
+		// InfluxDB 3 Core returns timestamps without a timezone suffix (e.g. "2026-07-20T15:04:05").
+		// Try RFC3339Nano first (has Z/offset), then the no-TZ form (treat as UTC).
+		for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999999999", "2006-01-02T15:04:05"} {
+			if ts, err := time.Parse(layout, t); err == nil {
+				return ts.UTC()
+			}
 		}
 	case float64:
 		return time.Unix(0, int64(t)).UTC()

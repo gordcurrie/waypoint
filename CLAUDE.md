@@ -104,6 +104,26 @@ Default to stdlib. Add a dep only when:
 
 When a dep is proposed, name what it replaces and why stdlib falls short.
 
+## Unit conversions in sync.py — backfill required on existing DBs
+
+These fields have non-obvious units from the Garmin API. The field names were fixed in
+`feat/sync-sidecar` (July 2026). If applying these fixes to a DB with existing data, the
+old wrong-unit points must be deleted and re-synced:
+
+| Field | Measurement | Garmin API unit | Stored unit | Conversion |
+|-------|-------------|-----------------|-------------|------------|
+| `vertical_oscillation_mm` | `activity` | centimeters | millimeters | ×10 |
+| `stride_length_mm` | `activity` | centimeters | millimeters | ×10 |
+| `recovery_time_h` | `training_readiness` | minutes | hours | ÷60 |
+| `hrv_status` | `training_readiness` | string enum | float | `BALANCED`→2.0, `UNBALANCED`→1.0, `POOR`→0.0 |
+
+**To backfill**: delete the affected measurements, reset the watermark keys
+(`activities`, `training_readiness`) in `/data/sync_state.json`, and restart the
+container. The backfill window is controlled by `BACKFILL_DAYS` (default 90).
+
+`lt_pace_s_per_km` in `lactate_threshold` may also need ×1000 (s/m → s/km) if
+a lactate threshold test exists in the DB — unverifiable until LT data is present.
+
 ## Skill to invoke for MCP server work
 
 When building `tools/` or `cmd/mcp-server/`, invoke the `generate-mcp` skill:

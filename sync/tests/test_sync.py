@@ -340,3 +340,96 @@ def test_advance_state_first_run_none_existing_allows_write():
     with patch.object(sync, "_save_state"):
         sync._advance_state(state, "daily_stats", date(2026, 4, 6))
     assert state["daily_stats"] == "2026-04-06"
+
+
+# ── sync_training_readiness ────────────────────────────────────────────────────
+
+
+def _make_readiness_garmin(payload: object) -> MagicMock:
+    g = MagicMock()
+    g.get_training_readiness.return_value = payload
+    return g
+
+
+def _captured_readiness_fields(garmin: MagicMock, state: dict | None = None) -> dict:
+    """Run sync_training_readiness for a single day and return the fields dict."""
+    client = MagicMock()
+    captured: dict = {}
+    original = sync._add_fields
+
+    def capturing(p, fields):
+        captured.update(fields)
+        return original(p, fields)
+
+    with (
+        patch.object(sync, "_add_fields", side_effect=capturing),
+        patch.object(sync, "_save_state"),
+    ):
+        sync.sync_training_readiness(garmin, client, state or {"training_readiness": "2026-07-05"})
+
+    return captured
+
+
+@freeze_time("2026-07-06")
+def test_training_readiness_recovery_time_converted_from_minutes():
+    """recoveryTime is in minutes; stored field must be hours (÷60)."""
+    garmin = _make_readiness_garmin([{"score": 80, "recoveryTime": 3000}])
+    fields = _captured_readiness_fields(garmin)
+    assert fields.get("recovery_time_h") == pytest.approx(50.0)
+
+
+@freeze_time("2026-07-06")
+def test_training_readiness_recovery_time_none_propagated():
+    """Missing recoveryTime must not crash and must not write the field."""
+    garmin = _make_readiness_garmin([{"score": 70}])
+    fields = _captured_readiness_fields(garmin)
+    assert fields.get("recovery_time_h") is None
+
+
+@freeze_time("2026-07-06")
+def test_training_readiness_hrv_status_balanced_maps_to_2():
+    """HRV status string enum must be converted to numeric (BALANCED→2.0)."""
+    garmin = _make_readiness_garmin([{"score": 75, "hrvStatus": "BALANCED"}])
+    fields = _captured_readiness_fields(garmin)
+    assert fields.get("hrv_status") == 2.0
+
+
+@freeze_time("2026-07-06")
+def test_training_readiness_hrv_status_unbalanced_maps_to_1():
+    garmin = _make_readiness_garmin([{"score": 40, "hrvStatus": "UNBALANCED"}])
+    fields = _captured_readiness_fields(garmin)
+    assert fields.get("hrv_status") == 1.0
+
+
+@freeze_time("2026-07-06")
+def test_training_readiness_hrv_status_poor_maps_to_0():
+    garmin = _make_readiness_garmin([{"score": 15, "hrvStatus": "POOR"}])
+    fields = _captured_readiness_fields(garmin)
+    assert fields.get("hrv_status") == 0.0
+
+
+@freeze_time("2026-07-06")
+def test_training_readiness_hrv_status_unknown_is_none():
+    """Unknown or missing hrv_status string must not be written."""
+    garmin = _make_readiness_garmin([{"score": 60, "hrvStatus": "SOMETHING_NEW"}])
+    fields = _captured_readiness_fields(garmin)
+    assert fields.get("hrv_status") is None
+
+
+@freeze_time("2026-07-06")
+def test_training_readiness_accepts_dict_payload():
+    """API may return a dict instead of a list; both shapes must be handled."""
+    garmin = _make_readiness_garmin({"score": 65, "recoveryTime": 1800, "hrvStatus": "BALANCED"})
+    fields = _captured_readiness_fields(garmin)
+    assert fields.get("recovery_time_h") == pytest.approx(30.0)
+    assert fields.get("hrv_status") == 2.0
+
+
+@freeze_time("2026-07-06")
+def test_training_readiness_state_advanced():
+    garmin = _make_readiness_garmin([])
+    client = MagicMock()
+    state: dict = {"training_readiness": "2026-07-05"}
+    with patch.object(sync, "_save_state"):
+        sync.sync_training_readiness(garmin, client, state)
+    assert state["training_readiness"] == "2026-07-06"

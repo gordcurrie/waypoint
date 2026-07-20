@@ -4,17 +4,17 @@ import "time"
 
 // DailyStats represents one row from the "daily_stats" measurement.
 type DailyStats struct {
-	Time                 time.Time
-	Steps                float64
-	RestingHRBPM         float64
-	BodyBatteryMax       float64
-	BodyBatteryMin       float64
-	StressAvg            float64
-	ActiveCalories       float64
-	TotalCalories        float64
-	FloorsAscended       float64
-	VigorousIntensityMin float64
-	ModerateIntensityMin float64
+	Time                 time.Time `json:"time"`
+	Steps                float64   `json:"steps"`
+	RestingHRBPM         float64   `json:"resting_hr_bpm"`
+	BodyBatteryMax       float64   `json:"body_battery_max"`
+	BodyBatteryMin       float64   `json:"body_battery_min"`
+	StressAvg            float64   `json:"stress_avg"`
+	ActiveCalories       float64   `json:"active_calories"`
+	TotalCalories        float64   `json:"total_calories"`
+	FloorsAscended       float64   `json:"floors_ascended"`
+	VigorousIntensityMin float64   `json:"vigorous_intensity_min"`
+	ModerateIntensityMin float64   `json:"moderate_intensity_min"`
 }
 
 // DailyStatsFrom converts a query row from the "daily_stats" measurement.
@@ -36,17 +36,17 @@ func DailyStatsFrom(row map[string]any) DailyStats {
 
 // Sleep represents one row from the "sleep" measurement.
 type Sleep struct {
-	Time             time.Time
-	TotalSleepS      float64
-	DeepSleepS       float64
-	LightSleepS      float64
-	REMSleepS        float64
-	AwakeS           float64
-	SleepScore       float64
-	AvgHRVMS         float64
-	AvgSpO2Pct       float64
-	AvgBreathingRate float64
-	AvgStress        float64
+	Time             time.Time `json:"time"`
+	TotalSleepS      float64   `json:"total_sleep_s"`
+	DeepSleepS       float64   `json:"deep_sleep_s"`
+	LightSleepS      float64   `json:"light_sleep_s"`
+	REMSleepS        float64   `json:"rem_sleep_s"`
+	AwakeS           float64   `json:"awake_s"`
+	SleepScore       float64   `json:"sleep_score"`
+	AvgHRVMS         float64   `json:"avg_hrv_ms"`
+	AvgSpO2Pct       float64   `json:"avg_spo2_pct"`
+	AvgBreathingRate float64   `json:"avg_breathing_rate"`
+	AvgStress        float64   `json:"avg_stress"`
 }
 
 // SleepFrom converts a query row from the "sleep" measurement.
@@ -68,11 +68,11 @@ func SleepFrom(row map[string]any) Sleep {
 
 // Respiration represents one row from the "respiration" measurement.
 type Respiration struct {
-	Time          time.Time
-	AvgWakingBRPM float64
-	AvgSleepBRPM  float64
-	HighestBRPM   float64
-	LowestBRPM    float64
+	Time          time.Time `json:"time"`
+	AvgWakingBRPM float64   `json:"avg_waking_brpm"`
+	AvgSleepBRPM  float64   `json:"avg_sleep_brpm"`
+	HighestBRPM   float64   `json:"highest_brpm"`
+	LowestBRPM    float64   `json:"lowest_brpm"`
 }
 
 // RespirationFrom converts a query row from the "respiration" measurement.
