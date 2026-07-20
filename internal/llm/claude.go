@@ -45,6 +45,9 @@ func (p *claudeProvider) Complete(ctx context.Context, system, user string) (str
 	if err != nil {
 		return "", fmt.Errorf("claude: %w", err)
 	}
+	if string(resp.StopReason) == "max_tokens" {
+		return "", fmt.Errorf("claude: response truncated at max_tokens=%d; reduce input or increase MaxTokens", params.MaxTokens)
+	}
 
 	var sb strings.Builder
 	for i := range resp.Content {

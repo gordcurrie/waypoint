@@ -82,7 +82,7 @@ func (p *ollamaProvider) Complete(ctx context.Context, system, user string) (str
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return "", fmt.Errorf("ollama: read response: %w", err)
 	}

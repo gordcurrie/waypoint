@@ -76,6 +76,7 @@ func TestBuildAnalyzePrompt_HRVStatus(t *testing.T) {
 	balanced := 2.0
 	unbalanced := 1.0
 	poor := 0.0
+	lowUnbalanced := 3.0
 	unknown := 99.0
 
 	cases := []struct {
@@ -85,6 +86,7 @@ func TestBuildAnalyzePrompt_HRVStatus(t *testing.T) {
 		{&balanced, "balanced"},
 		{&unbalanced, "unbalanced"},
 		{&poor, "poor"},
+		{&lowUnbalanced, "low-unbalanced"},
 		{&unknown, "unknown"},
 		{nil, "unknown"},
 	}
@@ -144,5 +146,37 @@ func TestBuildPlanPrompt_closingInstruction(t *testing.T) {
 	got := buildPlanPrompt(12, d)
 	if !strings.Contains(got, "12-week plan") {
 		t.Errorf("closing instruction missing week count:\n%s", got)
+	}
+}
+
+func TestBuildPlanPrompt_includesHRV(t *testing.T) {
+	balanced := 2.0
+	d := &trainingData{
+		hrv: []garmin.HRV{
+			{Time: testTime.AddDate(0, 0, -6), WeeklyAvgMS: 50, Status: nil},
+			{Time: testTime, WeeklyAvgMS: 60, Status: &balanced},
+		},
+	}
+	got := buildPlanPrompt(4, d)
+	for _, want := range []string{"HRV", "55", "balanced"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in plan prompt:\n%s", want, got)
+		}
+	}
+}
+
+func TestBuildPlanPrompt_includesBodyBattery(t *testing.T) {
+	d := &trainingData{
+		dailyStats: []garmin.DailyStats{
+			{Time: testTime.AddDate(0, 0, -1), BodyBatteryMax: 80},
+			{Time: testTime, BodyBatteryMax: 60},
+		},
+	}
+	got := buildPlanPrompt(4, d)
+	if !strings.Contains(got, "body battery") {
+		t.Errorf("missing body battery in plan prompt:\n%s", got)
+	}
+	if !strings.Contains(got, "70") {
+		t.Errorf("expected avg body battery 70 in plan prompt:\n%s", got)
 	}
 }

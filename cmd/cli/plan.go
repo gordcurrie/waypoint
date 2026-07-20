@@ -26,14 +26,14 @@ func runPlan(client *influx.Client, weeks int) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	data, err := gatherData(ctx, client, planHistoryDays)
-	if err != nil {
-		return err
-	}
-
 	provider, err := llm.NewFromEnv()
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
+	}
+
+	data, err := gatherData(ctx, client, planHistoryDays)
+	if err != nil {
+		return err
 	}
 
 	prompt := buildPlanPrompt(weeks, &data)
@@ -78,6 +78,36 @@ func buildPlanPrompt(weeks int, d *trainingData) string {
 	if len(d.readiness) > 0 {
 		r := d.readiness[0]
 		fmt.Fprintf(&sb, "Latest readiness: %.0f/100 (HRV status=%.0f)\n", r.Score, r.HRVStatus)
+	}
+
+	if len(d.hrv) > 0 {
+		var totalHRV float64
+		for _, h := range d.hrv {
+			totalHRV += h.WeeklyAvgMS
+		}
+		latest := d.hrv[len(d.hrv)-1]
+		status := "unknown"
+		if latest.Status != nil {
+			switch *latest.Status {
+			case 2.0:
+				status = "balanced"
+			case 1.0:
+				status = "unbalanced"
+			case 0.0:
+				status = "poor"
+			case 3.0:
+				status = "low-unbalanced"
+			}
+		}
+		fmt.Fprintf(&sb, "HRV: 28d avg=%.0fms, current status=%s\n", totalHRV/float64(len(d.hrv)), status)
+	}
+
+	if len(d.dailyStats) > 0 {
+		var totalBB float64
+		for _, s := range d.dailyStats {
+			totalBB += s.BodyBatteryMax
+		}
+		fmt.Fprintf(&sb, "Avg daily body battery max: %.0f/100\n", totalBB/float64(len(d.dailyStats)))
 	}
 
 	fmt.Fprintf(&sb, "\nCreate a %d-week plan. Include weekly structure and key sessions.", weeks) //nolint:gosec // weeks is validated 1-52 by caller

@@ -42,6 +42,9 @@ func runAnalyze(client *influx.Client, period string) error {
 	if err != nil {
 		return err
 	}
+	if len(data.activities) == 0 && len(data.sleep) == 0 && len(data.hrv) == 0 && len(data.dailyStats) == 0 && len(data.readiness) == 0 {
+		return fmt.Errorf("no training data found for the last %d days; run sync first", days)
+	}
 
 	prompt := buildAnalyzePrompt(period, days, &data)
 	response, err := provider.Complete(ctx, analyzeSystemPrompt, prompt)
@@ -89,8 +92,8 @@ func gatherData(ctx context.Context, client *influx.Client, days int) (trainingD
 
 	collect(func() error {
 		rows, err := client.Query(ctx, fmt.Sprintf(
-			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-			influx.MeasurementActivity, startStr, days,
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+			influx.MeasurementActivity, startStr,
 		))
 		if err != nil {
 			return fmt.Errorf("activities: %w", err)
@@ -107,8 +110,8 @@ func gatherData(ctx context.Context, client *influx.Client, days int) (trainingD
 
 	collect(func() error {
 		rows, err := client.Query(ctx, fmt.Sprintf(
-			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-			influx.MeasurementSleep, startStr, days,
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+			influx.MeasurementSleep, startStr,
 		))
 		if err != nil {
 			return fmt.Errorf("sleep: %w", err)
@@ -125,8 +128,8 @@ func gatherData(ctx context.Context, client *influx.Client, days int) (trainingD
 
 	collect(func() error {
 		rows, err := client.Query(ctx, fmt.Sprintf(
-			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-			influx.MeasurementHRV, startStr, days,
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time ASC",
+			influx.MeasurementHRV, startStr,
 		))
 		if err != nil {
 			return fmt.Errorf("hrv: %w", err)
@@ -143,8 +146,8 @@ func gatherData(ctx context.Context, client *influx.Client, days int) (trainingD
 
 	collect(func() error {
 		rows, err := client.Query(ctx, fmt.Sprintf(
-			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-			influx.MeasurementDailyStats, startStr, days,
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+			influx.MeasurementDailyStats, startStr,
 		))
 		if err != nil {
 			return fmt.Errorf("daily stats: %w", err)
@@ -161,8 +164,8 @@ func gatherData(ctx context.Context, client *influx.Client, days int) (trainingD
 
 	collect(func() error {
 		rows, err := client.Query(ctx, fmt.Sprintf(
-			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-			influx.MeasurementTrainingReadiness, startStr, days,
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+			influx.MeasurementTrainingReadiness, startStr,
 		))
 		if err != nil {
 			return fmt.Errorf("readiness: %w", err)
@@ -205,9 +208,12 @@ func buildAnalyzePrompt(period string, days int, d *trainingData) string {
 	}
 
 	if len(d.readiness) > 0 {
-		r := d.readiness[0]
-		fmt.Fprintf(&sb, "READINESS (%s): score=%.0f, hrv_status=%.0f, sleep_score=%.0f\n\n",
-			r.Time.Format("2006-01-02"), r.Score, r.HRVStatus, r.SleepScore)
+		sb.WriteString("READINESS:\n")
+		for _, r := range d.readiness {
+			fmt.Fprintf(&sb, "  %s: score=%.0f, hrv_status=%.0f, sleep_score=%.0f\n",
+				r.Time.Format("2006-01-02"), r.Score, r.HRVStatus, r.SleepScore)
+		}
+		sb.WriteString("\n")
 	}
 
 	if len(d.activities) > 0 {
@@ -248,6 +254,8 @@ func buildAnalyzePrompt(period string, days int, d *trainingData) string {
 					status = "unbalanced"
 				case 0.0:
 					status = "poor"
+				case 3.0:
+					status = "low-unbalanced"
 				}
 			}
 			fmt.Fprintf(&sb, "  %s: weekly_avg=%.0fms, last_night=%.0fms, status=%s\n",

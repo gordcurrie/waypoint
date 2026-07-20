@@ -22,7 +22,7 @@ func runStatus(client *influx.Client) error {
 		return fmt.Errorf("training load: %w", err)
 	}
 
-	readiness, err := queryReadiness(ctx, client, 1)
+	readiness, err := queryReadiness(ctx, client, 7)
 	if err != nil {
 		return fmt.Errorf("readiness: %w", err)
 	}

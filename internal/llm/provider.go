@@ -23,7 +23,9 @@ func NewFromEnv() (Provider, error) {
 			return nil, fmt.Errorf("LLM_PROVIDER=claude requires ANTHROPIC_API_KEY")
 		}
 		return newClaude(), nil
+	case "openai":
+		return nil, fmt.Errorf("LLM_PROVIDER=openai is not yet implemented; use 'ollama' (default) or 'claude'")
 	default:
-		return nil, fmt.Errorf("unknown LLM_PROVIDER %q: use ollama or claude", p)
+		return nil, fmt.Errorf("unknown LLM_PROVIDER %q: use 'ollama' (default) or 'claude'", p)
 	}
 }

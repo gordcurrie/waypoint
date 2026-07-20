@@ -30,21 +30,21 @@ func TestRun_noArgs(t *testing.T) {
 	defer withArgs(t)()
 
 	err := run()
-	if err == nil || err.Error() != "unknown command" {
-		t.Errorf("got %v, want 'unknown command'", err)
+	if err == nil || err.Error() != "invalid usage" {
+		t.Errorf("got %v, want 'invalid usage'", err)
 	}
 }
 
 func TestRun_unknownCommand_noInfluxNeeded(t *testing.T) {
 	// Unknown command must return usage error BEFORE attempting influx connection.
 	// INFLUXDB_URL intentionally unset — if influx is contacted, the test will fail
-	// with an influx error rather than "unknown command".
+	// with an influx error rather than "invalid usage".
 	t.Setenv("INFLUXDB_URL", "")
 	defer withArgs(t, "badcmd")()
 
 	err := run()
-	if err == nil || err.Error() != "unknown command" {
-		t.Errorf("got %v, want 'unknown command' (not an influx error)", err)
+	if err == nil || err.Error() != "invalid usage" {
+		t.Errorf("got %v, want 'invalid usage' (not an influx error)", err)
 	}
 }
 

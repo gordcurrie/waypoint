@@ -66,5 +66,5 @@ func usage() error {
 	fmt.Fprintln(os.Stderr, "  status               show current ATL/CTL/TSB and training readiness")
 	fmt.Fprintln(os.Stderr, "  analyze [week|month]  AI analysis of recent training")
 	fmt.Fprintln(os.Stderr, "  plan [weeks]          generate a training plan (default: 4 weeks)")
-	return fmt.Errorf("unknown command")
+	return fmt.Errorf("invalid usage")
 }

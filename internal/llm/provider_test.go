@@ -88,6 +88,18 @@ func TestNewFromEnv_unknownProvider(t *testing.T) {
 	}
 }
 
+func TestNewFromEnv_openaiNotImplemented(t *testing.T) {
+	t.Setenv("LLM_PROVIDER", "openai")
+
+	_, err := NewFromEnv()
+	if err == nil {
+		t.Fatal("expected error for openai provider, got nil")
+	}
+	if !strings.Contains(err.Error(), "not yet implemented") {
+		t.Errorf("error should mention 'not yet implemented': %v", err)
+	}
+}
+
 func TestNewFromEnv_claudeReadsModel(t *testing.T) {
 	t.Setenv("LLM_PROVIDER", "claude")
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
