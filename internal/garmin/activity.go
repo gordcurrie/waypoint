@@ -5,27 +5,27 @@ import "time"
 // Activity represents one row from the "activity" measurement.
 // Running-specific fields (Cadence, GroundContactTime, etc.) are zero for non-running sports.
 type Activity struct {
-	Time         time.Time
-	Sport        string // tag
-	ActivityID   int64
-	DistanceM    float64
-	DurationS    float64
-	AvgHRBPM     float64
-	MaxHRBPM     float64
-	CaloriesKcal float64
-	ElevationGainM float64
-	AvgSpeedMpS   float64
-	TrainingLoad float64
-	AerobicTE    float64
-	AnaerobicTE  float64
-	VO2Max       float64
+	Time           time.Time `json:"time"`
+	Sport          string    `json:"sport"` // tag
+	ActivityID     int64     `json:"activity_id"`
+	DistanceM      float64   `json:"distance_m"`
+	DurationS      float64   `json:"duration_s"`
+	AvgHRBPM       float64   `json:"avg_hr_bpm"`
+	MaxHRBPM       float64   `json:"max_hr_bpm"`
+	CaloriesKcal   float64   `json:"calories_kcal"`
+	ElevationGainM float64   `json:"elevation_gain_m"`
+	AvgSpeedMpS    float64   `json:"avg_speed_m_s"`
+	TrainingLoad   float64   `json:"training_load"`
+	AerobicTE      float64   `json:"aerobic_te"`
+	AnaerobicTE    float64   `json:"anaerobic_te"`
+	VO2Max         float64   `json:"vo2max"`
 	// Running-specific
-	CadenceAvgSPM         float64
-	GroundContactTimeMS   float64
-	VerticalOscillationMM float64
-	StrideLengthMM        float64
-	VerticalRatioPct      float64
-	AvgPowerW             float64
+	CadenceAvgSPM         float64 `json:"cadence_avg_spm"`
+	GroundContactTimeMS   float64 `json:"ground_contact_time_ms"`
+	VerticalOscillationMM float64 `json:"vertical_oscillation_mm"`
+	StrideLengthMM        float64 `json:"stride_length_mm"`
+	VerticalRatioPct      float64 `json:"vertical_ratio_pct"`
+	AvgPowerW             float64 `json:"avg_power_w"`
 }
 
 // ActivityFrom converts a query row from the "activity" measurement into an Activity.
@@ -40,7 +40,7 @@ func ActivityFrom(row map[string]any) Activity {
 		MaxHRBPM:              floatFrom(row, "max_hr_bpm"),
 		CaloriesKcal:          floatFrom(row, "calories_kcal"),
 		ElevationGainM:        floatFrom(row, "elevation_gain_m"),
-		AvgSpeedMpS:            floatFrom(row, "avg_speed_m_s"),
+		AvgSpeedMpS:           floatFrom(row, "avg_speed_m_s"),
 		TrainingLoad:          floatFrom(row, "training_load"),
 		AerobicTE:             floatFrom(row, "aerobic_te"),
 		AnaerobicTE:           floatFrom(row, "anaerobic_te"),

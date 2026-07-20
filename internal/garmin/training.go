@@ -4,12 +4,12 @@ import "time"
 
 // TrainingReadiness represents one row from the "training_readiness" measurement.
 type TrainingReadiness struct {
-	Time          time.Time
-	Score         float64
-	HRVStatus     float64
-	SleepScore    float64
-	RecoveryTimeH float64
-	ACWRatio      float64
+	Time          time.Time `json:"time"`
+	Score         float64   `json:"score"`
+	HRVStatus     float64   `json:"hrv_status"`
+	SleepScore    float64   `json:"sleep_score"`
+	RecoveryTimeH float64   `json:"recovery_time_h"`
+	ACWRatio      float64   `json:"acw_ratio"`
 }
 
 // TrainingReadinessFrom converts a query row from the "training_readiness" measurement.
@@ -29,11 +29,11 @@ func TrainingReadinessFrom(row map[string]any) TrainingReadiness {
 // 2.0=recovery, 1.0=detraining, 0.0=overreaching.
 // StatusNum is a pointer so nil (absent) can be distinguished from 0.0 (overreaching).
 type TrainingStatus struct {
-	Time          time.Time
-	StatusNum     *float64
-	VO2MaxRunning float64
-	VO2MaxCycling float64
-	FitnessAge    float64
+	Time          time.Time `json:"time"`
+	StatusNum     *float64  `json:"status_num"`
+	VO2MaxRunning float64   `json:"vo2max_running"`
+	VO2MaxCycling float64   `json:"vo2max_cycling"`
+	FitnessAge    float64   `json:"fitness_age"`
 }
 
 // TrainingStatusFrom converts a query row from the "training_status" measurement.
@@ -49,9 +49,9 @@ func TrainingStatusFrom(row map[string]any) TrainingStatus {
 
 // Performance represents one row from the "performance" measurement.
 type Performance struct {
-	Time       time.Time
-	VO2Max     float64
-	FitnessAge float64
+	Time       time.Time `json:"time"`
+	VO2Max     float64   `json:"vo2max"`
+	FitnessAge float64   `json:"fitness_age"`
 }
 
 // PerformanceFrom converts a query row from the "performance" measurement.
@@ -65,9 +65,9 @@ func PerformanceFrom(row map[string]any) Performance {
 
 // LactateThreshold represents one row from the "lactate_threshold" measurement.
 type LactateThreshold struct {
-	Time         time.Time
-	LTHeartRate  float64 // lt_hr_bpm
-	LTPaceSPerKM float64 // lt_pace_s_per_km
+	Time         time.Time `json:"time"`
+	LTHeartRate  float64   `json:"lt_hr_bpm"`
+	LTPaceSPerKM float64   `json:"lt_pace_s_per_km"`
 }
 
 // LactateThresholdFrom converts a query row from the "lactate_threshold" measurement.
@@ -83,10 +83,10 @@ func LactateThresholdFrom(row map[string]any) LactateThreshold {
 // Written by the Go MCP server on demand, not by the Python sync sidecar.
 // ATL = 7-day EMA of training load, CTL = 42-day EMA, TSB = CTL - ATL.
 type TrainingLoad struct {
-	Time time.Time
-	ATL  float64 // atl_7day
-	CTL  float64 // ctl_42day
-	TSB  float64 // tsb
+	Time time.Time `json:"time"`
+	ATL  float64   `json:"atl_7day"`
+	CTL  float64   `json:"ctl_42day"`
+	TSB  float64   `json:"tsb"`
 }
 
 // TrainingLoadFrom converts a query row from the "training_load" measurement.
