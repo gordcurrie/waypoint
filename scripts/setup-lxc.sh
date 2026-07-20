@@ -77,7 +77,8 @@ setup_env() {
 # ── systemd ────────────────────────────────────────────────────────────────────
 
 install_service() {
-  cat > /etc/systemd/system/waypoint.service <<'EOF'
+  # Expand INSTALL_DIR into the unit — heredoc with 'EOF' would leave it literal.
+  cat > /etc/systemd/system/waypoint.service <<EOF
 [Unit]
 Description=Waypoint fitness tracker (Garmin → InfluxDB → Grafana + MCP)
 Documentation=https://github.com/gordcurrie/waypoint
@@ -85,15 +86,16 @@ After=docker.service network-online.target
 Requires=docker.service
 
 [Service]
+# Type=oneshot + RemainAfterExit: ExecStart runs "docker compose up -d" which
+# returns immediately (detached). Systemd marks the unit active after that.
+# Container restarts are handled by Docker's own restart: unless-stopped policy.
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/waypoint
-EnvironmentFile=/opt/waypoint/.env
-ExecStart=docker compose -f docker-compose.yml -f docker-compose.homelab.yml up -d --build
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${INSTALL_DIR}/.env
+ExecStart=docker compose -f docker-compose.yml -f docker-compose.homelab.yml up -d
 ExecStop=docker compose -f docker-compose.yml -f docker-compose.homelab.yml down
-TimeoutStartSec=300
-Restart=on-failure
-RestartSec=30
+TimeoutStartSec=120
 
 [Install]
 WantedBy=multi-user.target
@@ -113,21 +115,24 @@ print_auth_instructions() {
   log "1. Edit your credentials:"
   log "     nano $INSTALL_DIR/.env"
   log ""
-  log "2. Run first-time Garmin auth (interactive MFA required):"
+  log "2. Build images (run once now, and after any git pull):"
   log "     cd $INSTALL_DIR"
-  log "     docker compose -f docker-compose.yml -f docker-compose.homelab.yml build sync"
+  log "     docker compose -f docker-compose.yml -f docker-compose.homelab.yml build"
+  log ""
+  log "3. Run first-time Garmin auth (interactive MFA required):"
+  log "     cd $INSTALL_DIR"
   log "     docker run --rm -it --env-file .env \\"
   log "       -v waypoint_sync_data:/data \\"
   log "       \$(docker compose -f docker-compose.yml -f docker-compose.homelab.yml images -q sync) \\"
   log "       python auth.py"
   log ""
-  log "3. Start the stack:"
+  log "4. Start the stack:"
   log "     systemctl start waypoint"
   log ""
-  log "4. Add Traefik routing — see deploy/traefik-waypoint.yml"
+  log "5. Add Traefik routing — see deploy/traefik-waypoint.yml"
   log "     Update LXC_IP in the file, then copy to your Traefik conf.d/"
   log ""
-  log "5. Configure Claude MCP (after Traefik is set up):"
+  log "6. Configure Claude MCP (after Traefik is set up):"
   log '     { "waypoint": { "type": "http", "url": "https://YOUR_MCP_HOST/mcp" } }'
   log ""
 }
