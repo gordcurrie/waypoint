@@ -58,7 +58,12 @@ func Compute(ctx context.Context, client querier, windowDays int) ([]Result, err
 		var ts time.Time
 		switch t := row["time"].(type) {
 		case string:
-			ts, _ = time.Parse(time.RFC3339Nano, t)
+			for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999999999", "2006-01-02T15:04:05"} {
+				if parsed, err := time.Parse(layout, t); err == nil {
+					ts = parsed.UTC()
+					break
+				}
+			}
 		case float64:
 			ts = time.Unix(0, int64(t)).UTC()
 		case int64:
