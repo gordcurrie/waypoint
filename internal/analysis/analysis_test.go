@@ -182,3 +182,35 @@ func abs(x float64) float64 {
 	}
 	return x
 }
+
+type fakeQuerier struct{ rows []map[string]any }
+
+func (f *fakeQuerier) Query(_ context.Context, _ string) ([]map[string]any, error) {
+	return f.rows, nil
+}
+
+func TestCompute_NoTZTimestamp(t *testing.T) {
+	// InfluxDB 3 Core returns timestamps without a timezone suffix (e.g. "2026-07-19T14:52:18").
+	// Compute must parse them as UTC rather than dropping the row.
+	q := &fakeQuerier{rows: []map[string]any{
+		{"time": "2026-07-19T14:52:18", "training_load": float64(200)},
+	}}
+	results, err := Compute(context.Background(), q, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) == 0 {
+		t.Fatal("got 0 results; no-TZ timestamp was likely dropped during parsing")
+	}
+	// Load should be non-zero — the row was parsed and contributed to ATL/CTL.
+	found := false
+	for _, r := range results {
+		if r.Load > 0 || r.ATL > 0 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("all results have zero ATL/Load; no-TZ timestamp was dropped")
+	}
+}

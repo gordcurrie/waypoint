@@ -131,6 +131,24 @@ func TestTimeFrom_NanosEpoch(t *testing.T) {
 	}
 }
 
+func TestTimeFrom_NoTimezone(t *testing.T) {
+	// InfluxDB 3 Core returns timestamps without a timezone suffix.
+	// Must parse as UTC, not return zero time.
+	row := map[string]any{"time": "2026-07-20T00:00:00"}
+	want := time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC)
+	if got := timeFrom(row, "time"); !got.Equal(want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestTimeFrom_NoTimezoneWithSubseconds(t *testing.T) {
+	row := map[string]any{"time": "2026-07-20T14:52:18.123456789"}
+	want := time.Date(2026, 7, 20, 14, 52, 18, 123456789, time.UTC)
+	if got := timeFrom(row, "time"); !got.Equal(want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestTimeFrom_Missing(t *testing.T) {
 	if got := timeFrom(map[string]any{}, "time"); !got.IsZero() {
 		t.Errorf("got %v, want zero time", got)
