@@ -94,5 +94,8 @@ func (p *ollamaProvider) Complete(ctx context.Context, system, user string) (str
 	if err := json.Unmarshal(data, &result); err != nil {
 		return "", fmt.Errorf("ollama: decode response: %w", err)
 	}
+	if result.Message.Content == "" {
+		return "", fmt.Errorf("ollama: empty response")
+	}
 	return result.Message.Content, nil
 }

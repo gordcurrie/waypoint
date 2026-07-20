@@ -52,5 +52,8 @@ func (p *claudeProvider) Complete(ctx context.Context, system, user string) (str
 			sb.WriteString(resp.Content[i].AsText().Text)
 		}
 	}
+	if sb.Len() == 0 {
+		return "", fmt.Errorf("claude: empty response")
+	}
 	return sb.String(), nil
 }

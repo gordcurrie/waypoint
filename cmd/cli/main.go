@@ -4,8 +4,7 @@ package main
 import (
 	"fmt"
 	"os"
-
-	"github.com/spf13/viper"
+	"strconv"
 
 	"github.com/gordcurrie/waypoint/internal/influx"
 )
@@ -18,17 +17,19 @@ func main() {
 }
 
 func run() error {
-	viper.AutomaticEnv()
-
 	if len(os.Args) < 2 {
 		return usage()
 	}
 
-	client, err := influx.New(
-		viper.GetString("INFLUXDB_URL"),
-		viper.GetString("INFLUXDB_TOKEN"),
-		viper.GetString("INFLUXDB_DATABASE"),
-	)
+	// Validate subcommand before connecting to InfluxDB so unknown commands
+	// show usage rather than an infrastructure error.
+	switch os.Args[1] {
+	case "status", "analyze", "plan":
+	default:
+		return usage()
+	}
+
+	client, err := influx.NewFromEnv()
 	if err != nil {
 		return fmt.Errorf("influx: %w", err)
 	}
@@ -46,9 +47,11 @@ func run() error {
 	case "plan":
 		weeks := 4
 		if len(os.Args) >= 3 {
-			if _, err := fmt.Sscanf(os.Args[2], "%d", &weeks); err != nil {
+			n, parseErr := strconv.Atoi(os.Args[2])
+			if parseErr != nil {
 				return fmt.Errorf("plan: invalid weeks %q", os.Args[2])
 			}
+			weeks = n
 		}
 		return runPlan(client, weeks)
 	default:
@@ -60,8 +63,8 @@ func usage() error {
 	fmt.Fprintln(os.Stderr, "usage: waypoint <command> [args]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "commands:")
-	fmt.Fprintln(os.Stderr, "  status              show current ATL/CTL/TSB and training readiness")
-	fmt.Fprintln(os.Stderr, "  analyze [week|month] AI analysis of recent training")
-	fmt.Fprintln(os.Stderr, "  plan [weeks]         generate a training plan (default: 4 weeks)")
+	fmt.Fprintln(os.Stderr, "  status               show current ATL/CTL/TSB and training readiness")
+	fmt.Fprintln(os.Stderr, "  analyze [week|month]  AI analysis of recent training")
+	fmt.Fprintln(os.Stderr, "  plan [weeks]          generate a training plan (default: 4 weeks)")
 	return fmt.Errorf("unknown command")
 }

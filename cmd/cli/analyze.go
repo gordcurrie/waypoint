@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -29,17 +30,17 @@ func runAnalyze(client *influx.Client, period string) error {
 		return fmt.Errorf("analyze: unknown period %q, use week or month", period)
 	}
 
+	provider, err := llm.NewFromEnv()
+	if err != nil {
+		return fmt.Errorf("llm: %w", err)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	data, err := gatherData(ctx, client, days)
 	if err != nil {
 		return err
-	}
-
-	provider, err := llm.NewFromEnv()
-	if err != nil {
-		return fmt.Errorf("llm: %w", err)
 	}
 
 	prompt := buildAnalyzePrompt(period, days, &data)
@@ -62,78 +63,133 @@ type trainingData struct {
 }
 
 func gatherData(ctx context.Context, client *influx.Client, days int) (trainingData, error) {
-	var d trainingData
-	var err error
-
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 	startStr := start.Format(time.RFC3339)
 
-	rows, err := client.Query(ctx, fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT 50",
-		influx.MeasurementActivity, startStr,
-	))
-	if err != nil {
-		return d, fmt.Errorf("activities: %w", err)
-	}
-	d.activities = make([]garmin.Activity, 0, len(rows))
-	for _, row := range rows {
-		d.activities = append(d.activities, garmin.ActivityFrom(row))
+	var (
+		d        trainingData
+		mu       sync.Mutex
+		firstErr error
+		wg       sync.WaitGroup
+	)
+
+	collect := func(fn func() error) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := fn(); err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			}
+		}()
 	}
 
-	rows, err = client.Query(ctx, fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-		influx.MeasurementSleep, startStr, days,
-	))
-	if err != nil {
-		return d, fmt.Errorf("sleep: %w", err)
-	}
-	d.sleep = make([]garmin.Sleep, 0, len(rows))
-	for _, row := range rows {
-		d.sleep = append(d.sleep, garmin.SleepFrom(row))
-	}
+	collect(func() error {
+		rows, err := client.Query(ctx, fmt.Sprintf(
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
+			influx.MeasurementActivity, startStr, days,
+		))
+		if err != nil {
+			return fmt.Errorf("activities: %w", err)
+		}
+		result := make([]garmin.Activity, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, garmin.ActivityFrom(row))
+		}
+		mu.Lock()
+		d.activities = result
+		mu.Unlock()
+		return nil
+	})
 
-	rows, err = client.Query(ctx, fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time ASC LIMIT %d",
-		influx.MeasurementHRV, startStr, days,
-	))
-	if err != nil {
-		return d, fmt.Errorf("hrv: %w", err)
-	}
-	d.hrv = make([]garmin.HRV, 0, len(rows))
-	for _, row := range rows {
-		d.hrv = append(d.hrv, garmin.HRVFrom(row))
-	}
+	collect(func() error {
+		rows, err := client.Query(ctx, fmt.Sprintf(
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
+			influx.MeasurementSleep, startStr, days,
+		))
+		if err != nil {
+			return fmt.Errorf("sleep: %w", err)
+		}
+		result := make([]garmin.Sleep, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, garmin.SleepFrom(row))
+		}
+		mu.Lock()
+		d.sleep = result
+		mu.Unlock()
+		return nil
+	})
 
-	rows, err = client.Query(ctx, fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-		influx.MeasurementDailyStats, startStr, days,
-	))
-	if err != nil {
-		return d, fmt.Errorf("daily stats: %w", err)
-	}
-	d.dailyStats = make([]garmin.DailyStats, 0, len(rows))
-	for _, row := range rows {
-		d.dailyStats = append(d.dailyStats, garmin.DailyStatsFrom(row))
-	}
+	collect(func() error {
+		rows, err := client.Query(ctx, fmt.Sprintf(
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
+			influx.MeasurementHRV, startStr, days,
+		))
+		if err != nil {
+			return fmt.Errorf("hrv: %w", err)
+		}
+		result := make([]garmin.HRV, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, garmin.HRVFrom(row))
+		}
+		mu.Lock()
+		d.hrv = result
+		mu.Unlock()
+		return nil
+	})
 
-	rows, err = client.Query(ctx, fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-		influx.MeasurementTrainingReadiness, startStr, days,
-	))
-	if err != nil {
-		return d, fmt.Errorf("readiness: %w", err)
-	}
-	d.readiness = make([]garmin.TrainingReadiness, 0, len(rows))
-	for _, row := range rows {
-		d.readiness = append(d.readiness, garmin.TrainingReadinessFrom(row))
-	}
+	collect(func() error {
+		rows, err := client.Query(ctx, fmt.Sprintf(
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
+			influx.MeasurementDailyStats, startStr, days,
+		))
+		if err != nil {
+			return fmt.Errorf("daily stats: %w", err)
+		}
+		result := make([]garmin.DailyStats, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, garmin.DailyStatsFrom(row))
+		}
+		mu.Lock()
+		d.dailyStats = result
+		mu.Unlock()
+		return nil
+	})
 
-	d.load, err = analysis.Compute(ctx, client, days)
-	if err != nil {
-		return d, fmt.Errorf("training load: %w", err)
-	}
+	collect(func() error {
+		rows, err := client.Query(ctx, fmt.Sprintf(
+			"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
+			influx.MeasurementTrainingReadiness, startStr, days,
+		))
+		if err != nil {
+			return fmt.Errorf("readiness: %w", err)
+		}
+		result := make([]garmin.TrainingReadiness, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, garmin.TrainingReadinessFrom(row))
+		}
+		mu.Lock()
+		d.readiness = result
+		mu.Unlock()
+		return nil
+	})
 
-	return d, nil
+	collect(func() error {
+		load, err := analysis.Compute(ctx, client, days)
+		if err != nil {
+			return fmt.Errorf("training load: %w", err)
+		}
+		mu.Lock()
+		d.load = load
+		mu.Unlock()
+		return nil
+	})
+
+	wg.Wait()
+	return d, firstErr
 }
 
 func buildAnalyzePrompt(period string, days int, d *trainingData) string {

@@ -16,6 +16,8 @@ Use the athlete's recent training data to calibrate the plan appropriately.
 Format the plan week by week with specific workouts. Be concrete about duration, intensity, and type.
 Keep the plan realistic given the athlete's current fitness (CTL) and form (TSB).`
 
+const planHistoryDays = 28
+
 func runPlan(client *influx.Client, weeks int) error {
 	if weeks < 1 || weeks > 52 {
 		return fmt.Errorf("plan: weeks must be 1–52, got %d", weeks)
@@ -24,8 +26,7 @@ func runPlan(client *influx.Client, weeks int) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Gather 4 weeks of history to inform the plan
-	data, err := gatherData(ctx, client, 28)
+	data, err := gatherData(ctx, client, planHistoryDays)
 	if err != nil {
 		return err
 	}
@@ -47,8 +48,8 @@ func runPlan(client *influx.Client, weeks int) error {
 
 func buildPlanPrompt(weeks int, d *trainingData) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Create a %d-week training plan based on my recent fitness data.\n\n", weeks)
-	sb.WriteString("RECENT HISTORY (last 28 days):\n")
+	fmt.Fprintf(&sb, "Create a %d-week training plan based on my recent fitness data.\n\n", weeks) //nolint:gosec // weeks is validated 1-52 by caller
+	fmt.Fprintf(&sb, "RECENT HISTORY (last %d days):\n", planHistoryDays)
 
 	if len(d.load) > 0 {
 		latest := d.load[len(d.load)-1]
@@ -79,6 +80,6 @@ func buildPlanPrompt(weeks int, d *trainingData) string {
 		fmt.Fprintf(&sb, "Latest readiness: %.0f/100 (HRV status=%.0f)\n", r.Score, r.HRVStatus)
 	}
 
-	fmt.Fprintf(&sb, "\nCreate a %d-week plan. Include weekly structure and key sessions.", weeks)
+	fmt.Fprintf(&sb, "\nCreate a %d-week plan. Include weekly structure and key sessions.", weeks) //nolint:gosec // weeks is validated 1-52 by caller
 	return sb.String()
 }
