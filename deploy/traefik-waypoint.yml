@@ -1,0 +1,46 @@
+# Traefik conf.d entry for the Waypoint LXC.
+#
+# Copy this file to your Traefik conf.d/ directory and update:
+#   - LXC_IP (two places) — static IP assigned to the Waypoint LXC
+#   - Hostnames to match your domain
+#   - Middlewares to match your setup (internal-only, auth, etc.)
+#
+# Traefik watches conf.d/ and reloads automatically — no restart needed.
+
+# Waypoint LXC: pve1 / vmid XXX / 192.168.X.XXX
+# Ports: Grafana :3000, MCP HTTP :8080
+
+http:
+  routers:
+    waypoint-grafana:
+      rule: "Host(`waypoint.example.com`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: cloudflare
+      service: waypoint-grafana-svc
+      middlewares:
+        - secure-headers@file
+        - internal-only@file
+
+    waypoint-mcp:
+      rule: "Host(`waypoint-mcp.example.com`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: cloudflare
+      service: waypoint-mcp-svc
+      middlewares:
+        - secure-headers@file
+        - internal-only@file
+
+  services:
+    waypoint-grafana-svc:
+      loadBalancer:
+        servers:
+          - url: "http://LXC_IP:3000"
+
+    waypoint-mcp-svc:
+      loadBalancer:
+        servers:
+          - url: "http://LXC_IP:8080"
