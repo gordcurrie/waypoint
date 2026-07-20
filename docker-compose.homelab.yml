@@ -1,0 +1,39 @@
+# Homelab overlay for Proxmox LXC deployment.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.homelab.yml up -d --build
+#
+# Traefik (running on a separate LXC) routes to this LXC's IP:
+#   Grafana  → http://LXC_IP:3000
+#   MCP HTTP → http://LXC_IP:8080
+#
+# See deploy/traefik-waypoint.yml for the Traefik conf.d entry.
+
+services:
+  influxdb:
+    # Keep InfluxDB internal — Traefik does not route to it.
+    # Containers communicate via the Docker bridge network (http://influxdb:8181).
+    ports:
+      - "127.0.0.1:8181:8181"
+
+  grafana:
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SERVER_ROOT_URL: "https://${WAYPOINT_GRAFANA_HOST:-waypoint.example.com}"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+
+  mcp-server:
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+    environment:
+      INFLUXDB_URL: http://influxdb:8181
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      INFLUXDB_DATABASE: ${INFLUXDB_DATABASE:-${INFLUXDB_BUCKET:-garmin}}
+    command: ["--transport=http", "--addr=0.0.0.0:8080"]
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped

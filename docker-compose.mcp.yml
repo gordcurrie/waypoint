@@ -1,17 +1,10 @@
-# MCP server as HTTP service for homelab/remote deployment.
-# NOTE: Go binary and root Dockerfile not yet written (Phase 1, step 6).
-# Running this overlay before cmd/mcp-server/ is built will fail with
-# "failed to read dockerfile". Implement the MCP server first.
+# MCP server as HTTP service — for local testing with HTTP transport.
+# For homelab deployment, use docker-compose.homelab.yml instead (includes this).
 #
-# Usage: docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d
+# Usage: docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d --build
 #
-# Claude config (claude_desktop_config.json or Claude Code settings):
-#   {
-#     "waypoint": {
-#       "type": "http",
-#       "url": "http://<host>:8080/mcp"
-#     }
-#   }
+# Claude config:
+#   { "waypoint": { "type": "http", "url": "http://localhost:8080/mcp" } }
 
 services:
   mcp-server:
