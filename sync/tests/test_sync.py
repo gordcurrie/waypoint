@@ -399,7 +399,6 @@ def test_sleep_score_missing_when_not_in_daily_dto():
     assert captured.get("sleep_score") is None
 
 
-
 # ── sync_hrv field extraction ─────────────────────────────────────────────────
 
 
