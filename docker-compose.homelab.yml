@@ -4,7 +4,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.homelab.yml up -d --build
 #
 # Traefik (running on a separate LXC) routes to this LXC's IP:
-#   Grafana  → http://LXC_IP:3000
+#   Grafana  → http://LXC_IP:3001
 #   MCP HTTP → http://LXC_IP:8080
 #
 # See deploy/traefik-waypoint.yml for the Traefik conf.d entry.
@@ -17,8 +17,6 @@ services:
       - "127.0.0.1:8181:8181"
 
   grafana:
-    ports:
-      - "3000:3000"
     environment:
       GF_SERVER_ROOT_URL: "https://${WAYPOINT_GRAFANA_HOST:-waypoint.example.com}"
       GF_SERVER_SERVE_FROM_SUB_PATH: "false"

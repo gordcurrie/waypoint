@@ -200,8 +200,7 @@ systemctl start waypoint
 systemctl status waypoint
 ```
 
-Grafana: `http://<LXC_IP>:3000` (also `3001` via base compose — both bound)
-InfluxDB binds to `127.0.0.1:8181` — accessible from within the LXC only; Grafana reaches it via the internal Docker network.
+Grafana: `http://<LXC_IP>:3001` · InfluxDB is localhost-only (`127.0.0.1:8181`) — not reachable from other hosts.
 
 ### 7. Wire up Traefik (optional)
 
