@@ -48,6 +48,11 @@ podman run --rm -it --env-file .env \
 
 This saves a token to the `waypoint_sync_data` volume. Subsequent syncs use the token until it expires.
 
+If auth'ing on a different host and copying the token into a target volume, copy only the
+`garmin_auth` dir — never the whole `/data` dir. `/data` also holds `sync_state.json`; dragging
+that along seeds the target with stale watermarks and silently skips the initial `BACKFILL_DAYS`
+backfill.
+
 ## MCP Server
 
 Build and register with Claude:

@@ -7,6 +7,10 @@ Usage (from repo root):
 
 Then copy tokens into the sync container if using a separate volume:
   podman cp waypoint_sync_data:/data/garmin_auth ./auth_tokens/garmin_auth
+
+IMPORTANT: copy only the garmin_auth dir, never the whole /data dir — /data
+also holds sync_state.json, and dragging that along seeds the target with
+stale watermarks, silently skipping the initial BACKFILL_DAYS backfill.
 """
 
 import logging
