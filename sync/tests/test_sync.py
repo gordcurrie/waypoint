@@ -337,7 +337,6 @@ def test_sleep_connection_error_propagates():
 def _make_sleep_raw(
     *,
     sleep_score: int = 75,
-    avg_hrv: float = 48.5,
     spo2: float = 96.0,
 ) -> dict:
     return {
@@ -347,7 +346,6 @@ def _make_sleep_raw(
             "lightSleepSeconds": 18000,
             "remSleepSeconds": 5400,
             "awakeSleepSeconds": 600,
-            "avgSleepHRV": avg_hrv,
             "averageSpO2Value": spo2,
             "averageRespirationValue": 14.0,
             "avgSleepStress": 22.0,
@@ -401,11 +399,21 @@ def test_sleep_score_missing_when_not_in_daily_dto():
     assert captured.get("sleep_score") is None
 
 
+# ── sync_hrv field extraction ─────────────────────────────────────────────────
+
+
 @freeze_time("2026-07-06")
-def test_sleep_avg_hrv_uses_avg_sleep_hrv_field():
-    """avg_hrv_ms must be read from avgSleepHRV (not avgOvernightHrv)."""
+def test_hrv_last_night_avg_uses_last_night_avg_field():
+    """last_night_avg_ms must be read from lastNightAvg (not lastNight)."""
     garmin = MagicMock()
-    garmin.get_sleep_data.return_value = _make_sleep_raw(avg_hrv=52.3)
+    garmin.get_hrv_data.return_value = {
+        "hrvSummary": {
+            "weeklyAvg": 45,
+            "lastNightAvg": 48,
+            "lastNight5MinHigh": 79,
+            "status": "BALANCED",
+        }
+    }
     client = MagicMock()
     captured: dict = {}
     original = sync._add_fields
@@ -418,8 +426,8 @@ def test_sleep_avg_hrv_uses_avg_sleep_hrv_field():
         patch.object(sync, "_add_fields", side_effect=capturing),
         patch.object(sync, "_save_state"),
     ):
-        sync.sync_sleep(garmin, client, {"sleep": "2026-07-05"})
-    assert captured.get("avg_hrv_ms") == 52.3
+        sync.sync_hrv(garmin, client, {"hrv": "2026-07-05"})
+    assert captured.get("last_night_ms") == 48.0
 
 
 # ── _advance_state first-run regression guard ──────────────────────────────────

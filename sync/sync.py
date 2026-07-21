@@ -341,7 +341,6 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -
                     "rem_sleep_s": _fval(daily, "remSleepSeconds"),
                     "awake_s": _fval(daily, "awakeSleepSeconds"),
                     "sleep_score": _fval(scores, "overall", "value"),
-                    "avg_hrv_ms": _fval(daily, "avgSleepHRV"),
                     "avg_spo2_pct": _fval(daily, "averageSpO2Value"),
                     "avg_breathing_rate": _fval(daily, "averageRespirationValue"),
                     "avg_stress": _fval(daily, "avgSleepStress"),
@@ -387,7 +386,7 @@ def sync_hrv(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> 
                 p = Point("hrv").time(_day_ts(d))
                 fields = {
                     "weekly_avg_ms": _fval(summary, "weeklyAvg"),
-                    "last_night_ms": _fval(summary, "lastNight"),
+                    "last_night_ms": _fval(summary, "lastNightAvg"),
                     "last_5min_high_ms": _fval(summary, "lastNight5MinHigh"),
                     "status": status_num.get(str(summary.get("status", "")), None),
                 }
