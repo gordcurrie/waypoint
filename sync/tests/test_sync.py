@@ -427,7 +427,7 @@ def test_hrv_last_night_avg_uses_last_night_avg_field():
         patch.object(sync, "_save_state"),
     ):
         sync.sync_hrv(garmin, client, {"hrv": "2026-07-05"})
-    assert captured.get("last_night_avg_ms") == 48.0
+    assert captured.get("last_night_ms") == 48.0
 
 
 # ── _advance_state first-run regression guard ──────────────────────────────────
