@@ -119,25 +119,26 @@ grafana/          Provisioning config + dashboard JSON
 
 ## Development
 
-### Go
-
 ```bash
-go test ./...
-go vet ./...
+make build   # go build ./...
+make test    # go test + pytest
+make lint    # ruff + mypy + golangci-lint
 ```
 
-### Python sync sidecar (`sync/`)
-
-```bash
-pip install -r sync/requirements-dev.txt
-
-ruff check sync/
-ruff format --check sync/
-mypy --config-file sync/pyproject.toml sync/sync.py
-pytest sync/
-```
+Or run the individual Go/Python commands directly — see `Makefile` for the full expansion.
 
 CI runs all checks on every push/PR to `main` via `.github/workflows/ci.yml`.
+
+## Deployment (homelab)
+
+```bash
+cp deploy.env.example .deploy.env
+# Edit .deploy.env — set DEPLOY_HOST, optionally DEPLOY_USER and DEPLOY_PATH
+
+make deploy   # or: bash deploy.sh
+```
+
+Connects via SSH, runs `git pull --ff-only`, rebuilds the sync container image, and restarts all services. `.deploy.env` is gitignored — never committed.
 
 ## Disclaimer
 
