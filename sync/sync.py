@@ -330,8 +330,8 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -
             raw = garmin.get_sleep_data(d.isoformat())
             if raw:
                 daily = raw.get("dailySleepDTO") or {}
-                # sleepScores can be a dict or a list; normalise to dict
-                _ss = raw.get("sleepScores")
+                # sleepScores lives inside dailySleepDTO, not at the top level
+                _ss = daily.get("sleepScores")
                 scores: dict[str, Any] = (
                     (_ss[0] if _ss else {}) if isinstance(_ss, list) else (_ss or {})
                 )
@@ -343,7 +343,7 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -
                     "rem_sleep_s": _fval(daily, "remSleepSeconds"),
                     "awake_s": _fval(daily, "awakeSleepSeconds"),
                     "sleep_score": _fval(scores, "overall", "value"),
-                    "avg_hrv_ms": _fval(daily, "avgOvernightHrv"),
+                    "avg_hrv_ms": _fval(daily, "avgSleepHRV"),
                     "avg_spo2_pct": _fval(daily, "averageSpO2Value"),
                     "avg_breathing_rate": _fval(daily, "averageRespirationValue"),
                     "avg_stress": _fval(daily, "avgSleepStress"),

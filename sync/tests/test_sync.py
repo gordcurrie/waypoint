@@ -331,6 +331,97 @@ def test_sleep_connection_error_propagates():
         sync.sync_sleep(garmin, client, {"sleep": "2026-07-05"})
 
 
+# ── sync_sleep field extraction ────────────────────────────────────────────────
+
+
+def _make_sleep_raw(
+    *,
+    sleep_score: int = 75,
+    avg_hrv: float = 48.5,
+    spo2: float = 96.0,
+) -> dict:
+    return {
+        "dailySleepDTO": {
+            "sleepTimeSeconds": 27000,
+            "deepSleepSeconds": 3600,
+            "lightSleepSeconds": 18000,
+            "remSleepSeconds": 5400,
+            "awakeSleepSeconds": 600,
+            "avgSleepHRV": avg_hrv,
+            "averageSpO2Value": spo2,
+            "averageRespirationValue": 14.0,
+            "avgSleepStress": 22.0,
+            "sleepScores": {
+                "overall": {"value": sleep_score},
+            },
+        }
+    }
+
+
+@freeze_time("2026-07-06")
+def test_sleep_score_read_from_daily_sleep_dto():
+    """sleep_score must come from dailySleepDTO.sleepScores, not top-level."""
+    garmin = MagicMock()
+    garmin.get_sleep_data.return_value = _make_sleep_raw(sleep_score=78)
+    client = MagicMock()
+    captured: dict = {}
+    original = sync._add_fields
+
+    def capturing(p, fields):  # type: ignore[no-untyped-def]
+        captured.update(fields)
+        return original(p, fields)
+
+    with (
+        patch.object(sync, "_add_fields", side_effect=capturing),
+        patch.object(sync, "_save_state"),
+    ):
+        sync.sync_sleep(garmin, client, {"sleep": "2026-07-05"})
+    assert captured.get("sleep_score") == 78.0
+
+
+@freeze_time("2026-07-06")
+def test_sleep_score_missing_when_not_in_daily_dto():
+    """If sleepScores is absent from dailySleepDTO, sleep_score is not written."""
+    raw = {"dailySleepDTO": {"sleepTimeSeconds": 27000, "deepSleepSeconds": 3600}}
+    garmin = MagicMock()
+    garmin.get_sleep_data.return_value = raw
+    client = MagicMock()
+    captured: dict = {}
+    original = sync._add_fields
+
+    def capturing(p, fields):  # type: ignore[no-untyped-def]
+        captured.update(fields)
+        return original(p, fields)
+
+    with (
+        patch.object(sync, "_add_fields", side_effect=capturing),
+        patch.object(sync, "_save_state"),
+    ):
+        sync.sync_sleep(garmin, client, {"sleep": "2026-07-05"})
+    assert captured.get("sleep_score") is None
+
+
+@freeze_time("2026-07-06")
+def test_sleep_avg_hrv_uses_avg_sleep_hrv_field():
+    """avg_hrv_ms must be read from avgSleepHRV (not avgOvernightHrv)."""
+    garmin = MagicMock()
+    garmin.get_sleep_data.return_value = _make_sleep_raw(avg_hrv=52.3)
+    client = MagicMock()
+    captured: dict = {}
+    original = sync._add_fields
+
+    def capturing(p, fields):  # type: ignore[no-untyped-def]
+        captured.update(fields)
+        return original(p, fields)
+
+    with (
+        patch.object(sync, "_add_fields", side_effect=capturing),
+        patch.object(sync, "_save_state"),
+    ):
+        sync.sync_sleep(garmin, client, {"sleep": "2026-07-05"})
+    assert captured.get("avg_hrv_ms") == 52.3
+
+
 # ── _advance_state first-run regression guard ──────────────────────────────────
 
 
