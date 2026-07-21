@@ -5,6 +5,10 @@
 Personal fitness tracker: Garmin Connect → InfluxDB 3 → Grafana + Go MCP server + Go CLI.
 Full architecture in PLAN.md.
 
+## Git workflow (non-negotiable)
+
+**Never commit directly to main.** Every change — no matter how small, in any repo — goes on a feature branch and through a PR. No exceptions for "trivial" fixes, config files, or infra repos.
+
 ## Non-obvious constraints (don't re-litigate these)
 
 ### Python sidecar is required
