@@ -18,7 +18,7 @@ ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<REMOTE
 set -euo pipefail
 cd '${DEPLOY_PATH}'
 git pull --ff-only
-docker compose build
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.homelab.yml build
+docker compose -f docker-compose.yml -f docker-compose.homelab.yml up -d
 echo "Deploy complete."
 REMOTE
