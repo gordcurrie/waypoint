@@ -332,9 +332,7 @@ def sync_sleep(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -
                 daily = raw.get("dailySleepDTO") or {}
                 # sleepScores lives inside dailySleepDTO, not at the top level
                 _ss = daily.get("sleepScores")
-                scores: dict[str, Any] = (
-                    (_ss[0] if _ss else {}) if isinstance(_ss, list) else (_ss or {})
-                )
+                scores: dict[str, Any] = _ss or {}
                 p = Point("sleep").time(_day_ts(d))
                 fields = {
                     "total_sleep_s": _fval(daily, "sleepTimeSeconds"),

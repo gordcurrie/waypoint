@@ -367,7 +367,7 @@ def test_sleep_score_read_from_daily_sleep_dto():
     captured: dict = {}
     original = sync._add_fields
 
-    def capturing(p, fields):  # type: ignore[no-untyped-def]
+    def capturing(p, fields):
         captured.update(fields)
         return original(p, fields)
 
@@ -389,7 +389,7 @@ def test_sleep_score_missing_when_not_in_daily_dto():
     captured: dict = {}
     original = sync._add_fields
 
-    def capturing(p, fields):  # type: ignore[no-untyped-def]
+    def capturing(p, fields):
         captured.update(fields)
         return original(p, fields)
 
@@ -410,7 +410,7 @@ def test_sleep_avg_hrv_uses_avg_sleep_hrv_field():
     captured: dict = {}
     original = sync._add_fields
 
-    def capturing(p, fields):  # type: ignore[no-untyped-def]
+    def capturing(p, fields):
         captured.update(fields)
         return original(p, fields)
 
