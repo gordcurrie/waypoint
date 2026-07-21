@@ -14,11 +14,11 @@ DEPLOY_PATH="${DEPLOY_PATH:-/opt/waypoint}"
 
 echo "Deploying to ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}"
 
-ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "
-    set -euo pipefail
-    cd '${DEPLOY_PATH}'
-    git pull
-    docker compose build
-    docker compose up -d
-    echo 'Deploy complete.'
-"
+ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<REMOTE
+set -euo pipefail
+cd '${DEPLOY_PATH}'
+git pull --ff-only
+docker compose build
+docker compose up -d
+echo "Deploy complete."
+REMOTE
