@@ -26,5 +26,8 @@ sync/.venv/
 uv.lock
 sync/uv.lock
 
+# Deploy config (contains host/IP — do not commit)
+.deploy.env
+
 # OS
 .DS_Store

@@ -409,6 +409,89 @@
       ],
       "title": "Daily Steps",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "yellow", "mode": "fixed" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "min": 0,
+          "max": 100,
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "sleep_score" },
+            "properties": [{ "id": "displayName", "value": "Sleep Score" }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "id": 9,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "rawQuery": true,
+          "query": "SELECT sleep_score FROM sleep WHERE $timeFilter ORDER BY time ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "Sleep Score",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "dark-purple", "mode": "fixed" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "unit": "ms",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "avg_hrv_ms" },
+            "properties": [{ "id": "displayName", "value": "Overnight HRV" }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "id": 10,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "rawQuery": true,
+          "query": "SELECT avg_hrv_ms FROM sleep WHERE $timeFilter ORDER BY time ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "Overnight HRV (Sleep)",
+      "type": "timeseries"
     }
   ],
   "refresh": "5m",
