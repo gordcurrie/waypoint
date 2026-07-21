@@ -471,7 +471,7 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "avg_hrv_ms" },
+            "matcher": { "id": "byName", "options": "last_night_avg_ms" },
             "properties": [{ "id": "displayName", "value": "Overnight HRV" }]
           }
         ]
@@ -486,7 +486,7 @@
         {
           "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
           "rawQuery": true,
-          "query": "SELECT avg_hrv_ms FROM sleep WHERE $timeFilter ORDER BY time ASC",
+          "query": "SELECT last_night_avg_ms FROM hrv WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
         }
       ],
