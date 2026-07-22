@@ -135,10 +135,84 @@ CI runs all checks on every push/PR to `main` via `.github/workflows/ci.yml`.
 cp deploy.env.example .deploy.env
 # Edit .deploy.env — set DEPLOY_HOST, optionally DEPLOY_USER and DEPLOY_PATH
 
-make deploy   # or: bash deploy.sh
+make deploy   # or: bash scripts/deploy.sh
 ```
 
 Connects via SSH, runs `git pull --ff-only`, rebuilds the sync container image, and restarts all services. `.deploy.env` is gitignored — never committed.
+
+## Homelab Setup (from scratch)
+
+### 1. Create the LXC on Proxmox
+
+In the Proxmox UI (or via the API), create an Ubuntu 24.04 LXC with:
+
+| Setting | Value |
+|---------|-------|
+| Template | `ubuntu-24.04-standard_24.04-2_amd64.tar.zst` |
+| Memory | 2048 MB |
+| Cores | 2 |
+| Disk | 32 GB (on your preferred storage) |
+| Network | Static IP on your LAN bridge (e.g. `192.168.4.25/24`, gw `192.168.4.1`) |
+| Features | Nesting enabled (required for Docker inside LXC) |
+
+Start the container and ensure SSH access as root.
+
+### 2. Provision the LXC
+
+Run `scripts/setup-lxc.sh` inside the container. It installs Docker, clones the repo to `/opt/waypoint`, creates `.env` from `.env.example`, and installs + enables the `waypoint` systemd service.
+
+```bash
+# From inside the LXC (or via ssh root@<LXC_IP>):
+bash <(curl -fsSL https://raw.githubusercontent.com/gordcurrie/waypoint/main/scripts/setup-lxc.sh)
+
+# Or if you've already cloned:
+bash /opt/waypoint/scripts/setup-lxc.sh
+```
+
+### 3. Configure credentials
+
+```bash
+nano /opt/waypoint/.env   # fill in GARMIN_EMAIL, GARMIN_PASSWORD, tokens, etc.
+```
+
+### 4. Build images
+
+```bash
+cd /opt/waypoint
+docker compose -f docker-compose.yml -f docker-compose.homelab.yml build
+```
+
+### 5. First-time Garmin auth (interactive MFA required)
+
+```bash
+docker run --rm -it --env-file .env \
+  -v waypoint_sync_data:/data \
+  $(docker compose -f docker-compose.yml -f docker-compose.homelab.yml images -q sync) \
+  python auth.py
+```
+
+Follow the MFA prompt. Token is saved to the `waypoint_sync_data` volume — subsequent syncs use it automatically.
+
+### 6. Start the stack
+
+```bash
+systemctl start waypoint
+systemctl status waypoint
+```
+
+Grafana: `http://<LXC_IP>:3001` · InfluxDB is localhost-only (`127.0.0.1:8181`) — not reachable from other hosts.
+
+### 7. Wire up Traefik (optional)
+
+Copy `deploy/traefik-waypoint.yml` to your Traefik `conf.d/` directory after updating the LXC IP. Traefik hot-reloads — no restart needed.
+
+### Re-deploying after code changes
+
+From your dev machine:
+
+```bash
+make deploy   # SSH → git pull → docker compose build → up -d
+```
 
 ## Disclaimer
 

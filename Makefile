@@ -14,4 +14,4 @@ lint:
 	golangci-lint run ./...
 
 deploy:
-	bash deploy.sh
+	bash scripts/deploy.sh

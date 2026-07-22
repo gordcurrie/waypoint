@@ -8,7 +8,7 @@
 # Traefik watches conf.d/ and reloads automatically — no restart needed.
 
 # Waypoint LXC: pve1 / vmid XXX / 192.168.X.XXX
-# Ports: Grafana :3000, MCP HTTP :8080
+# Ports: Grafana :3001, MCP HTTP :8080
 
 http:
   routers:
@@ -38,7 +38,7 @@ http:
     waypoint-grafana-svc:
       loadBalancer:
         servers:
-          - url: "http://LXC_IP:3000"
+          - url: "http://LXC_IP:3001"
 
     waypoint-mcp-svc:
       loadBalancer:
