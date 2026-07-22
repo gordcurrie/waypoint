@@ -479,7 +479,7 @@
   "templating": { "list": [] },
   "time": { "from": "now-30d", "to": "now" },
   "timepicker": {},
-  "timezone": "browser",
+  "timezone": "utc",
   "title": "Garmin Fitness",
   "uid": "garmin-fitness-01",
   "version": 1,
