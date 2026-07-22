@@ -15,6 +15,9 @@ func TestHRVFrom(t *testing.T) {
 		"status":            float64(2), // BALANCED
 	}
 	h := garmin.HRVFrom(row)
+	if h.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", h.Date, "2026-07-06")
+	}
 	if h.WeeklyAvgMS != 58 {
 		t.Errorf("WeeklyAvgMS: got %v, want 58", h.WeeklyAvgMS)
 	}

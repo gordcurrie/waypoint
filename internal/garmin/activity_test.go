@@ -1,6 +1,8 @@
 package garmin_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,8 +63,8 @@ func TestActivityFrom(t *testing.T) {
 	if a.ElevationGainM != 85 {
 		t.Errorf("ElevationGainM: got %v, want 85", a.ElevationGainM)
 	}
-	if a.AvgSpeedMpS != 2.78 {
-		t.Errorf("AvgSpeedMpS: got %v, want 2.78", a.AvgSpeedMpS)
+	if a.AvgSpeedMpS != 2.8 {
+		t.Errorf("AvgSpeedMpS: got %v, want 2.8", a.AvgSpeedMpS)
 	}
 	if a.TrainingLoad != 82.5 {
 		t.Errorf("TrainingLoad: got %v, want 82.5", a.TrainingLoad)
@@ -93,6 +95,28 @@ func TestActivityFrom(t *testing.T) {
 	}
 	if a.AvgPowerW != 215 {
 		t.Errorf("AvgPowerW: got %v, want 215", a.AvgPowerW)
+	}
+}
+
+func TestActivityFrom_CyclingOmitsRunningFields(t *testing.T) {
+	row := map[string]any{
+		"time":       "2026-07-06T10:30:00Z",
+		"sport":      "cycling",
+		"distance_m": float64(30000),
+		"duration_s": float64(3600),
+	}
+	b, err := json.Marshal(garmin.ActivityFrom(row))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, field := range []string{
+		"cadence_avg_spm", "ground_contact_time_ms", "vertical_oscillation_mm",
+		"stride_length_mm", "vertical_ratio_pct", "avg_power_w",
+	} {
+		if strings.Contains(s, field) {
+			t.Errorf("cycling activity JSON should not contain %q, got: %s", field, s)
+		}
 	}
 }
 

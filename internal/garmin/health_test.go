@@ -16,6 +16,9 @@ func TestDailyStatsFrom(t *testing.T) {
 		"stress_avg":       float64(28),
 	}
 	s := garmin.DailyStatsFrom(row)
+	if s.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", s.Date, "2026-07-06")
+	}
 	if s.Steps != 8500 {
 		t.Errorf("Steps: got %v, want 8500", s.Steps)
 	}
@@ -36,6 +39,9 @@ func TestSleepFrom(t *testing.T) {
 		"avg_hrv_ms":    float64(62),
 	}
 	s := garmin.SleepFrom(row)
+	if s.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", s.Date, "2026-07-06")
+	}
 	if s.TotalSleepS != 27000 {
 		t.Errorf("TotalSleepS: got %v, want 27000", s.TotalSleepS)
 	}
@@ -56,6 +62,9 @@ func TestRespirationFrom(t *testing.T) {
 		"lowest_brpm":     float64(11),
 	}
 	r := garmin.RespirationFrom(row)
+	if r.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", r.Date, "2026-07-06")
+	}
 	if r.AvgWakingBRPM != 14.5 {
 		t.Errorf("AvgWakingBRPM: got %v, want 14.5", r.AvgWakingBRPM)
 	}

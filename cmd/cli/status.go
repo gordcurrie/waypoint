@@ -39,7 +39,7 @@ func runStatus(client *influx.Client) error {
 
 	if len(readiness) > 0 {
 		r := readiness[0]
-		fmt.Printf("\nTraining Readiness  (%s)\n", r.Time.Format("2006-01-02"))
+		fmt.Printf("\nTraining Readiness  (%s)\n", r.Date)
 		fmt.Printf("  Score:        %.0f/100\n", r.Score)
 		fmt.Printf("  HRV status:   %.0f\n", r.HRVStatus)
 		fmt.Printf("  Sleep score:  %.0f\n", r.SleepScore)

@@ -2,6 +2,8 @@ package analysis
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -173,6 +175,34 @@ func TestCompute_TSBInvariant(t *testing.T) {
 			t.Errorf("date %s: TSB=%.9f but CTL-ATL=%.9f",
 				r.Date.Format("2006-01-02"), r.TSB, r.CTL-r.ATL)
 		}
+	}
+}
+
+func TestResultMarshalJSON(t *testing.T) {
+	r := Result{
+		Date: time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC),
+		ATL:  87.23046875,
+		CTL:  65.12345678,
+		TSB:  -22.10701197,
+		Load: 100.0,
+	}
+	b, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	if !strings.Contains(s, `"date":"2026-07-15"`) {
+		t.Errorf("want date as YYYY-MM-DD, got %s", s)
+	}
+	if !strings.Contains(s, `"atl":87.2`) {
+		t.Errorf("want atl:87.2, got %s", s)
+	}
+	if !strings.Contains(s, `"ctl":65.1`) {
+		t.Errorf("want ctl:65.1, got %s", s)
+	}
+	// Internal time.Time field still usable after marshal
+	if r.Date.IsZero() {
+		t.Error("Date field must not be zeroed by MarshalJSON")
 	}
 }
 

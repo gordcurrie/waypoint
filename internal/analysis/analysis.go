@@ -2,7 +2,9 @@ package analysis
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/gordcurrie/waypoint/internal/influx"
@@ -31,6 +33,25 @@ type Result struct {
 	CTL  float64   `json:"ctl"` // 42-day EMA of daily training load (chronic)
 	TSB  float64   `json:"tsb"` // training stress balance: CTL - ATL
 	Load float64   `json:"load"` // raw total training load for this day
+}
+
+// MarshalJSON emits date as "YYYY-MM-DD" and rounds floats to 1 decimal place.
+// The time.Time field is kept for WriteResults; this controls only JSON output.
+func (r Result) MarshalJSON() ([]byte, error) {
+	round1 := func(f float64) float64 { return math.Round(f*10) / 10 }
+	return json.Marshal(struct {
+		Date string  `json:"date"`
+		ATL  float64 `json:"atl"`
+		CTL  float64 `json:"ctl"`
+		TSB  float64 `json:"tsb"`
+		Load float64 `json:"load"`
+	}{
+		Date: r.Date.Format("2006-01-02"),
+		ATL:  round1(r.ATL),
+		CTL:  round1(r.CTL),
+		TSB:  round1(r.TSB),
+		Load: round1(r.Load),
+	})
 }
 
 // Compute queries activities from InfluxDB and returns ATL/CTL/TSB for each
