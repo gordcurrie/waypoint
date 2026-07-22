@@ -333,7 +333,7 @@
           {
             "matcher": { "id": "byName", "options": "awake_h" },
             "properties": [{ "id": "displayName", "value": "Awake" }, { "id": "color", "fixedColor": "yellow", "mode": "fixed" }]
-          },
+          }
         ]
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 27 },
