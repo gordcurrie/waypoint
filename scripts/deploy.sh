@@ -3,9 +3,11 @@
 # Config: copy deploy.env.example → .deploy.env (gitignored) and set values.
 set -euo pipefail
 
-if [[ -f .deploy.env ]]; then
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ -f "${REPO_ROOT}/.deploy.env" ]]; then
     # shellcheck source=/dev/null
-    source .deploy.env
+    source "${REPO_ROOT}/.deploy.env"
 fi
 
 : "${DEPLOY_HOST:?Set DEPLOY_HOST in .deploy.env (see deploy.env.example)}"
@@ -14,11 +16,10 @@ DEPLOY_PATH="${DEPLOY_PATH:-/opt/waypoint}"
 
 echo "Deploying to ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}"
 
-ssh "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<REMOTE
+ssh -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- "${DEPLOY_PATH}" <<'REMOTE'
 set -euo pipefail
-cd '${DEPLOY_PATH}'
+cd "$1"
 git pull --ff-only
-docker compose -f docker-compose.yml -f docker-compose.homelab.yml build
-docker compose -f docker-compose.yml -f docker-compose.homelab.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.homelab.yml up -d --build
 echo "Deploy complete."
 REMOTE
