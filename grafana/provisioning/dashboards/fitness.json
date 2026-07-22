@@ -333,21 +333,6 @@
           {
             "matcher": { "id": "byName", "options": "awake_h" },
             "properties": [{ "id": "displayName", "value": "Awake" }, { "id": "color", "fixedColor": "yellow", "mode": "fixed" }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "sleep_score" },
-            "properties": [
-              { "id": "displayName", "value": "Sleep Score" },
-              { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } },
-              { "id": "unit", "value": "none" },
-              { "id": "custom.drawStyle", "value": "line" },
-              { "id": "custom.lineWidth", "value": 2 },
-              { "id": "custom.fillOpacity", "value": 0 },
-              { "id": "custom.stacking", "value": { "group": "B", "mode": "none" } },
-              { "id": "custom.axisPlacement", "value": "right" },
-              { "id": "min", "value": 0 },
-              { "id": "max", "value": 100 }
-            ]
           }
         ]
       },
@@ -363,12 +348,6 @@
           "rawQuery": true,
           "query": "SELECT deep_sleep_s / 3600 AS deep_h, rem_sleep_s / 3600 AS rem_h, light_sleep_s / 3600 AS light_h, awake_s / 3600 AS awake_h FROM sleep WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
-        },
-        {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
-          "rawQuery": true,
-          "query": "SELECT sleep_score FROM sleep WHERE $timeFilter ORDER BY time ASC",
-          "refId": "B"
         }
       ],
       "title": "Sleep Breakdown",
