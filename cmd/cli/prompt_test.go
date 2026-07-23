@@ -93,7 +93,7 @@ func TestBuildAnalyzePrompt_HRVStatus(t *testing.T) {
 
 	for _, tc := range cases {
 		d := &trainingData{
-			hrv: []garmin.HRV{{Time: testTime, WeeklyAvgMS: 55, LastNightMS: 52, Status: tc.status}},
+			hrv: []garmin.HRV{{Date: testTime.Format("2006-01-02"), WeeklyAvgMS: 55, LastNightMS: 52, Status: tc.status}},
 		}
 		got := buildAnalyzePrompt("week", 7, d)
 		if !strings.Contains(got, tc.want) {
@@ -153,8 +153,8 @@ func TestBuildPlanPrompt_includesHRV(t *testing.T) {
 	balanced := 2.0
 	d := &trainingData{
 		hrv: []garmin.HRV{
-			{Time: testTime.AddDate(0, 0, -6), WeeklyAvgMS: 50, Status: nil},
-			{Time: testTime, WeeklyAvgMS: 60, Status: &balanced},
+			{Date: testTime.AddDate(0, 0, -6).Format("2006-01-02"), WeeklyAvgMS: 50, Status: nil},
+			{Date: testTime.Format("2006-01-02"), WeeklyAvgMS: 60, Status: &balanced},
 		},
 	}
 	got := buildPlanPrompt(4, d)
@@ -168,8 +168,8 @@ func TestBuildPlanPrompt_includesHRV(t *testing.T) {
 func TestBuildPlanPrompt_includesBodyBattery(t *testing.T) {
 	d := &trainingData{
 		dailyStats: []garmin.DailyStats{
-			{Time: testTime.AddDate(0, 0, -1), BodyBatteryMax: 80},
-			{Time: testTime, BodyBatteryMax: 60},
+			{Date: testTime.AddDate(0, 0, -1).Format("2006-01-02"), BodyBatteryMax: 80},
+			{Date: testTime.Format("2006-01-02"), BodyBatteryMax: 60},
 		},
 	}
 	got := buildPlanPrompt(4, d)

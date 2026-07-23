@@ -1,6 +1,23 @@
 package garmin
 
-import "time"
+import (
+	"math"
+	"time"
+)
+
+// roundF rounds f to 1 decimal place for compact JSON output.
+func roundF(f float64) float64 {
+	return math.Round(f*10) / 10
+}
+
+// roundFPtr rounds a *float64 to 1 decimal place, returning nil unchanged.
+func roundFPtr(p *float64) *float64 {
+	if p == nil {
+		return nil
+	}
+	v := roundF(*p)
+	return &v
+}
 
 // floatFrom extracts a float64 from a query row, returning 0 if absent or non-numeric.
 func floatFrom(row map[string]any, key string) float64 {
@@ -67,6 +84,17 @@ func stringFrom(row map[string]any, key string) string {
 		return ""
 	}
 	return s
+}
+
+// dateFrom extracts a YYYY-MM-DD date string from a query row.
+// Returns "" when the key is absent or the timestamp cannot be parsed,
+// so callers can detect missing data instead of seeing "0001-01-01".
+func dateFrom(row map[string]any, key string) string {
+	t := timeFrom(row, key)
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02")
 }
 
 // timeFrom parses a timestamp from a query row.

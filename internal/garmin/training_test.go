@@ -16,10 +16,13 @@ func TestTrainingReadinessFrom(t *testing.T) {
 		"acw_ratio":       float64(0.85),
 	}
 	tr := garmin.TrainingReadinessFrom(row)
+	if tr.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", tr.Date, "2026-07-06")
+	}
 	if tr.Score != 74 {
 		t.Errorf("Score: got %v, want 74", tr.Score)
 	}
-	if tr.HRVStatus != 2 {
+	if tr.HRVStatus == nil || *tr.HRVStatus != 2 {
 		t.Errorf("HRVStatus: got %v, want 2", tr.HRVStatus)
 	}
 	if tr.SleepScore != 78 {
@@ -28,8 +31,16 @@ func TestTrainingReadinessFrom(t *testing.T) {
 	if tr.RecoveryTimeH != 16 {
 		t.Errorf("RecoveryTimeH: got %v, want 16", tr.RecoveryTimeH)
 	}
-	if tr.ACWRatio != 0.85 {
-		t.Errorf("ACWRatio: got %v, want 0.85", tr.ACWRatio)
+	if tr.ACWRatio != 0.9 {
+		t.Errorf("ACWRatio: got %v, want 0.9 (0.85 rounded to 1 decimal)", tr.ACWRatio)
+	}
+}
+
+func TestTrainingReadinessFrom_HRVStatusAbsent(t *testing.T) {
+	row := map[string]any{"time": "2026-07-06T00:00:00Z", "score": float64(74)}
+	tr := garmin.TrainingReadinessFrom(row)
+	if tr.HRVStatus != nil {
+		t.Errorf("HRVStatus: got %v, want nil for absent field", tr.HRVStatus)
 	}
 }
 
@@ -42,6 +53,9 @@ func TestTrainingStatusFrom(t *testing.T) {
 		"fitness_age":    float64(32),
 	}
 	ts := garmin.TrainingStatusFrom(row)
+	if ts.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", ts.Date, "2026-07-06")
+	}
 	if ts.StatusNum == nil || *ts.StatusNum != 3 {
 		t.Errorf("StatusNum: got %v, want 3 (productive)", ts.StatusNum)
 	}
@@ -71,6 +85,9 @@ func TestPerformanceFrom(t *testing.T) {
 		"fitness_age": float64(31),
 	}
 	p := garmin.PerformanceFrom(row)
+	if p.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", p.Date, "2026-07-06")
+	}
 	if p.VO2Max != 53.2 {
 		t.Errorf("VO2Max: got %v, want 53.2", p.VO2Max)
 	}
@@ -86,6 +103,9 @@ func TestLactateThresholdFrom(t *testing.T) {
 		"lt_pace_s_per_km": float64(272),
 	}
 	lt := garmin.LactateThresholdFrom(row)
+	if lt.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", lt.Date, "2026-07-06")
+	}
 	if lt.LTHeartRate != 168 {
 		t.Errorf("LTHeartRate: got %v, want 168", lt.LTHeartRate)
 	}
@@ -102,6 +122,9 @@ func TestTrainingLoadFrom(t *testing.T) {
 		"tsb":       float64(-6.4),
 	}
 	tl := garmin.TrainingLoadFrom(row)
+	if tl.Date != "2026-07-06" {
+		t.Errorf("Date: got %q, want %q", tl.Date, "2026-07-06")
+	}
 	if tl.ATL != 65.2 {
 		t.Errorf("ATL: got %v, want 65.2", tl.ATL)
 	}

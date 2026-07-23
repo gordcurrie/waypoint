@@ -210,8 +210,21 @@ func buildAnalyzePrompt(period string, days int, d *trainingData) string {
 	if len(d.readiness) > 0 {
 		sb.WriteString("READINESS:\n")
 		for _, r := range d.readiness {
-			fmt.Fprintf(&sb, "  %s: score=%.0f, hrv_status=%.0f, sleep_score=%.0f\n",
-				r.Time.Format("2006-01-02"), r.Score, r.HRVStatus, r.SleepScore)
+			hrvStatus := "unknown"
+			if r.HRVStatus != nil {
+				switch *r.HRVStatus {
+				case 2.0:
+					hrvStatus = "balanced"
+				case 1.0:
+					hrvStatus = "unbalanced"
+				case 0.0:
+					hrvStatus = "poor"
+				case 3.0:
+					hrvStatus = "low-unbalanced"
+				}
+			}
+			fmt.Fprintf(&sb, "  %s: score=%.0f, hrv_status=%s, sleep_score=%.0f\n",
+				r.Date, r.Score, hrvStatus, r.SleepScore)
 		}
 		sb.WriteString("\n")
 	}
@@ -234,7 +247,7 @@ func buildAnalyzePrompt(period string, days int, d *trainingData) string {
 		sb.WriteString("SLEEP:\n")
 		for _, s := range d.sleep {
 			fmt.Fprintf(&sb, "  %s: total=%.1fh, deep=%.1fh, rem=%.1fh, score=%.0f, hrv=%.0fms\n",
-				s.Time.Format("2006-01-02"),
+				s.Date,
 				s.TotalSleepS/3600, s.DeepSleepS/3600, s.REMSleepS/3600,
 				s.SleepScore, s.AvgHRVMS,
 			)
@@ -259,7 +272,7 @@ func buildAnalyzePrompt(period string, days int, d *trainingData) string {
 				}
 			}
 			fmt.Fprintf(&sb, "  %s: weekly_avg=%.0fms, last_night=%.0fms, status=%s\n",
-				h.Time.Format("2006-01-02"), h.WeeklyAvgMS, h.LastNightMS, status,
+				h.Date, h.WeeklyAvgMS, h.LastNightMS, status,
 			)
 		}
 		sb.WriteString("\n")
@@ -269,7 +282,7 @@ func buildAnalyzePrompt(period string, days int, d *trainingData) string {
 		sb.WriteString("DAILY STATS:\n")
 		for _, s := range d.dailyStats {
 			fmt.Fprintf(&sb, "  %s: steps=%.0f, resting_hr=%.0f, body_battery=%.0f-%.0f, stress=%.0f\n",
-				s.Time.Format("2006-01-02"),
+				s.Date,
 				s.Steps, s.RestingHRBPM,
 				s.BodyBatteryMin, s.BodyBatteryMax,
 				s.StressAvg,
