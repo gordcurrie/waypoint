@@ -609,7 +609,7 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
     activities = garmin.get_activities_by_date(start.isoformat(), end.isoformat()) or []
 
     points: list[Any] = []
-    _had_error = False
+    _first_err: date | None = None
     for a in activities:
         activity_id = a.get("activityId")
         if activity_id is None:
@@ -621,6 +621,7 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
             activity_ts = _parse_gmt(ts_str)
         except Exception:
             continue
+        activity_date = activity_ts.date()
 
         # Per-lap splits
         try:
@@ -654,7 +655,8 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
         ):
             raise
         except Exception as exc:
-            _had_error = True
+            if _first_err is None:
+                _first_err = activity_date
             log.warning("activity_splits %s: %s", activity_id, exc)
 
         time.sleep(0.3)
@@ -694,13 +696,15 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
         ):
             raise
         except Exception as exc:
-            _had_error = True
+            if _first_err is None:
+                _first_err = activity_date
             log.warning("activity_hr_zones %s: %s", activity_id, exc)
 
         time.sleep(0.3)
 
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)
-    _advance_state(state, "activity_details", end, had_error=_had_error)
+    _advance_state(state, "activity_details", watermark, had_error=_first_err is not None)
     log.info("activity_details: wrote %d points for %d activities", len(points), len(activities))
 
 

@@ -683,6 +683,19 @@ def test_activity_details_state_advanced():
 
 
 @freeze_time("2026-07-06")
+def test_activity_details_watermark_rolls_back_on_error():
+    """On splits fetch error, watermark must roll back to before the failed activity date."""
+    garmin = _make_details_garmin([_activity_stub(activity_id=1, ts="2026-07-05 10:00:00")])
+    garmin.get_activity_splits.side_effect = Exception("rate limited")
+    client = MagicMock()
+    state: dict = {}
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, state)
+    # Activity is on 2026-07-05; watermark must be 2026-07-04 (day before first error)
+    assert state.get("activity_details") == "2026-07-04"
+
+
+@freeze_time("2026-07-06")
 def test_activity_details_connection_error_propagates():
     garmin = MagicMock()
     garmin.get_activities_by_date.side_effect = GarminConnectConnectionError("timeout")

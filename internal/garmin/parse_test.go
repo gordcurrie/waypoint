@@ -106,6 +106,41 @@ func TestFloatPtrFrom_Nil(t *testing.T) {
 	}
 }
 
+func TestInt64FromString_StringTag(t *testing.T) {
+	// InfluxDB returns tags as strings; int64FromString must parse them.
+	row := map[string]any{"activity_id": "1234567890123456"}
+	if got := int64FromString(row, "activity_id"); got != 1234567890123456 {
+		t.Errorf("got %d, want 1234567890123456", got)
+	}
+}
+
+func TestInt64FromString_NativeFloat64(t *testing.T) {
+	row := map[string]any{"activity_id": float64(9876543210)}
+	if got := int64FromString(row, "activity_id"); got != 9876543210 {
+		t.Errorf("got %d, want 9876543210", got)
+	}
+}
+
+func TestInt64FromString_NativeInt64(t *testing.T) {
+	row := map[string]any{"activity_id": int64(42)}
+	if got := int64FromString(row, "activity_id"); got != 42 {
+		t.Errorf("got %d, want 42", got)
+	}
+}
+
+func TestInt64FromString_Missing(t *testing.T) {
+	if got := int64FromString(map[string]any{}, "activity_id"); got != 0 {
+		t.Errorf("got %d, want 0 for absent key", got)
+	}
+}
+
+func TestInt64FromString_InvalidString(t *testing.T) {
+	row := map[string]any{"activity_id": "not-a-number"}
+	if got := int64FromString(row, "activity_id"); got != 0 {
+		t.Errorf("got %d, want 0 for unparseable string", got)
+	}
+}
+
 func TestTimeFrom_RFC3339Nano(t *testing.T) {
 	row := map[string]any{"time": "2026-07-06T10:30:00.000000000Z"}
 	want := time.Date(2026, 7, 6, 10, 30, 0, 0, time.UTC)

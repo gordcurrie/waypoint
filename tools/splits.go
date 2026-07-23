@@ -17,7 +17,7 @@ func registerSplitTools(s *mcp.Server, client influxClient) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "get_activity_splits",
-		Description: "Return per-lap split data for a specific activity: distance, duration, pace, heart rate, cadence, and power per lap.",
+		Description: "Return per-lap split data for a specific activity: distance, duration, average speed, heart rate, cadence, and power per lap.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input activityDetailInput) (*mcp.CallToolResult, any, error) {
 		if input.ActivityID <= 0 {
@@ -32,7 +32,7 @@ func registerSplitTools(s *mcp.Server, client influxClient) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "get_activity_hr_zones",
-		Description: "Return heart rate zone distribution (seconds in each of 5 zones) for a specific activity. Use alongside get_activity_splits to understand aerobic vs threshold intensity.",
+		Description: "Return heart rate zone distribution for a specific activity. Fields z1_s through z5_s report seconds in each zone; zones with zero seconds are omitted. Use alongside get_activity_splits to understand aerobic vs threshold intensity.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input activityDetailInput) (*mcp.CallToolResult, any, error) {
 		if input.ActivityID <= 0 {
@@ -64,7 +64,7 @@ func queryActivitySplits(ctx context.Context, client influxClient, activityID in
 
 func queryActivityHRZones(ctx context.Context, client influxClient, activityID int64) (*garmin.ActivityHRZones, error) {
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE activity_id = '%d' LIMIT 1",
+		"SELECT * FROM %s WHERE activity_id = '%d' ORDER BY time DESC LIMIT 1",
 		influx.MeasurementActivityHRZones, activityID,
 	)
 	rows, err := client.Query(ctx, sql)
