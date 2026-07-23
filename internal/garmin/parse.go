@@ -2,6 +2,7 @@ package garmin
 
 import (
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -71,6 +72,28 @@ func floatPtrFrom(row map[string]any, key string) *float64 {
 		return &f
 	}
 	return nil
+}
+
+// int64FromString extracts an int64 from a query row where the value may be a tag
+// (InfluxDB tags are always returned as strings) or a numeric field.
+func int64FromString(row map[string]any, key string) int64 {
+	v, ok := row[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case int64:
+		return n
+	case float64:
+		return int64(n)
+	case int:
+		return int64(n)
+	case string:
+		if i, err := strconv.ParseInt(n, 10, 64); err == nil {
+			return i
+		}
+	}
+	return 0
 }
 
 // stringFrom extracts a string from a query row, returning "" if absent or wrong type.

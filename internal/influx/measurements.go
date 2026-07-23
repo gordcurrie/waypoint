@@ -15,4 +15,6 @@ const (
 	MeasurementLactateThreshold   = "lactate_threshold"
 	MeasurementRespiration        = "respiration"
 	MeasurementTrainingLoad       = "training_load"
+	MeasurementActivityLap        = "activity_lap"
+	MeasurementActivityHRZones    = "activity_hr_zones"
 )
