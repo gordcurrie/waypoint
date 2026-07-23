@@ -77,7 +77,7 @@ Add to Claude's MCP config (stdio, local dev):
 
 For homelab HTTP deployment: `./waypoint-mcp --transport=http --addr=0.0.0.0:8080`
 
-**Available tools:** `get_recent_activities`, `get_weekly_volume`, `get_daily_stats`, `get_sleep_summary`, `get_hrv_trend`, `get_training_load`, `get_training_readiness`
+**Available tools:** `get_recent_activities`, `get_weekly_volume`, `get_daily_stats`, `get_sleep_summary`, `get_hrv_trend`, `get_training_load`, `get_training_readiness`, `get_scheduled_workouts`
 
 ## CLI
 

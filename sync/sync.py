@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import time
+import urllib.request
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -138,6 +139,34 @@ def _influx_client() -> InfluxDBClient3:
 def _write(client: InfluxDBClient3, points: list[Any]) -> None:
     if points:
         client.write(record=points)
+
+
+def _delete_scheduled_workouts(months: list[tuple[int, int]]) -> None:
+    """Delete scheduled_workout rows for the given months before writing fresh data.
+
+    Clears the window so cancelled or rescheduled workouts don't persist in InfluxDB.
+    Failures are logged as warnings — the subsequent write still proceeds.
+    """
+    if not months:
+        return
+    year0, month0 = months[0]
+    year1, month1 = months[-1]
+    end_year, end_month = (year1 + 1, 1) if month1 == 12 else (year1, month1 + 1)
+    start_ts = _day_ts(date(year0, month0, 1)).isoformat()
+    end_ts = _day_ts(date(end_year, end_month, 1)).isoformat()
+    sql = f"DELETE FROM scheduled_workout WHERE time >= '{start_ts}' AND time < '{end_ts}'"
+    body = json.dumps({"q": sql, "db": INFLUXDB_DB, "format": "json"}).encode()
+    headers = {"Content-Type": "application/json"}
+    if INFLUXDB_TOKEN:
+        headers["Authorization"] = f"Bearer {INFLUXDB_TOKEN}"
+    req = urllib.request.Request(
+        INFLUXDB_URL + "/api/v3/query_sql", data=body, headers=headers, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            resp.read()
+    except Exception as exc:
+        log.warning("scheduled_workouts: delete failed: %s", exc)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -708,6 +737,78 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
     log.info("activity_details: wrote %d points for %d activities", len(points), len(activities))
 
 
+def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
+    """Sync Garmin calendar workouts for the current and next month into InfluxDB."""
+    today = date.today()
+    months = [(today.year, today.month)]
+    # Always include next month to cover a 14-day lookahead that spans a boundary.
+    if today.month == 12:
+        months.append((today.year + 1, 1))
+    else:
+        months.append((today.year, today.month + 1))
+
+    points: list[Any] = []
+    for year, month in months:
+        try:
+            raw = garmin.get_scheduled_workouts(year, month) or {}
+            items: list[Any] = raw.get("calendarItems") or []
+            for item in items:
+                # Calendar items include more than workouts (e.g. races, notes).
+                # Only sync items that have a workoutId — those are scheduled workouts.
+                try:
+                    workout_id = item.get("workoutId")
+                    if workout_id is None:
+                        continue
+                    scheduled_id = item.get("id")
+                    if scheduled_id is None:
+                        log.warning("scheduled_workouts: item missing id, skipping")
+                        continue
+                    date_str = item.get("date") or item.get("calendarDate")
+                    if not date_str:
+                        log.warning("scheduled_workouts: item %s missing date, skipping", scheduled_id)
+                        continue
+                    scheduled_date = date.fromisoformat(str(date_str)[:10])
+
+                    sport_raw = item.get("sport") or item.get("activityType")
+                    sport_val = (
+                        str(sport_raw.get("typeKey") or "")
+                        if isinstance(sport_raw, dict)
+                        else str(sport_raw or "")
+                    )
+
+                    p = (
+                        Point("scheduled_workout")
+                        .tag("scheduled_id", str(scheduled_id))
+                        .tag("sport", sport_val)
+                        .time(_day_ts(scheduled_date))
+                    )
+                    dur = _fval(item, "duration")
+                    fields: dict[str, Any] = {
+                        "workout_id": float(workout_id),
+                        "name": str(item.get("title") or item.get("workoutName") or ""),
+                        "duration_s": dur if dur is not None else _fval(item, "estimatedDurationInSecs"),
+                    }
+                    p, n = _add_fields(p, fields)
+                    if n:
+                        points.append(p)
+                except Exception as exc:
+                    log.warning("scheduled_workouts: item %s: %s", item.get("id"), exc)
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
+            raise
+        except Exception as exc:
+            log.warning("scheduled_workouts %d-%02d: %s", year, month, exc)
+        time.sleep(0.3)
+
+    # Delete the synced window before writing so cancelled workouts don't persist.
+    _delete_scheduled_workouts(months)
+    _write(client, points)
+    log.info("scheduled_workouts: wrote %d points", len(points))
+
+
 def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "respiration")
     end = date.today()
@@ -762,6 +863,7 @@ SYNC_FUNCS = [
     sync_performance,
     sync_lactate_threshold,
     sync_respiration,
+    sync_scheduled_workouts,
 ]
 
 

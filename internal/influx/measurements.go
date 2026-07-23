@@ -17,4 +17,5 @@ const (
 	MeasurementTrainingLoad       = "training_load"
 	MeasurementActivityLap        = "activity_lap"
 	MeasurementActivityHRZones    = "activity_hr_zones"
+	MeasurementScheduledWorkout   = "scheduled_workout"
 )

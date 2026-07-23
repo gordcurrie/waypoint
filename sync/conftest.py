@@ -17,3 +17,15 @@ def _safe_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     monkeypatch.setattr(sync, "TOKEN_STORE", str(tmp_path / "garmin_auth"))
     monkeypatch.setattr(sync, "STATE_FILE", tmp_path / "sync_state.json")
+
+
+@pytest.fixture()
+def no_sleep(monkeypatch):
+    """Suppress time.sleep calls so tests that trigger API rate-limit delays run instantly."""
+    monkeypatch.setattr(sync.time, "sleep", lambda _: None)
+
+
+@pytest.fixture(autouse=True)
+def no_delete(monkeypatch):
+    """Suppress the InfluxDB DELETE HTTP call so tests don't hit a real server."""
+    monkeypatch.setattr(sync, "_delete_scheduled_workouts", lambda *_: None)
