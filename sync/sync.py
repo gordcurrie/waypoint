@@ -765,7 +765,9 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                         continue
                     date_str = item.get("date") or item.get("calendarDate")
                     if not date_str:
-                        log.warning("scheduled_workouts: item %s missing date, skipping", scheduled_id)
+                        log.warning(
+                            "scheduled_workouts: item %s missing date, skipping", scheduled_id
+                        )
                         continue
                     scheduled_date = date.fromisoformat(str(date_str)[:10])
 
@@ -786,7 +788,9 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                     fields: dict[str, Any] = {
                         "workout_id": float(workout_id),
                         "name": str(item.get("title") or item.get("workoutName") or ""),
-                        "duration_s": dur if dur is not None else _fval(item, "estimatedDurationInSecs"),
+                        "duration_s": dur
+                        if dur is not None
+                        else _fval(item, "estimatedDurationInSecs"),
                     }
                     p, n = _add_fields(p, fields)
                     if n:
