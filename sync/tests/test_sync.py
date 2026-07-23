@@ -788,6 +788,33 @@ def test_scheduled_workouts_skips_non_workout_items(no_sleep):
 
 
 @freeze_time("2026-07-06")
+def test_scheduled_workouts_workout_id_zero_not_skipped(no_sleep):
+    """workoutId=0 must not be treated as absent (falsy-zero guard)."""
+    garmin = _sched_garmin([_workout_item(workout_id=0)])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = client.write.call_args[1]["record"]
+    assert len(points) == 1
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_skips_item_with_no_id(no_sleep):
+    """Items with no `id` field must be skipped — str(None) would corrupt the tag."""
+    item_no_id = {
+        "workoutId": 200,
+        "date": "2026-07-25",
+        "title": "Easy Run",
+        "sport": "running",
+        "duration": 1800,
+        # no "id" key
+    }
+    garmin = _sched_garmin([item_no_id])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    assert not client.write.called
+
+
+@freeze_time("2026-07-06")
 def test_scheduled_workouts_connection_error_propagates(no_sleep):
     garmin = MagicMock()
     garmin.get_scheduled_workouts.side_effect = GarminConnectConnectionError("timeout")

@@ -14,7 +14,7 @@ type ScheduledWorkout struct {
 func ScheduledWorkoutFrom(row map[string]any) ScheduledWorkout {
 	return ScheduledWorkout{
 		ScheduledID: int64FromString(row, "scheduled_id"),
-		WorkoutID:   int64FromString(row, "workout_id"),
+		WorkoutID:   int64From(row, "workout_id"),
 		Date:        dateFrom(row, "time"),
 		Name:        stringFrom(row, "name"),
 		Sport:       stringFrom(row, "sport"),
