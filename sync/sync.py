@@ -600,6 +600,114 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[
         log.warning("lactate_threshold: %s", exc)
 
 
+def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
+    """Fetch per-lap splits and HR zone distribution for each recent activity."""
+    start = _last_synced(state, "activity_details")
+    end = date.today()
+    log.info("activity_details: %s → %s", start, end)
+
+    activities = garmin.get_activities_by_date(start.isoformat(), end.isoformat()) or []
+
+    points: list[Any] = []
+    _first_err: date | None = None
+    for a in activities:
+        activity_id = a.get("activityId")
+        if activity_id is None:
+            continue
+        ts_str = a.get("startTimeGMT")
+        if not ts_str:
+            continue
+        try:
+            activity_ts = _parse_gmt(ts_str)
+        except Exception:
+            continue
+        activity_date = activity_ts.date()
+
+        # Per-lap splits
+        try:
+            splits = garmin.get_activity_splits(str(activity_id)) or {}
+            for lap in splits.get("lapDTOs") or []:
+                lap_idx = lap.get("lapIndex") or 0
+                lap_ts_str = lap.get("startTimeGMT")
+                try:
+                    lap_ts = _parse_gmt(lap_ts_str) if lap_ts_str else activity_ts
+                except Exception:
+                    lap_ts = activity_ts
+                p = Point("activity_lap").tag("activity_id", str(activity_id)).time(lap_ts)
+                fields: dict[str, Any] = {
+                    "lap_index": float(lap_idx),
+                    "distance_m": _fval(lap, "distance"),
+                    "duration_s": _fval(lap, "duration"),
+                    "avg_hr_bpm": _fval(lap, "averageHR"),
+                    "max_hr_bpm": _fval(lap, "maxHR"),
+                    "avg_speed_m_s": _fval(lap, "averageSpeed"),
+                    "avg_cadence_spm": _fval(lap, "averageRunCadence"),
+                    "avg_power_w": _fval(lap, "avgPower"),
+                    "elevation_gain_m": _fval(lap, "totalAscent"),
+                }
+                p, n = _add_fields(p, fields)
+                if n:
+                    points.append(p)
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
+            raise
+        except Exception as exc:
+            if _first_err is None:
+                _first_err = activity_date
+            log.warning("activity_splits %s: %s", activity_id, exc)
+
+        time.sleep(0.3)
+
+        # HR zone distribution
+        try:
+            zones_raw = garmin.get_activity_hr_in_timezones(str(activity_id)) or []
+            zones: list[Any] = (
+                zones_raw if isinstance(zones_raw, list) else zones_raw.get("hrTimeInZones") or []
+            )
+            zone_secs: dict[int, float] = {}
+            for z in zones:
+                znum = z.get("zoneNumber")
+                secs = _fval(z, "secsInZone")
+                if znum is not None and secs is not None:
+                    zone_secs[int(znum)] = secs
+            if zone_secs:
+                p = (
+                    Point("activity_hr_zones")
+                    .tag("activity_id", str(activity_id))
+                    .time(activity_ts)
+                )
+                hr_fields: dict[str, Any] = {
+                    "z1_s": zone_secs.get(1),
+                    "z2_s": zone_secs.get(2),
+                    "z3_s": zone_secs.get(3),
+                    "z4_s": zone_secs.get(4),
+                    "z5_s": zone_secs.get(5),
+                }
+                p, n = _add_fields(p, hr_fields)
+                if n:
+                    points.append(p)
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
+            raise
+        except Exception as exc:
+            if _first_err is None:
+                _first_err = activity_date
+            log.warning("activity_hr_zones %s: %s", activity_id, exc)
+
+        time.sleep(0.3)
+
+    watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
+    _write(client, points)
+    _advance_state(state, "activity_details", watermark, had_error=_first_err is not None)
+    log.info("activity_details: wrote %d points for %d activities", len(points), len(activities))
+
+
 def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "respiration")
     end = date.today()
@@ -645,6 +753,7 @@ def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
 
 SYNC_FUNCS = [
     sync_activities,
+    sync_activity_details,
     sync_daily_stats,
     sync_sleep,
     sync_hrv,

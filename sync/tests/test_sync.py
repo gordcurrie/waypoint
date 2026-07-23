@@ -565,3 +565,140 @@ def test_training_readiness_state_advanced():
     with patch.object(sync, "_save_state"):
         sync.sync_training_readiness(garmin, client, state)
     assert state["training_readiness"] == "2026-07-06"
+
+
+# ── sync_activity_details ──────────────────────────────────────────────────────
+
+
+def _make_details_garmin(
+    activities: list,
+    splits: dict | None = None,
+    hr_zones: list | None = None,
+) -> MagicMock:
+    g = MagicMock()
+    g.get_activities_by_date.return_value = activities
+    g.get_activity_splits.return_value = splits or {}
+    g.get_activity_hr_in_timezones.return_value = hr_zones or []
+    return g
+
+
+def _activity_stub(
+    activity_id: int = 1,
+    ts: str = "2026-07-06 10:00:00",
+    sport: str = "running",
+) -> dict:
+    return {
+        "activityId": activity_id,
+        "startTimeGMT": ts,
+        "activityType": {"typeKey": sport},
+    }
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_writes_lap_points():
+    """Lap data from get_activity_splits must produce activity_lap points."""
+    splits = {
+        "lapDTOs": [
+            {
+                "lapIndex": 1,
+                "startTimeGMT": "2026-07-06 10:00:00",
+                "distance": 1000.0,
+                "duration": 360.0,
+                "averageHR": 148.0,
+                "averageSpeed": 2.78,
+            },
+            {
+                "lapIndex": 2,
+                "startTimeGMT": "2026-07-06 10:06:00",
+                "distance": 1000.0,
+                "duration": 355.0,
+                "averageHR": 152.0,
+                "averageSpeed": 2.82,
+            },
+        ]
+    }
+    garmin = _make_details_garmin([_activity_stub()], splits=splits)
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, {})
+    written = _written_points(client)
+    lap_points = [p for p in written if "activity_lap" in str(p)]
+    assert len(lap_points) == 2
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_writes_hr_zone_point():
+    """HR zone data must produce one activity_hr_zones point per activity."""
+    hr_zones = [
+        {"zoneNumber": 1, "secsInZone": 1200},
+        {"zoneNumber": 2, "secsInZone": 2400},
+        {"zoneNumber": 3, "secsInZone": 600},
+        {"zoneNumber": 4, "secsInZone": 120},
+        {"zoneNumber": 5, "secsInZone": 30},
+    ]
+    garmin = _make_details_garmin([_activity_stub()], hr_zones=hr_zones)
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, {})
+    written = _written_points(client)
+    zone_points = [p for p in written if "activity_hr_zones" in str(p)]
+    assert len(zone_points) == 1
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_hr_zones_dict_payload():
+    """API may wrap zones in {'hrTimeInZones': [...]} — both shapes must work."""
+    hr_zones_dict = {
+        "hrTimeInZones": [
+            {"zoneNumber": 1, "secsInZone": 900},
+            {"zoneNumber": 2, "secsInZone": 1800},
+        ]
+    }
+    garmin = _make_details_garmin([_activity_stub()], hr_zones=hr_zones_dict)
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, {})
+    written = _written_points(client)
+    zone_points = [p for p in written if "activity_hr_zones" in str(p)]
+    assert len(zone_points) == 1
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_skips_activity_without_start_time():
+    garmin = _make_details_garmin([{"activityId": 1}])  # no startTimeGMT
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, {})
+    assert not client.write.called
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_state_advanced():
+    garmin = _make_details_garmin([])
+    client = MagicMock()
+    state: dict = {}
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, state)
+    assert state["activity_details"] == "2026-07-06"
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_watermark_rolls_back_on_error():
+    """On splits fetch error, watermark must roll back to before the failed activity date."""
+    garmin = _make_details_garmin([_activity_stub(activity_id=1, ts="2026-07-05 10:00:00")])
+    garmin.get_activity_splits.side_effect = Exception("rate limited")
+    client = MagicMock()
+    state: dict = {}
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, state)
+    # Activity is on 2026-07-05; watermark must be 2026-07-04 (day before first error)
+    assert state.get("activity_details") == "2026-07-04"
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_connection_error_propagates():
+    garmin = MagicMock()
+    garmin.get_activities_by_date.side_effect = GarminConnectConnectionError("timeout")
+    client = MagicMock()
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_activity_details(garmin, client, {})
