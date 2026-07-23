@@ -265,6 +265,39 @@ def test_garmin_login_token_path_sets_skip_strategies():
 
 
 @freeze_time("2026-07-06")
+def test_activities_uses_average_speed_not_avg_speed():
+    """Garmin API field is averageSpeed; avgSpeed is absent and would store 0."""
+    garmin = _make_garmin(
+        [
+            {
+                "startTimeGMT": "2026-07-06 10:00:00",
+                "activityId": 1,
+                "activityType": {"typeKey": "running"},
+                "averageSpeed": 2.78,
+                "avgSpeed": 999.0,  # wrong key — must not reach InfluxDB
+            }
+        ]
+    )
+    client = MagicMock()
+    captured: dict = {}
+    original = sync._add_fields
+
+    def capturing(p, fields):
+        captured.update(fields)
+        return original(p, fields)
+
+    with (
+        patch.object(sync, "_add_fields", side_effect=capturing),
+        patch.object(sync, "_save_state"),
+    ):
+        sync.sync_activities(garmin, client, {})
+
+    assert captured.get("avg_speed_m_s") == 2.78, (
+        f"avg_speed_m_s should be 2.78 from averageSpeed, got {captured.get('avg_speed_m_s')}"
+    )
+
+
+@freeze_time("2026-07-06")
 def test_activities_activity_id_stored_as_int():
     """activity_id must be int, not float — 16-digit IDs exceed float64 precision."""
     garmin = _make_garmin(

@@ -120,6 +120,21 @@ func TestActivityFrom_CyclingOmitsRunningFields(t *testing.T) {
 	}
 }
 
+func TestActivityFrom_SpeedOmittedWhenZero(t *testing.T) {
+	row := map[string]any{
+		"time":  "2026-07-06T10:30:00Z",
+		"sport": "running",
+		// avg_speed_m_s absent — simulates old stored rows or missing Garmin field
+	}
+	b, err := json.Marshal(garmin.ActivityFrom(row))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "avg_speed_m_s") {
+		t.Errorf("avg_speed_m_s should be omitted when zero, got: %s", string(b))
+	}
+}
+
 func TestActivityFrom_MissingFields(t *testing.T) {
 	// Partial row — only required fields present; missing fields default to zero.
 	row := map[string]any{
