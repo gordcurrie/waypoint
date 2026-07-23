@@ -18,7 +18,6 @@ import logging
 import os
 import re
 import time
-import urllib.request
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -139,34 +138,6 @@ def _influx_client() -> InfluxDBClient3:
 def _write(client: InfluxDBClient3, points: list[Any]) -> None:
     if points:
         client.write(record=points)
-
-
-def _delete_scheduled_workouts(months: list[tuple[int, int]]) -> None:
-    """Delete scheduled_workout rows for the given months before writing fresh data.
-
-    Clears the window so cancelled or rescheduled workouts don't persist in InfluxDB.
-    Failures are logged as warnings — the subsequent write still proceeds.
-    """
-    if not months:
-        return
-    year0, month0 = months[0]
-    year1, month1 = months[-1]
-    end_year, end_month = (year1 + 1, 1) if month1 == 12 else (year1, month1 + 1)
-    start_ts = _day_ts(date(year0, month0, 1)).isoformat()
-    end_ts = _day_ts(date(end_year, end_month, 1)).isoformat()
-    sql = f"DELETE FROM scheduled_workout WHERE time >= '{start_ts}' AND time < '{end_ts}'"
-    body = json.dumps({"q": sql, "db": INFLUXDB_DB, "format": "json"}).encode()
-    headers = {"Content-Type": "application/json"}
-    if INFLUXDB_TOKEN:
-        headers["Authorization"] = f"Bearer {INFLUXDB_TOKEN}"
-    req = urllib.request.Request(
-        INFLUXDB_URL + "/api/v3/query_sql", data=body, headers=headers, method="POST"
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-            resp.read()
-    except Exception as exc:
-        log.warning("scheduled_workouts: delete failed: %s", exc)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -807,8 +778,6 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
             log.warning("scheduled_workouts %d-%02d: %s", year, month, exc)
         time.sleep(0.3)
 
-    # Delete the synced window before writing so cancelled workouts don't persist.
-    _delete_scheduled_workouts(months)
     _write(client, points)
     log.info("scheduled_workouts: wrote %d points", len(points))
 
