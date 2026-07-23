@@ -708,6 +708,64 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
     log.info("activity_details: wrote %d points for %d activities", len(points), len(activities))
 
 
+def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
+    """Sync Garmin calendar workouts for the current and next month into InfluxDB."""
+    today = date.today()
+    months = [(today.year, today.month)]
+    # Always include next month to cover a 14-day lookahead that spans a boundary.
+    if today.month == 12:
+        months.append((today.year + 1, 1))
+    else:
+        months.append((today.year, today.month + 1))
+
+    points: list[Any] = []
+    for year, month in months:
+        try:
+            raw = garmin.get_scheduled_workouts(year, month) or {}
+            items: list[Any] = raw.get("calendarItems") or []
+            for item in items:
+                # Calendar items include more than workouts (e.g. races, notes).
+                # Only sync items that have a workoutId — those are scheduled workouts.
+                workout_id = item.get("workoutId")
+                if not workout_id:
+                    continue
+                scheduled_id = item.get("id")
+                date_str = item.get("date") or item.get("calendarDate")
+                if not date_str:
+                    continue
+                try:
+                    scheduled_date = date.fromisoformat(str(date_str)[:10])
+                except (ValueError, TypeError):
+                    continue
+
+                p = (
+                    Point("scheduled_workout")
+                    .tag("scheduled_id", str(scheduled_id))
+                    .tag("sport", str(item.get("sport") or item.get("activityType") or ""))
+                    .time(_day_ts(scheduled_date))
+                )
+                fields: dict[str, Any] = {
+                    "workout_id": float(workout_id),
+                    "name": str(item.get("title") or item.get("workoutName") or ""),
+                    "duration_s": _fval(item, "duration") or _fval(item, "estimatedDurationInSecs"),
+                }
+                p, n = _add_fields(p, fields)
+                if n:
+                    points.append(p)
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
+            raise
+        except Exception as exc:
+            log.warning("scheduled_workouts %d-%02d: %s", year, month, exc)
+        time.sleep(0.3)
+
+    _write(client, points)
+    log.info("scheduled_workouts: wrote %d points", len(points))
+
+
 def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "respiration")
     end = date.today()
@@ -762,6 +820,7 @@ SYNC_FUNCS = [
     sync_performance,
     sync_lactate_threshold,
     sync_respiration,
+    sync_scheduled_workouts,
 ]
 
 

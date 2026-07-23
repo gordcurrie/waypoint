@@ -702,3 +702,95 @@ def test_activity_details_connection_error_propagates():
     client = MagicMock()
     with pytest.raises(GarminConnectConnectionError):
         sync.sync_activity_details(garmin, client, {})
+
+
+# ── sync_scheduled_workouts ────────────────────────────────────────────────────
+
+
+def _sched_garmin(calendar_items: list, next_month_items: list | None = None) -> MagicMock:
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = [
+        {"calendarItems": calendar_items},
+        {"calendarItems": next_month_items if next_month_items is not None else []},
+    ]
+    return garmin
+
+
+def _workout_item(
+    scheduled_id: int = 100,
+    workout_id: int = 200,
+    date_str: str = "2026-07-25",
+    title: str = "Easy Run",
+    sport: str = "running",
+    duration: float = 1800,
+) -> dict:
+    return {
+        "id": scheduled_id,
+        "workoutId": workout_id,
+        "date": date_str,
+        "title": title,
+        "sport": sport,
+        "duration": duration,
+    }
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_writes_points():
+    garmin = _sched_garmin([_workout_item()])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    client.write.assert_called_once()
+    points = client.write.call_args[1]["record"]
+    assert len(points) == 1
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_queries_two_months():
+    """Always queries current + next month to cover any 14-day lookahead."""
+    garmin = _sched_garmin([])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    assert garmin.get_scheduled_workouts.call_count == 2
+    calls = garmin.get_scheduled_workouts.call_args_list
+    assert calls[0][0] == (2026, 7)
+    assert calls[1][0] == (2026, 8)
+
+
+@freeze_time("2026-12-28")
+def test_scheduled_workouts_december_queries_january():
+    """December → queries December + January (year rolls over)."""
+    garmin = _sched_garmin([])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    calls = garmin.get_scheduled_workouts.call_args_list
+    assert calls[0][0] == (2026, 12)
+    assert calls[1][0] == (2027, 1)
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_skips_non_workout_items():
+    """Items without workoutId (e.g. race entries) must be skipped."""
+    garmin = _sched_garmin(
+        [
+            {
+                "id": 1,
+                "date": "2026-07-10",
+                "title": "Park Run",
+                "sport": "running",
+            },  # no workoutId
+            _workout_item(scheduled_id=2, workout_id=999),
+        ]
+    )
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = client.write.call_args[1]["record"]
+    assert len(points) == 1
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_connection_error_propagates():
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = GarminConnectConnectionError("timeout")
+    client = MagicMock()
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_scheduled_workouts(garmin, client, {})

@@ -8,4 +8,5 @@ func RegisterAll(s *mcp.Server, client influxClient) {
 	registerHealthTools(s, client)
 	registerTrainingTools(s, client)
 	registerSplitTools(s, client)
+	registerWorkoutTools(s, client)
 }
