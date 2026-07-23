@@ -735,7 +735,7 @@ def _workout_item(
 
 
 @freeze_time("2026-07-06")
-def test_scheduled_workouts_writes_points():
+def test_scheduled_workouts_writes_points(no_sleep):
     garmin = _sched_garmin([_workout_item()])
     client = MagicMock()
     sync.sync_scheduled_workouts(garmin, client, {})
@@ -745,7 +745,7 @@ def test_scheduled_workouts_writes_points():
 
 
 @freeze_time("2026-07-06")
-def test_scheduled_workouts_queries_two_months():
+def test_scheduled_workouts_queries_two_months(no_sleep):
     """Always queries current + next month to cover any 14-day lookahead."""
     garmin = _sched_garmin([])
     client = MagicMock()
@@ -757,7 +757,7 @@ def test_scheduled_workouts_queries_two_months():
 
 
 @freeze_time("2026-12-28")
-def test_scheduled_workouts_december_queries_january():
+def test_scheduled_workouts_december_queries_january(no_sleep):
     """December → queries December + January (year rolls over)."""
     garmin = _sched_garmin([])
     client = MagicMock()
@@ -768,7 +768,7 @@ def test_scheduled_workouts_december_queries_january():
 
 
 @freeze_time("2026-07-06")
-def test_scheduled_workouts_skips_non_workout_items():
+def test_scheduled_workouts_skips_non_workout_items(no_sleep):
     """Items without workoutId (e.g. race entries) must be skipped."""
     garmin = _sched_garmin(
         [
@@ -788,7 +788,7 @@ def test_scheduled_workouts_skips_non_workout_items():
 
 
 @freeze_time("2026-07-06")
-def test_scheduled_workouts_connection_error_propagates():
+def test_scheduled_workouts_connection_error_propagates(no_sleep):
     garmin = MagicMock()
     garmin.get_scheduled_workouts.side_effect = GarminConnectConnectionError("timeout")
     client = MagicMock()

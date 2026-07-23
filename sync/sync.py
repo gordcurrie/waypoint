@@ -747,7 +747,11 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                 fields: dict[str, Any] = {
                     "workout_id": float(workout_id),
                     "name": str(item.get("title") or item.get("workoutName") or ""),
-                    "duration_s": _fval(item, "duration") or _fval(item, "estimatedDurationInSecs"),
+                    "duration_s": (
+                        _fval(item, "duration")
+                        if _fval(item, "duration") is not None
+                        else _fval(item, "estimatedDurationInSecs")
+                    ),
                 }
                 p, n = _add_fields(p, fields)
                 if n:
