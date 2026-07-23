@@ -4,7 +4,7 @@ package garmin
 // Status is numerically encoded: 2.0=BALANCED, 1.0=UNBALANCED, 0.0=POOR.
 // Status is a pointer so nil (absent) can be distinguished from 0.0 (POOR).
 type HRV struct {
-	Date           string   `json:"date"`
+	Date           string   `json:"date,omitempty"`
 	WeeklyAvgMS    float64  `json:"weekly_avg_ms"`
 	LastNightMS    float64  `json:"last_night_ms"`
 	Last5MinHighMS float64  `json:"last_5min_high_ms"`
@@ -14,7 +14,7 @@ type HRV struct {
 // HRVFrom converts a query row from the "hrv" measurement.
 func HRVFrom(row map[string]any) HRV {
 	return HRV{
-		Date:           timeFrom(row, "time").Format("2006-01-02"),
+		Date:           dateFrom(row, "time"),
 		WeeklyAvgMS:    roundF(floatFrom(row, "weekly_avg_ms")),
 		LastNightMS:    roundF(floatFrom(row, "last_night_ms")),
 		Last5MinHighMS: roundF(floatFrom(row, "last_5min_high_ms")),

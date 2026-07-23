@@ -2,7 +2,7 @@ package garmin
 
 // DailyStats represents one row from the "daily_stats" measurement.
 type DailyStats struct {
-	Date                 string  `json:"date"`
+	Date                 string  `json:"date,omitempty"`
 	Steps                float64 `json:"steps"`
 	RestingHRBPM         float64 `json:"resting_hr_bpm"`
 	BodyBatteryMax       float64 `json:"body_battery_max"`
@@ -18,7 +18,7 @@ type DailyStats struct {
 // DailyStatsFrom converts a query row from the "daily_stats" measurement.
 func DailyStatsFrom(row map[string]any) DailyStats {
 	return DailyStats{
-		Date:                 timeFrom(row, "time").Format("2006-01-02"),
+		Date:                 dateFrom(row, "time"),
 		Steps:                roundF(floatFrom(row, "steps")),
 		RestingHRBPM:         roundF(floatFrom(row, "resting_hr_bpm")),
 		BodyBatteryMax:       roundF(floatFrom(row, "body_battery_max")),
@@ -34,7 +34,7 @@ func DailyStatsFrom(row map[string]any) DailyStats {
 
 // Sleep represents one row from the "sleep" measurement.
 type Sleep struct {
-	Date             string  `json:"date"`
+	Date             string  `json:"date,omitempty"`
 	TotalSleepS      float64 `json:"total_sleep_s"`
 	DeepSleepS       float64 `json:"deep_sleep_s"`
 	LightSleepS      float64 `json:"light_sleep_s"`
@@ -50,7 +50,7 @@ type Sleep struct {
 // SleepFrom converts a query row from the "sleep" measurement.
 func SleepFrom(row map[string]any) Sleep {
 	return Sleep{
-		Date:             timeFrom(row, "time").Format("2006-01-02"),
+		Date:             dateFrom(row, "time"),
 		TotalSleepS:      roundF(floatFrom(row, "total_sleep_s")),
 		DeepSleepS:       roundF(floatFrom(row, "deep_sleep_s")),
 		LightSleepS:      roundF(floatFrom(row, "light_sleep_s")),
@@ -66,7 +66,7 @@ func SleepFrom(row map[string]any) Sleep {
 
 // Respiration represents one row from the "respiration" measurement.
 type Respiration struct {
-	Date          string  `json:"date"`
+	Date          string  `json:"date,omitempty"`
 	AvgWakingBRPM float64 `json:"avg_waking_brpm"`
 	AvgSleepBRPM  float64 `json:"avg_sleep_brpm"`
 	HighestBRPM   float64 `json:"highest_brpm"`
@@ -76,7 +76,7 @@ type Respiration struct {
 // RespirationFrom converts a query row from the "respiration" measurement.
 func RespirationFrom(row map[string]any) Respiration {
 	return Respiration{
-		Date:          timeFrom(row, "time").Format("2006-01-02"),
+		Date:          dateFrom(row, "time"),
 		AvgWakingBRPM: roundF(floatFrom(row, "avg_waking_brpm")),
 		AvgSleepBRPM:  roundF(floatFrom(row, "avg_sleep_brpm")),
 		HighestBRPM:   roundF(floatFrom(row, "highest_brpm")),

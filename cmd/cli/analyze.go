@@ -210,8 +210,21 @@ func buildAnalyzePrompt(period string, days int, d *trainingData) string {
 	if len(d.readiness) > 0 {
 		sb.WriteString("READINESS:\n")
 		for _, r := range d.readiness {
-			fmt.Fprintf(&sb, "  %s: score=%.0f, hrv_status=%.0f, sleep_score=%.0f\n",
-				r.Date, r.Score, r.HRVStatus, r.SleepScore)
+			hrvStatus := "unknown"
+			if r.HRVStatus != nil {
+				switch *r.HRVStatus {
+				case 2.0:
+					hrvStatus = "balanced"
+				case 1.0:
+					hrvStatus = "unbalanced"
+				case 0.0:
+					hrvStatus = "poor"
+				case 3.0:
+					hrvStatus = "low-unbalanced"
+				}
+			}
+			fmt.Fprintf(&sb, "  %s: score=%.0f, hrv_status=%s, sleep_score=%.0f\n",
+				r.Date, r.Score, hrvStatus, r.SleepScore)
 		}
 		sb.WriteString("\n")
 	}

@@ -37,9 +37,11 @@ type Result struct {
 
 // MarshalJSON emits date as "YYYY-MM-DD" and rounds floats to 1 decimal place.
 // The time.Time field is kept for WriteResults; this controls only JSON output.
+// KEEP IN SYNC: anonymous struct must mirror all Result fields; new fields are
+// silently omitted from JSON otherwise (no compile error).
 func (r Result) MarshalJSON() ([]byte, error) {
 	round1 := func(f float64) float64 { return math.Round(f*10) / 10 }
-	return json.Marshal(struct {
+	b, err := json.Marshal(struct {
 		Date string  `json:"date"`
 		ATL  float64 `json:"atl"`
 		CTL  float64 `json:"ctl"`
@@ -52,6 +54,10 @@ func (r Result) MarshalJSON() ([]byte, error) {
 		TSB:  round1(r.TSB),
 		Load: round1(r.Load),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal Result: %w", err)
+	}
+	return b, nil
 }
 
 // Compute queries activities from InfluxDB and returns ATL/CTL/TSB for each

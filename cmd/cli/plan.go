@@ -77,7 +77,11 @@ func buildPlanPrompt(weeks int, d *trainingData) string {
 
 	if len(d.readiness) > 0 {
 		r := d.readiness[0]
-		fmt.Fprintf(&sb, "Latest readiness: %.0f/100 (HRV status=%.0f)\n", r.Score, r.HRVStatus)
+		if r.HRVStatus != nil {
+			fmt.Fprintf(&sb, "Latest readiness: %.0f/100 (HRV status=%.0f)\n", r.Score, *r.HRVStatus)
+		} else {
+			fmt.Fprintf(&sb, "Latest readiness: %.0f/100\n", r.Score)
+		}
 	}
 
 	if len(d.hrv) > 0 {

@@ -22,7 +22,7 @@ func TestTrainingReadinessFrom(t *testing.T) {
 	if tr.Score != 74 {
 		t.Errorf("Score: got %v, want 74", tr.Score)
 	}
-	if tr.HRVStatus != 2 {
+	if tr.HRVStatus == nil || *tr.HRVStatus != 2 {
 		t.Errorf("HRVStatus: got %v, want 2", tr.HRVStatus)
 	}
 	if tr.SleepScore != 78 {
@@ -33,6 +33,14 @@ func TestTrainingReadinessFrom(t *testing.T) {
 	}
 	if tr.ACWRatio != 0.9 {
 		t.Errorf("ACWRatio: got %v, want 0.9 (0.85 rounded to 1 decimal)", tr.ACWRatio)
+	}
+}
+
+func TestTrainingReadinessFrom_HRVStatusAbsent(t *testing.T) {
+	row := map[string]any{"time": "2026-07-06T00:00:00Z", "score": float64(74)}
+	tr := garmin.TrainingReadinessFrom(row)
+	if tr.HRVStatus != nil {
+		t.Errorf("HRVStatus: got %v, want nil for absent field", tr.HRVStatus)
 	}
 }
 

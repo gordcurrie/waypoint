@@ -72,8 +72,8 @@ func TestQueryReadiness_mapsFields(t *testing.T) {
 	if r.Score != 85.0 {
 		t.Errorf("Score: got %.1f, want 85.0", r.Score)
 	}
-	if r.HRVStatus != 2.0 {
-		t.Errorf("HRVStatus: got %.1f, want 2.0", r.HRVStatus)
+	if r.HRVStatus == nil || *r.HRVStatus != 2.0 {
+		t.Errorf("HRVStatus: got %v, want 2.0", r.HRVStatus)
 	}
 	if r.SleepScore != 78.0 {
 		t.Errorf("SleepScore: got %.1f, want 78.0", r.SleepScore)

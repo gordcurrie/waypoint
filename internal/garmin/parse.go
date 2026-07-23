@@ -86,6 +86,17 @@ func stringFrom(row map[string]any, key string) string {
 	return s
 }
 
+// dateFrom extracts a YYYY-MM-DD date string from a query row.
+// Returns "" when the key is absent or the timestamp cannot be parsed,
+// so callers can detect missing data instead of seeing "0001-01-01".
+func dateFrom(row map[string]any, key string) string {
+	t := timeFrom(row, key)
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02")
+}
+
 // timeFrom parses a timestamp from a query row.
 // Handles RFC3339Nano strings (superset of RFC3339) and nanosecond-epoch integers.
 func timeFrom(row map[string]any, key string) time.Time {
