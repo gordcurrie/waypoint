@@ -234,7 +234,7 @@ def sync_activities(garmin: Garmin, client: InfluxDBClient3, state: dict[str, An
                 "max_hr_bpm": _fval(a, "maxHR"),
                 "calories_kcal": _fval(a, "calories"),
                 "elevation_gain_m": _fval(a, "elevationGain"),
-                "avg_speed_m_s": _fval(a, "avgSpeed"),
+                "avg_speed_m_s": _fval(a, "averageSpeed"),
                 "training_load": _fval(a, "activityTrainingLoad"),
                 "aerobic_te": _fval(a, "aerobicTrainingEffect"),
                 "anaerobic_te": _fval(a, "anaerobicTrainingEffect"),

@@ -14,7 +14,7 @@ type Activity struct {
 	MaxHRBPM       float64   `json:"max_hr_bpm"`
 	CaloriesKcal   float64   `json:"calories_kcal"`
 	ElevationGainM float64   `json:"elevation_gain_m"`
-	AvgSpeedMpS    float64   `json:"avg_speed_m_s"`
+	AvgSpeedMpS    float64   `json:"avg_speed_m_s,omitempty"`
 	TrainingLoad   float64   `json:"training_load"`
 	AerobicTE      float64   `json:"aerobic_te"`
 	AnaerobicTE    float64   `json:"anaerobic_te"`
