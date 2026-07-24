@@ -36,7 +36,6 @@ func TestSleepFrom(t *testing.T) {
 		"total_sleep_s": float64(27000),
 		"deep_sleep_s":  float64(5400),
 		"sleep_score":   float64(78),
-		"avg_hrv_ms":    float64(62),
 	}
 	s := garmin.SleepFrom(row)
 	if s.Date != "2026-07-06" {

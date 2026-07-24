@@ -9,6 +9,31 @@ Full architecture in PLAN.md.
 
 **Never commit directly to main.** Every change — no matter how small, in any repo — goes on a feature branch and through a PR. No exceptions for "trivial" fixes, config files, or infra repos.
 
+## Garmin API field verification (non-negotiable)
+
+**Before writing any new sync field, model field, or MCP tool field that reads from
+Garmin Connect: verify the actual API response first.** Do not guess field names or
+response structure — the Garmin API has non-obvious shapes (nested device-keyed dicts,
+integer enums, percent values named "Ratio", missing fields that seem like they should exist).
+
+Two bugs burned from skipping this step: `acwRatio` (doesn't exist; real field is
+`acwrFactorPercent`), `avg_hrv_ms` in sleep (sleep API returns no HRV data at all),
+and the entire `training_status` response structure (wrong path, wrong type, wrong field names).
+
+**How to verify** (use the helper script):
+```bash
+docker exec waypoint-sync-1 python3 /app/inspect_api.py <method> <date>
+# Examples:
+docker exec waypoint-sync-1 python3 /app/inspect_api.py get_training_readiness 2026-07-24
+docker exec waypoint-sync-1 python3 /app/inspect_api.py get_sleep_data 2026-07-24
+```
+
+**Required before implementation:**
+1. Run the relevant `get_*` method and capture the full JSON response
+2. Identify exact field names, nesting, and types from the real response
+3. Include the actual response shape as a comment in the sync function (see `sync_training_status` for the pattern)
+4. Use the real response as the fixture in tests (not invented field names)
+
 ## Non-obvious constraints (don't re-litigate these)
 
 ### Python sidecar is required

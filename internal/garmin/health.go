@@ -41,7 +41,6 @@ type Sleep struct {
 	REMSleepS        float64 `json:"rem_sleep_s"`
 	AwakeS           float64 `json:"awake_s"`
 	SleepScore       float64 `json:"sleep_score"`
-	AvgHRVMS         float64 `json:"avg_hrv_ms"`
 	AvgSpO2Pct       float64 `json:"avg_spo2_pct"`
 	AvgBreathingRate float64 `json:"avg_breathing_rate"`
 	AvgStress        float64 `json:"avg_stress"`
@@ -57,7 +56,6 @@ func SleepFrom(row map[string]any) Sleep {
 		REMSleepS:        roundF(floatFrom(row, "rem_sleep_s")),
 		AwakeS:           roundF(floatFrom(row, "awake_s")),
 		SleepScore:       roundF(floatFrom(row, "sleep_score")),
-		AvgHRVMS:         roundF(floatFrom(row, "avg_hrv_ms")),
 		AvgSpO2Pct:       roundF(floatFrom(row, "avg_spo2_pct")),
 		AvgBreathingRate: roundF(floatFrom(row, "avg_breathing_rate")),
 		AvgStress:        roundF(floatFrom(row, "avg_stress")),
