@@ -75,7 +75,13 @@ Add to Claude's MCP config (stdio, local dev):
 }
 ```
 
-For homelab HTTP deployment: `./waypoint-mcp --transport=http --addr=0.0.0.0:8080`
+> **Note:** `create_workout` requires `--data-dir` pointing to the same volume the sync
+> sidecar reads. In stdio mode the binary writes to `./data` (relative to its CWD), which
+> is not accessible to the sync container. Use the HTTP transport (`docker-compose.mcp.yml`)
+> for `create_workout` — the MCP container and sync container share the `sync_data` volume
+> and both use `/data`.
+
+For homelab HTTP deployment: `./waypoint-mcp --transport=http --addr=0.0.0.0:8080 --data-dir=/data`
 
 **Available tools:** `get_recent_activities`, `get_weekly_volume`, `get_daily_stats`, `get_sleep_summary`, `get_hrv_trend`, `get_training_load`, `get_training_readiness`, `get_activity_splits`, `get_activity_hr_zones`, `get_scheduled_workouts`, `create_workout`
 
