@@ -828,6 +828,7 @@ def _build_garmin_step(order: int, step: dict[str, Any]) -> dict[str, Any]:
         target_val2 = None
 
     return {
+        "type": "ExecutableStepDTO",
         "stepOrder": order,
         "stepType": step_type,
         "endCondition": end_condition,
