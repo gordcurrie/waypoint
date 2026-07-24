@@ -431,7 +431,7 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
                     "hrv_status": _HRV_STATUS.get(str(item.get("hrvStatus", "")), None),
                     "sleep_score": _fval(item, "sleepScore"),
                     "recovery_time_h": _scale(_fval(item, "recoveryTime"), 1.0 / 60.0),
-                    "acw_ratio": _fval(item, "acwRatio"),
+                    "acw_pct": _fval(item, "acwrFactorPercent"),
                 }
                 p, n = _add_fields(p, fields)
                 if n:

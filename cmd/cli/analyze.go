@@ -246,10 +246,10 @@ func buildAnalyzePrompt(period string, days int, d *trainingData) string {
 	if len(d.sleep) > 0 {
 		sb.WriteString("SLEEP:\n")
 		for _, s := range d.sleep {
-			fmt.Fprintf(&sb, "  %s: total=%.1fh, deep=%.1fh, rem=%.1fh, score=%.0f, hrv=%.0fms\n",
+			fmt.Fprintf(&sb, "  %s: total=%.1fh, deep=%.1fh, rem=%.1fh, score=%.0f\n",
 				s.Date,
 				s.TotalSleepS/3600, s.DeepSleepS/3600, s.REMSleepS/3600,
-				s.SleepScore, s.AvgHRVMS,
+				s.SleepScore,
 			)
 		}
 		sb.WriteString("\n")

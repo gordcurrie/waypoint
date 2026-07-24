@@ -10,7 +10,7 @@ type TrainingReadiness struct {
 	HRVStatus     *float64 `json:"hrv_status,omitempty"`
 	SleepScore    float64  `json:"sleep_score"`
 	RecoveryTimeH float64  `json:"recovery_time_h"`
-	ACWRatio      float64  `json:"acw_ratio"`
+	ACWPct        float64  `json:"acw_pct"`
 }
 
 // TrainingReadinessFrom converts a query row from the "training_readiness" measurement.
@@ -21,7 +21,7 @@ func TrainingReadinessFrom(row map[string]any) TrainingReadiness {
 		HRVStatus:     roundFPtr(floatPtrFrom(row, "hrv_status")),
 		SleepScore:    roundF(floatFrom(row, "sleep_score")),
 		RecoveryTimeH: roundF(floatFrom(row, "recovery_time_h")),
-		ACWRatio:      roundF(floatFrom(row, "acw_ratio")),
+		ACWPct:        roundF(floatFrom(row, "acw_pct")),
 	}
 }
 

@@ -47,7 +47,7 @@ func TestQueryReadiness_mapsFields(t *testing.T) {
 			"hrv_status":       2.0,
 			"sleep_score":      78.0,
 			"recovery_time_h":  4.0,
-			"acw_ratio":        1.1,
+			"acw_pct":          76.0,
 		},
 	}
 	srv := fakeInfluxWithData(t, rows)
