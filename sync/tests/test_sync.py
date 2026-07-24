@@ -905,10 +905,13 @@ def test_build_garmin_workout_running_structure():
     assert w["sportType"]["sportTypeKey"] == "running"
     seg = w["workoutSegments"][0]
     assert len(seg["workoutSteps"]) == 3
+    assert seg["workoutSteps"][0]["type"] == "ExecutableStepDTO"
     assert seg["workoutSteps"][0]["stepType"]["stepTypeKey"] == "warmup"
     assert seg["workoutSteps"][0]["endConditionValue"] == 600.0
+    assert seg["workoutSteps"][1]["type"] == "ExecutableStepDTO"
     assert seg["workoutSteps"][1]["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
     assert seg["workoutSteps"][1]["targetValueOne"] == 4.0
+    assert seg["workoutSteps"][2]["type"] == "ExecutableStepDTO"
     assert seg["workoutSteps"][2]["targetType"]["workoutTargetTypeKey"] == "no.target"
 
 
@@ -916,6 +919,7 @@ def test_build_garmin_workout_distance_step():
     item = _queue_item(steps=[{"type": "interval", "distance_m": 1000}])
     w = sync._build_garmin_workout(item)
     step = w["workoutSegments"][0]["workoutSteps"][0]
+    assert step["type"] == "ExecutableStepDTO"
     assert step["endCondition"]["conditionTypeKey"] == "distance"
     assert step["endConditionValue"] == 1000.0
 
