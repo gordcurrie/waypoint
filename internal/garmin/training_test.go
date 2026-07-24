@@ -31,7 +31,7 @@ func TestTrainingReadinessFrom(t *testing.T) {
 	if tr.RecoveryTimeH != 16 {
 		t.Errorf("RecoveryTimeH: got %v, want 16", tr.RecoveryTimeH)
 	}
-	if tr.ACWPct != 76 {
+	if tr.ACWPct == nil || *tr.ACWPct != 76 {
 		t.Errorf("ACWPct: got %v, want 76", tr.ACWPct)
 	}
 }
@@ -41,6 +41,14 @@ func TestTrainingReadinessFrom_HRVStatusAbsent(t *testing.T) {
 	tr := garmin.TrainingReadinessFrom(row)
 	if tr.HRVStatus != nil {
 		t.Errorf("HRVStatus: got %v, want nil for absent field", tr.HRVStatus)
+	}
+}
+
+func TestTrainingReadinessFrom_ACWPctAbsent(t *testing.T) {
+	row := map[string]any{"time": "2026-07-06T00:00:00Z", "score": float64(74)}
+	tr := garmin.TrainingReadinessFrom(row)
+	if tr.ACWPct != nil {
+		t.Errorf("ACWPct: got %v, want nil for absent field", tr.ACWPct)
 	}
 }
 
