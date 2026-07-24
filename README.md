@@ -9,7 +9,7 @@ Pulls activity, sleep, HRV, and health data from Garmin Connect. Stores it in In
 - **Garmin sync**: Python sidecar (`sync/`) using [python-garminconnect](https://github.com/cyberjunky/python-garminconnect)
 - **Storage**: InfluxDB 3 Core
 - **Visualization**: Grafana (provisioned dashboard at `grafana/provisioning/dashboards/fitness.json`)
-- **MCP server**: Go — exposes 9 fitness data tools to Claude (or any MCP client)
+- **MCP server**: Go — exposes 11 fitness data tools to Claude (or any MCP client)
 - **CLI**: Go — `waypoint` command for AI analysis and planning via Ollama/Claude
 
 ## Prerequisites
@@ -77,7 +77,7 @@ Add to Claude's MCP config (stdio, local dev):
 
 For homelab HTTP deployment: `./waypoint-mcp --transport=http --addr=0.0.0.0:8080`
 
-**Available tools:** `get_recent_activities`, `get_weekly_volume`, `get_daily_stats`, `get_sleep_summary`, `get_hrv_trend`, `get_training_load`, `get_training_readiness`, `get_scheduled_workouts`, `create_workout`
+**Available tools:** `get_recent_activities`, `get_weekly_volume`, `get_daily_stats`, `get_sleep_summary`, `get_hrv_trend`, `get_training_load`, `get_training_readiness`, `get_activity_splits`, `get_activity_hr_zones`, `get_scheduled_workouts`, `create_workout`
 
 ## CLI
 

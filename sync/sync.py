@@ -883,27 +883,29 @@ def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[s
 
     remaining: list[dict[str, Any]] = []
     uploaded = 0
-    for item in items:
-        try:
-            workout = _build_garmin_workout(item)
-            garmin.upload_workout(workout)
-            uploaded += 1
-            log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item.get("id"))
-        except (
-            GarminConnectAuthenticationError,
-            GarminConnectTooManyRequestsError,
-            GarminConnectConnectionError,
-        ):
-            raise
-        except Exception as exc:
-            log.warning(
-                "pending_workouts: failed to upload %s: %s — keeping in queue",
-                item.get("id"),
-                exc,
-            )
-            remaining.append(item)
-
-    _save_queue(remaining)
+    try:
+        for i, item in enumerate(items):
+            try:
+                workout = _build_garmin_workout(item)
+                garmin.upload_workout(workout)
+                uploaded += 1
+                log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item.get("id"))
+            except (
+                GarminConnectAuthenticationError,
+                GarminConnectTooManyRequestsError,
+                GarminConnectConnectionError,
+            ):
+                remaining.extend(items[i:])  # current item + all unprocessed
+                raise
+            except Exception as exc:
+                log.warning(
+                    "pending_workouts: failed to upload %s: %s — keeping in queue",
+                    item.get("id"),
+                    exc,
+                )
+                remaining.append(item)
+    finally:
+        _save_queue(remaining)
     log.info("pending_workouts: uploaded %d, %d remaining in queue", uploaded, len(remaining))
 
 
@@ -951,7 +953,6 @@ def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 SYNC_FUNCS = [
-    sync_pending_workouts,
     sync_activities,
     sync_activity_details,
     sync_daily_stats,
@@ -962,6 +963,7 @@ SYNC_FUNCS = [
     sync_performance,
     sync_lactate_threshold,
     sync_respiration,
+    sync_pending_workouts,  # upload queued workouts before reading the calendar back
     sync_scheduled_workouts,
 ]
 

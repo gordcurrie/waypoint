@@ -94,4 +94,3 @@ volumes:
   influxdb_plugins:
   grafana_data:
   sync_data:
-  sync_data:
