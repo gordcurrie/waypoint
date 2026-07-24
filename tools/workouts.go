@@ -69,9 +69,9 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	})
 
 	type createWorkoutInput struct {
-		Name  string        `json:"name"  jsonschema:"required,description=Workout name e.g. Tuesday tempo run"`
-		Sport string        `json:"sport" jsonschema:"required,description=Sport type: running cycling walking swimming strength_training"`
-		Steps []WorkoutStep `json:"steps" jsonschema:"required,description=Ordered list of workout steps"`
+		Name  string        `json:"name"  jsonschema:"workout name e.g. Tuesday tempo run"`
+		Sport string        `json:"sport" jsonschema:"sport type: running cycling walking swimming strength_training"`
+		Steps []WorkoutStep `json:"steps" jsonschema:"ordered list of workout steps"`
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
