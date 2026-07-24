@@ -479,11 +479,15 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                 # latestTrainingStatusData is keyed by device ID, not a flat dict.
                 # trainingStatus is an integer; trainingStatusFeedbackPhrase ("PRODUCTIVE_2") is the
                 # reliable string — it starts with the status name we want to map.
-                ts_by_device: dict[str, Any] = (
-                    (raw.get("mostRecentTrainingStatus") or {}).get("latestTrainingStatusData") or {}
-                )
+                ts_by_device: dict[str, Any] = (raw.get("mostRecentTrainingStatus") or {}).get(
+                    "latestTrainingStatusData"
+                ) or {}
                 device_entry: dict[str, Any] | None = next(
-                    (v for v in ts_by_device.values() if isinstance(v, dict) and v.get("primaryTrainingDevice")),
+                    (
+                        v
+                        for v in ts_by_device.values()
+                        if isinstance(v, dict) and v.get("primaryTrainingDevice")
+                    ),
                     next((v for v in ts_by_device.values() if isinstance(v, dict)), None),
                 )
                 if device_entry:
@@ -495,8 +499,12 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                     p = Point("training_status").time(_day_ts(d))
                     fields: dict[str, Any] = {
                         "status_num": status_val,
-                        "vo2max_running": _fval(raw, "mostRecentVO2Max", "generic", "vo2MaxPreciseValue"),
-                        "vo2max_cycling": _fval(raw, "mostRecentVO2Max", "cycling", "vo2MaxPreciseValue"),
+                        "vo2max_running": _fval(
+                            raw, "mostRecentVO2Max", "generic", "vo2MaxPreciseValue"
+                        ),
+                        "vo2max_cycling": _fval(
+                            raw, "mostRecentVO2Max", "cycling", "vo2MaxPreciseValue"
+                        ),
                         "fitness_age": _fval(raw, "mostRecentVO2Max", "generic", "fitnessAge"),
                     }
                     p, n = _add_fields(p, fields)

@@ -638,11 +638,22 @@ def test_training_status_cycling_vo2max_none_when_absent():
 def test_training_status_prefers_primary_device():
     """When multiple devices exist, must pick primaryTrainingDevice=True."""
     payload = {
-        "mostRecentVO2Max": {"generic": {"vo2MaxPreciseValue": 47.0, "fitnessAge": None}, "cycling": None},
+        "mostRecentVO2Max": {
+            "generic": {"vo2MaxPreciseValue": 47.0, "fitnessAge": None},
+            "cycling": None,
+        },
         "mostRecentTrainingStatus": {
             "latestTrainingStatusData": {
-                "9999": {"trainingStatus": 8, "trainingStatusFeedbackPhrase": "PEAKING_1", "primaryTrainingDevice": False},
-                "3620139022": {"trainingStatus": 7, "trainingStatusFeedbackPhrase": "PRODUCTIVE_2", "primaryTrainingDevice": True},
+                "9999": {
+                    "trainingStatus": 8,
+                    "trainingStatusFeedbackPhrase": "PEAKING_1",
+                    "primaryTrainingDevice": False,
+                },
+                "3620139022": {
+                    "trainingStatus": 7,
+                    "trainingStatusFeedbackPhrase": "PRODUCTIVE_2",
+                    "primaryTrainingDevice": True,
+                },
             }
         },
     }
@@ -654,7 +665,10 @@ def test_training_status_prefers_primary_device():
 @freeze_time("2026-07-06")
 def test_training_status_no_device_data_writes_nothing():
     """Empty latestTrainingStatusData must not write any point."""
-    payload = {"mostRecentTrainingStatus": {"latestTrainingStatusData": {}}, "mostRecentVO2Max": None}
+    payload = {
+        "mostRecentTrainingStatus": {"latestTrainingStatusData": {}},
+        "mostRecentVO2Max": None,
+    }
     garmin = _make_status_garmin(payload)
     client = MagicMock()
     with patch.object(sync, "_save_state"):
@@ -666,10 +680,16 @@ def test_training_status_no_device_data_writes_nothing():
 def test_training_status_unknown_phrase_status_num_is_none():
     """Unrecognised feedback phrase must write None for status_num (not crash)."""
     payload = {
-        "mostRecentVO2Max": {"generic": {"vo2MaxPreciseValue": 47.0, "fitnessAge": None}, "cycling": None},
+        "mostRecentVO2Max": {
+            "generic": {"vo2MaxPreciseValue": 47.0, "fitnessAge": None},
+            "cycling": None,
+        },
         "mostRecentTrainingStatus": {
             "latestTrainingStatusData": {
-                "3620139022": {"trainingStatusFeedbackPhrase": "UNKNOWN_STATUS_99", "primaryTrainingDevice": True}
+                "3620139022": {
+                    "trainingStatusFeedbackPhrase": "UNKNOWN_STATUS_99",
+                    "primaryTrainingDevice": True,
+                }
             }
         },
     }
