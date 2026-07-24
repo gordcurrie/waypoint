@@ -1,7 +1,9 @@
 {
   "__inputs": [],
   "__requires": [],
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "description": "Garmin fitness data: training load, recovery, sleep, HRV",
   "editable": true,
   "fiscalYearStartMonth": 0,
@@ -10,16 +12,26 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 100,
       "title": "Recovery & Readiness",
       "type": "row"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 15,
@@ -35,33 +47,86 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 25 },
-              { "color": "yellow", "value": 50 },
-              { "color": "green", "value": 75 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
             ]
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "score" },
-            "properties": [{ "id": "displayName", "value": "Readiness Score" }, { "id": "color", "fixedColor": "blue", "mode": "fixed" }]
+            "matcher": {
+              "id": "byName",
+              "options": "score"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Readiness Score"
+              },
+              {
+                "id": "color",
+                "fixedColor": "blue",
+                "mode": "fixed"
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "sleep_score" },
-            "properties": [{ "id": "displayName", "value": "Sleep Score" }, { "id": "color", "fixedColor": "purple", "mode": "fixed" }]
+            "matcher": {
+              "id": "byName",
+              "options": "sleep_score"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Sleep Score"
+              },
+              {
+                "id": "color",
+                "fixedColor": "purple",
+                "mode": "fixed"
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
       "id": 1,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT score, sleep_score FROM training_readiness WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -71,10 +136,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 20,
@@ -90,30 +160,65 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "body_battery_max" },
+            "matcher": {
+              "id": "byName",
+              "options": "body_battery_max"
+            },
             "properties": [
-              { "id": "displayName", "value": "Max" },
-              { "id": "color", "fixedColor": "green", "mode": "fixed" }
+              {
+                "id": "displayName",
+                "value": "Max"
+              },
+              {
+                "id": "color",
+                "fixedColor": "green",
+                "mode": "fixed"
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "body_battery_min" },
+            "matcher": {
+              "id": "byName",
+              "options": "body_battery_min"
+            },
             "properties": [
-              { "id": "displayName", "value": "Min" },
-              { "id": "color", "fixedColor": "orange", "mode": "fixed" }
+              {
+                "id": "displayName",
+                "value": "Min"
+              },
+              {
+                "id": "color",
+                "fixedColor": "orange",
+                "mode": "fixed"
+              }
             ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
       "id": 2,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT body_battery_max, body_battery_min FROM daily_stats WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -123,10 +228,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "fixedColor": "dark-purple", "mode": "fixed" },
+          "color": {
+            "fixedColor": "dark-purple",
+            "mode": "fixed"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 15,
@@ -141,20 +252,43 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "weekly_avg_ms" },
-            "properties": [{ "id": "displayName", "value": "HRV Weekly Avg" }]
+            "matcher": {
+              "id": "byName",
+              "options": "weekly_avg_ms"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HRV Weekly Avg"
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
       "id": 3,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT weekly_avg_ms FROM hrv WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -164,10 +298,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "fixedColor": "red", "mode": "fixed" },
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -182,20 +322,43 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "resting_hr_bpm" },
-            "properties": [{ "id": "displayName", "value": "Resting HR" }]
+            "matcher": {
+              "id": "byName",
+              "options": "resting_hr_bpm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Resting HR"
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
       "id": 4,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT resting_hr_bpm FROM daily_stats WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -206,16 +369,27 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
       "id": 101,
       "title": "Training",
       "type": "row"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "fixedColor": "dark-blue", "mode": "fixed" },
+          "color": {
+            "fixedColor": "dark-blue",
+            "mode": "fixed"
+          },
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 80,
@@ -230,20 +404,43 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "training_load" },
-            "properties": [{ "id": "displayName", "value": "Training Load (EPOC)" }]
+            "matcher": {
+              "id": "byName",
+              "options": "training_load"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Training Load (EPOC)"
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 18 },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 18
+      },
       "id": 5,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT training_load FROM activity WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -253,10 +450,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "fixedColor": "dark-green", "mode": "fixed" },
+          "color": {
+            "fixedColor": "dark-green",
+            "mode": "fixed"
+          },
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 80,
@@ -271,20 +474,43 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "distance_km" },
-            "properties": [{ "id": "displayName", "value": "Distance" }]
+            "matcher": {
+              "id": "byName",
+              "options": "distance_km"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Distance"
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 18 },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 18
+      },
       "id": 6,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT distance_m / 1000 AS distance_km FROM activity WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -294,24 +520,137 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "color": "dark-red",
+                  "index": 0,
+                  "text": "Overreaching"
+                },
+                "1": {
+                  "color": "orange",
+                  "index": 1,
+                  "text": "Detraining"
+                },
+                "2": {
+                  "color": "yellow",
+                  "index": 2,
+                  "text": "Recovery"
+                },
+                "3": {
+                  "color": "green",
+                  "index": 3,
+                  "text": "Productive"
+                },
+                "4": {
+                  "color": "blue",
+                  "index": 4,
+                  "text": "Maintaining"
+                },
+                "5": {
+                  "color": "dark-purple",
+                  "index": 5,
+                  "text": "Peaking"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 11,
+      "options": {
+        "alignValue": "center",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "always",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
+          "rawQuery": true,
+          "query": "SELECT status_num FROM training_status WHERE $timeFilter ORDER BY time ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "Training Status",
+      "type": "state-timeline"
+    },
+    {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
       "id": 102,
       "title": "Sleep & Activity",
       "type": "row"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 80,
             "lineWidth": 1,
             "showPoints": "never",
             "barWidthFactor": 0.7,
-            "stacking": { "group": "A", "mode": "normal" },
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
             "spanNulls": false
           },
           "unit": "h",
@@ -319,32 +658,99 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "deep_h" },
-            "properties": [{ "id": "displayName", "value": "Deep" }, { "id": "color", "fixedColor": "dark-blue", "mode": "fixed" }]
+            "matcher": {
+              "id": "byName",
+              "options": "deep_h"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Deep"
+              },
+              {
+                "id": "color",
+                "fixedColor": "dark-blue",
+                "mode": "fixed"
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "rem_h" },
-            "properties": [{ "id": "displayName", "value": "REM" }, { "id": "color", "fixedColor": "purple", "mode": "fixed" }]
+            "matcher": {
+              "id": "byName",
+              "options": "rem_h"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "REM"
+              },
+              {
+                "id": "color",
+                "fixedColor": "purple",
+                "mode": "fixed"
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "light_h" },
-            "properties": [{ "id": "displayName", "value": "Light" }, { "id": "color", "fixedColor": "light-blue", "mode": "fixed" }]
+            "matcher": {
+              "id": "byName",
+              "options": "light_h"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Light"
+              },
+              {
+                "id": "color",
+                "fixedColor": "light-blue",
+                "mode": "fixed"
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "awake_h" },
-            "properties": [{ "id": "displayName", "value": "Awake" }, { "id": "color", "fixedColor": "yellow", "mode": "fixed" }]
+            "matcher": {
+              "id": "byName",
+              "options": "awake_h"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Awake"
+              },
+              {
+                "id": "color",
+                "fixedColor": "yellow",
+                "mode": "fixed"
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 27 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
       "id": 7,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT deep_sleep_s / 3600 AS deep_h, rem_sleep_s / 3600 AS rem_h, light_sleep_s / 3600 AS light_h, awake_s / 3600 AS awake_h FROM sleep WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -354,10 +760,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "fixedColor": "orange", "mode": "fixed" },
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
           "custom": {
             "drawStyle": "bars",
             "fillOpacity": 70,
@@ -372,15 +784,30 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 27 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
       "id": 8,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT steps FROM daily_stats WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -390,10 +817,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "fixedColor": "yellow", "mode": "fixed" },
+          "color": {
+            "fixedColor": "yellow",
+            "mode": "fixed"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 15,
@@ -409,20 +842,43 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "sleep_score" },
-            "properties": [{ "id": "displayName", "value": "Sleep Score" }]
+            "matcher": {
+              "id": "byName",
+              "options": "sleep_score"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Sleep Score"
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
       "id": 9,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT sleep_score FROM sleep WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -432,10 +888,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "fixedColor": "dark-purple", "mode": "fixed" },
+          "color": {
+            "fixedColor": "dark-purple",
+            "mode": "fixed"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 15,
@@ -450,20 +912,43 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "last_night_ms" },
-            "properties": [{ "id": "displayName", "value": "Overnight HRV" }]
+            "matcher": {
+              "id": "byName",
+              "options": "last_night_ms"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Overnight HRV"
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
       "id": 10,
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "influxdb", "uid": "garmin-influxdb" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
           "rawQuery": true,
           "query": "SELECT last_night_ms FROM hrv WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
@@ -475,9 +960,17 @@
   ],
   "refresh": "5m",
   "schemaVersion": 39,
-  "tags": ["fitness", "garmin"],
-  "templating": { "list": [] },
-  "time": { "from": "now-30d", "to": "now" },
+  "tags": [
+    "fitness",
+    "garmin"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "utc",
   "title": "Garmin Fitness",
