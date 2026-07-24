@@ -29,9 +29,10 @@ func main() {
 }
 
 func run() error {
-	var transport, addr string
+	var transport, addr, dataDir string
 	flag.StringVar(&transport, "transport", "stdio", "transport: stdio or http")
 	flag.StringVar(&addr, "addr", "127.0.0.1:8080", "listen address for http transport")
+	flag.StringVar(&dataDir, "data-dir", "./data", "directory for the workout queue shared with the sync sidecar")
 	flag.Parse()
 
 	client, err := influx.NewFromEnv()
@@ -41,7 +42,7 @@ func run() error {
 	defer func() { _ = client.Close() }()
 
 	s := mcp.NewServer(&mcp.Implementation{Name: "waypoint", Version: version}, nil)
-	tools.RegisterAll(s, client)
+	tools.RegisterAll(s, client, dataDir)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

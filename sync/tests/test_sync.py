@@ -821,3 +821,106 @@ def test_scheduled_workouts_connection_error_propagates(no_sleep):
     client = MagicMock()
     with pytest.raises(GarminConnectConnectionError):
         sync.sync_scheduled_workouts(garmin, client, {})
+
+
+# ── sync_pending_workouts ──────────────────────────────────────────────────────
+
+
+def _write_queue(tmp_path, items: list) -> None:
+    import json as _json
+
+    (tmp_path / "workout_queue.json").write_text(_json.dumps(items))
+
+
+def _queue_item(
+    id: str = "abc123",
+    name: str = "Tempo Run",
+    sport: str = "running",
+    steps: list | None = None,
+) -> dict:
+    if steps is None:
+        steps = [{"type": "interval", "duration_s": 1200, "target_hr_zone": 4}]
+    return {"id": id, "name": name, "sport": sport, "steps": steps}
+
+
+def test_pending_workouts_no_op_when_no_queue_file():
+    garmin = MagicMock()
+    client = MagicMock()
+    sync.sync_pending_workouts(garmin, client, {})
+    garmin.upload_workout.assert_not_called()
+
+
+def test_pending_workouts_no_op_when_queue_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [])
+    garmin = MagicMock()
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.upload_workout.assert_not_called()
+
+
+def test_pending_workouts_uploads_item_and_clears_queue(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item()])
+    garmin = MagicMock()
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.upload_workout.assert_called_once()
+    import json as _json
+
+    remaining = _json.loads((tmp_path / "workout_queue.json").read_text())
+    assert remaining == []
+
+
+def test_pending_workouts_keeps_failed_item_in_queue(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item(id="fail"), _queue_item(id="ok")])
+    garmin = MagicMock()
+    garmin.upload_workout.side_effect = [Exception("API error"), None]
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    import json as _json
+
+    remaining = _json.loads((tmp_path / "workout_queue.json").read_text())
+    assert len(remaining) == 1
+    assert remaining[0]["id"] == "fail"
+
+
+def test_pending_workouts_connection_error_propagates(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item()])
+    garmin = MagicMock()
+    garmin.upload_workout.side_effect = GarminConnectConnectionError("timeout")
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+
+
+def test_build_garmin_workout_running_structure():
+    item = _queue_item(
+        sport="running",
+        steps=[
+            {"type": "warmup", "duration_s": 600, "description": "easy"},
+            {"type": "interval", "duration_s": 1200, "target_hr_zone": 4},
+            {"type": "cooldown", "duration_s": 600},
+        ],
+    )
+    w = sync._build_garmin_workout(item)
+    assert w["sportType"]["sportTypeKey"] == "running"
+    seg = w["workoutSegments"][0]
+    assert len(seg["workoutSteps"]) == 3
+    assert seg["workoutSteps"][0]["stepType"]["stepTypeKey"] == "warmup"
+    assert seg["workoutSteps"][0]["endConditionValue"] == 600.0
+    assert seg["workoutSteps"][1]["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
+    assert seg["workoutSteps"][1]["targetValueOne"] == 4.0
+    assert seg["workoutSteps"][2]["targetType"]["workoutTargetTypeKey"] == "no.target"
+
+
+def test_build_garmin_workout_distance_step():
+    item = _queue_item(steps=[{"type": "interval", "distance_m": 1000}])
+    w = sync._build_garmin_workout(item)
+    step = w["workoutSegments"][0]["workoutSteps"][0]
+    assert step["endCondition"]["conditionTypeKey"] == "distance"
+    assert step["endConditionValue"] == 1000.0
+
+
+def test_build_garmin_workout_unknown_sport_passes_through():
+    item = _queue_item(sport="kayaking")
+    w = sync._build_garmin_workout(item)
+    assert w["sportType"]["sportTypeKey"] == "kayaking"
