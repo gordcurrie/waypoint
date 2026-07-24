@@ -567,6 +567,117 @@ def test_training_readiness_state_advanced():
     assert state["training_readiness"] == "2026-07-06"
 
 
+# ── sync_training_status ──────────────────────────────────────────────────────
+
+_TRAINING_STATUS_API_RESPONSE = {
+    "mostRecentVO2Max": {
+        "generic": {"vo2MaxPreciseValue": 47.0, "fitnessAge": None},
+        "cycling": None,
+    },
+    "mostRecentTrainingStatus": {
+        "latestTrainingStatusData": {
+            "3620139022": {
+                "trainingStatus": 7,
+                "trainingStatusFeedbackPhrase": "PRODUCTIVE_2",
+                "primaryTrainingDevice": True,
+            }
+        }
+    },
+}
+
+
+def _make_status_garmin(payload: object) -> MagicMock:
+    g = MagicMock()
+    g.get_training_status.return_value = payload
+    return g
+
+
+def _captured_status_fields(garmin: MagicMock, state: dict | None = None) -> dict:
+    client = MagicMock()
+    captured: dict = {}
+    original = sync._add_fields
+
+    def capturing(p, fields):
+        captured.update(fields)
+        return original(p, fields)
+
+    with (
+        patch.object(sync, "_add_fields", side_effect=capturing),
+        patch.object(sync, "_save_state"),
+    ):
+        sync.sync_training_status(garmin, client, state or {"training_status": "2026-07-05"})
+
+    return captured
+
+
+@freeze_time("2026-07-06")
+def test_training_status_productive_maps_to_3():
+    """PRODUCTIVE_2 phrase must map to status_num=3.0."""
+    garmin = _make_status_garmin(_TRAINING_STATUS_API_RESPONSE)
+    fields = _captured_status_fields(garmin)
+    assert fields.get("status_num") == 3.0
+
+
+@freeze_time("2026-07-06")
+def test_training_status_vo2max_extracted_from_nested_path():
+    """vo2max_running must come from mostRecentVO2Max.generic.vo2MaxPreciseValue."""
+    garmin = _make_status_garmin(_TRAINING_STATUS_API_RESPONSE)
+    fields = _captured_status_fields(garmin)
+    assert fields.get("vo2max_running") == pytest.approx(47.0)
+
+
+@freeze_time("2026-07-06")
+def test_training_status_cycling_vo2max_none_when_absent():
+    """cycling vo2max is null in API; must not crash and must not write the field."""
+    garmin = _make_status_garmin(_TRAINING_STATUS_API_RESPONSE)
+    fields = _captured_status_fields(garmin)
+    assert fields.get("vo2max_cycling") is None
+
+
+@freeze_time("2026-07-06")
+def test_training_status_prefers_primary_device():
+    """When multiple devices exist, must pick primaryTrainingDevice=True."""
+    payload = {
+        "mostRecentVO2Max": {"generic": {"vo2MaxPreciseValue": 47.0, "fitnessAge": None}, "cycling": None},
+        "mostRecentTrainingStatus": {
+            "latestTrainingStatusData": {
+                "9999": {"trainingStatus": 8, "trainingStatusFeedbackPhrase": "PEAKING_1", "primaryTrainingDevice": False},
+                "3620139022": {"trainingStatus": 7, "trainingStatusFeedbackPhrase": "PRODUCTIVE_2", "primaryTrainingDevice": True},
+            }
+        },
+    }
+    garmin = _make_status_garmin(payload)
+    fields = _captured_status_fields(garmin)
+    assert fields.get("status_num") == 3.0
+
+
+@freeze_time("2026-07-06")
+def test_training_status_no_device_data_writes_nothing():
+    """Empty latestTrainingStatusData must not write any point."""
+    payload = {"mostRecentTrainingStatus": {"latestTrainingStatusData": {}}, "mostRecentVO2Max": None}
+    garmin = _make_status_garmin(payload)
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_training_status(garmin, client, {"training_status": "2026-07-05"})
+    client.write.assert_not_called()
+
+
+@freeze_time("2026-07-06")
+def test_training_status_unknown_phrase_status_num_is_none():
+    """Unrecognised feedback phrase must write None for status_num (not crash)."""
+    payload = {
+        "mostRecentVO2Max": {"generic": {"vo2MaxPreciseValue": 47.0, "fitnessAge": None}, "cycling": None},
+        "mostRecentTrainingStatus": {
+            "latestTrainingStatusData": {
+                "3620139022": {"trainingStatusFeedbackPhrase": "UNKNOWN_STATUS_99", "primaryTrainingDevice": True}
+            }
+        },
+    }
+    garmin = _make_status_garmin(payload)
+    fields = _captured_status_fields(garmin)
+    assert fields.get("status_num") is None
+
+
 # ── sync_activity_details ──────────────────────────────────────────────────────
 
 

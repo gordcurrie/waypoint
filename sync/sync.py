@@ -475,24 +475,33 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
         try:
             raw = garmin.get_training_status(d.isoformat())
             if raw:
-                # get_training_status can return a list; normalise like training_readiness
-                item = raw[0] if isinstance(raw, list) else raw
-                latest = (
-                    (item.get("latestTrainingStatusData") or item)
-                    if isinstance(item, dict)
-                    else item
+                # API shape: {mostRecentTrainingStatus: {latestTrainingStatusData: {<deviceId>: {...}}}}
+                # latestTrainingStatusData is keyed by device ID, not a flat dict.
+                # trainingStatus is an integer; trainingStatusFeedbackPhrase ("PRODUCTIVE_2") is the
+                # reliable string — it starts with the status name we want to map.
+                ts_by_device: dict[str, Any] = (
+                    (raw.get("mostRecentTrainingStatus") or {}).get("latestTrainingStatusData") or {}
                 )
-                p = Point("training_status").time(_day_ts(d))
-                status_str = str(latest.get("trainingStatus", "")).lower()
-                fields = {
-                    "status_num": status_num.get(status_str, None),
-                    "vo2max_running": _fval(latest, "latestRunningVO2MaxValue"),
-                    "vo2max_cycling": _fval(latest, "latestCyclingVO2MaxValue"),
-                    "fitness_age": _fval(latest, "fitnessAge"),
-                }
-                p, n = _add_fields(p, fields)
-                if n:
-                    points.append(p)
+                device_entry: dict[str, Any] | None = next(
+                    (v for v in ts_by_device.values() if isinstance(v, dict) and v.get("primaryTrainingDevice")),
+                    next((v for v in ts_by_device.values() if isinstance(v, dict)), None),
+                )
+                if device_entry:
+                    phrase = str(device_entry.get("trainingStatusFeedbackPhrase") or "").lower()
+                    status_val: float | None = next(
+                        (v for k, v in status_num.items() if phrase.startswith(k)),
+                        None,
+                    )
+                    p = Point("training_status").time(_day_ts(d))
+                    fields: dict[str, Any] = {
+                        "status_num": status_val,
+                        "vo2max_running": _fval(raw, "mostRecentVO2Max", "generic", "vo2MaxPreciseValue"),
+                        "vo2max_cycling": _fval(raw, "mostRecentVO2Max", "cycling", "vo2MaxPreciseValue"),
+                        "fitness_age": _fval(raw, "mostRecentVO2Max", "generic", "fitnessAge"),
+                    }
+                    p, n = _add_fields(p, fields)
+                    if n:
+                        points.append(p)
         except (
             GarminConnectAuthenticationError,
             GarminConnectTooManyRequestsError,
