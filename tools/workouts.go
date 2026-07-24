@@ -125,7 +125,7 @@ func loadQueue(dataDir string) ([]WorkoutQueueItem, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read queue: %w", err)
 	}
 	var items []WorkoutQueueItem
 	if err := json.Unmarshal(data, &items); err != nil {
@@ -137,16 +137,19 @@ func loadQueue(dataDir string) ([]WorkoutQueueItem, error) {
 func saveQueue(dataDir string, items []WorkoutQueueItem) error {
 	data, err := json.Marshal(items)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal queue: %w", err)
 	}
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		return err
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
 	}
 	tmp := queuePath(dataDir) + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("write queue tmp: %w", err)
 	}
-	return os.Rename(tmp, queuePath(dataDir))
+	if err := os.Rename(tmp, queuePath(dataDir)); err != nil {
+		return fmt.Errorf("rename queue: %w", err)
+	}
+	return nil
 }
 
 func appendToQueue(dataDir string, item WorkoutQueueItem) error {
