@@ -474,7 +474,7 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
     while d <= end:
         try:
             raw = garmin.get_training_status(d.isoformat())
-            if raw:
+            if raw and isinstance(raw, dict):
                 # API shape: {mostRecentTrainingStatus: {latestTrainingStatusData: {<deviceId>: {...}}}}
                 # latestTrainingStatusData is keyed by device ID, not a flat dict.
                 # trainingStatus is an integer; trainingStatusFeedbackPhrase ("PRODUCTIVE_2") is the

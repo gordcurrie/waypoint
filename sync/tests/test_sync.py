@@ -604,10 +604,11 @@ def _captured_status_fields(garmin: MagicMock, state: dict | None = None) -> dic
     with (
         patch.object(sync, "_add_fields", side_effect=capturing),
         patch.object(sync, "_save_state"),
+        patch.object(sync.time, "sleep"),
     ):
         sync.sync_training_status(garmin, client, state or {"training_status": "2026-07-05"})
 
-    return captured
+    return {k: v for k, v in captured.items() if v is not None}
 
 
 @freeze_time("2026-07-06")
@@ -628,10 +629,10 @@ def test_training_status_vo2max_extracted_from_nested_path():
 
 @freeze_time("2026-07-06")
 def test_training_status_cycling_vo2max_none_when_absent():
-    """cycling vo2max is null in API; must not crash and must not write the field."""
+    """cycling vo2max is null in API; must not write the field."""
     garmin = _make_status_garmin(_TRAINING_STATUS_API_RESPONSE)
     fields = _captured_status_fields(garmin)
-    assert fields.get("vo2max_cycling") is None
+    assert "vo2max_cycling" not in fields
 
 
 @freeze_time("2026-07-06")
@@ -671,14 +672,14 @@ def test_training_status_no_device_data_writes_nothing():
     }
     garmin = _make_status_garmin(payload)
     client = MagicMock()
-    with patch.object(sync, "_save_state"):
+    with patch.object(sync, "_save_state"), patch.object(sync.time, "sleep"):
         sync.sync_training_status(garmin, client, {"training_status": "2026-07-05"})
     client.write.assert_not_called()
 
 
 @freeze_time("2026-07-06")
-def test_training_status_unknown_phrase_status_num_is_none():
-    """Unrecognised feedback phrase must write None for status_num (not crash)."""
+def test_training_status_unknown_phrase_status_num_not_written():
+    """Unrecognised feedback phrase must not write status_num (not crash)."""
     payload = {
         "mostRecentVO2Max": {
             "generic": {"vo2MaxPreciseValue": 47.0, "fitnessAge": None},
@@ -695,7 +696,7 @@ def test_training_status_unknown_phrase_status_num_is_none():
     }
     garmin = _make_status_garmin(payload)
     fields = _captured_status_fields(garmin)
-    assert fields.get("status_num") is None
+    assert "status_num" not in fields
 
 
 # ── sync_activity_details ──────────────────────────────────────────────────────
