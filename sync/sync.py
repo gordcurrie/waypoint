@@ -782,6 +782,133 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     log.info("scheduled_workouts: wrote %d points", len(points))
 
 
+_SPORT_TYPES: dict[str, dict[str, Any]] = {
+    "running": {"sportTypeId": 1, "sportTypeKey": "running"},
+    "cycling": {"sportTypeId": 2, "sportTypeKey": "cycling"},
+    "swimming": {"sportTypeId": 5, "sportTypeKey": "swimming"},
+    "walking": {"sportTypeId": 11, "sportTypeKey": "walking"},
+    "strength_training": {"sportTypeId": 13, "sportTypeKey": "strength_training"},
+}
+
+_STEP_TYPES: dict[str, dict[str, Any]] = {
+    "warmup": {"stepTypeId": 1, "stepTypeKey": "warmup"},
+    "cooldown": {"stepTypeId": 2, "stepTypeKey": "cooldown"},
+    "interval": {"stepTypeId": 3, "stepTypeKey": "interval"},
+    "recovery": {"stepTypeId": 4, "stepTypeKey": "recovery"},
+    "steady": {"stepTypeId": 7, "stepTypeKey": "other"},
+}
+
+
+def _build_garmin_step(order: int, step: dict[str, Any]) -> dict[str, Any]:
+    step_type = _STEP_TYPES.get(step["type"], {"stepTypeId": 7, "stepTypeKey": "other"})
+
+    duration_s = step.get("duration_s")
+    distance_m = step.get("distance_m")
+    if duration_s is not None:
+        end_condition: dict[str, Any] = {"conditionTypeId": 2, "conditionTypeKey": "time"}
+        end_value: float | None = float(duration_s)
+    elif distance_m is not None:
+        end_condition = {"conditionTypeId": 3, "conditionTypeKey": "distance"}
+        end_value = float(distance_m)
+    else:
+        end_condition = {"conditionTypeId": 1, "conditionTypeKey": "lap.button"}
+        end_value = None
+
+    hr_zone = step.get("target_hr_zone")
+    if hr_zone is not None:
+        target_type: dict[str, Any] = {
+            "workoutTargetTypeId": 4,
+            "workoutTargetTypeKey": "heart.rate.zone",
+        }
+        target_val1: float | None = float(hr_zone)
+        target_val2: float | None = float(hr_zone)
+    else:
+        target_type = {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target"}
+        target_val1 = None
+        target_val2 = None
+
+    return {
+        "stepOrder": order,
+        "stepType": step_type,
+        "endCondition": end_condition,
+        "endConditionValue": end_value,
+        "targetType": target_type,
+        "targetValueOne": target_val1,
+        "targetValueTwo": target_val2,
+        "description": step.get("description") or "",
+    }
+
+
+def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
+    sport = item.get("sport", "running")
+    sport_type = _SPORT_TYPES.get(sport, {"sportTypeId": 1, "sportTypeKey": sport})
+    steps = [_build_garmin_step(i + 1, s) for i, s in enumerate(item.get("steps") or [])]
+    return {
+        "workoutId": None,
+        "ownerId": None,
+        "workoutName": item.get("name", ""),
+        "description": None,
+        "sportType": sport_type,
+        "workoutSegments": [
+            {
+                "segmentOrder": 1,
+                "sportType": sport_type,
+                "workoutSteps": steps,
+            }
+        ],
+    }
+
+
+def _save_queue(items: list[dict[str, Any]]) -> None:
+    queue_file = DATA_DIR / "workout_queue.json"
+    tmp = queue_file.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(items))
+    tmp.rename(queue_file)
+
+
+def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
+    """Upload queued workouts to Garmin Connect. Items stay in queue on failure (retry next run)."""
+    queue_file = DATA_DIR / "workout_queue.json"
+    if not queue_file.exists():
+        return
+
+    try:
+        items: list[dict[str, Any]] = json.loads(queue_file.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("pending_workouts: cannot read queue: %s", exc)
+        return
+
+    if not items:
+        return
+
+    remaining: list[dict[str, Any]] = []
+    uploaded = 0
+    try:
+        for i, item in enumerate(items):
+            try:
+                workout = _build_garmin_workout(item)
+                garmin.upload_workout(workout)
+                uploaded += 1
+                log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item.get("id"))
+            except (
+                GarminConnectAuthenticationError,
+                GarminConnectTooManyRequestsError,
+                GarminConnectConnectionError,
+            ):
+                remaining.extend(items[i:])  # current item + all unprocessed
+                raise
+            except Exception as exc:
+                log.warning(
+                    "pending_workouts: failed to upload %s: %s — keeping in queue",
+                    item.get("id"),
+                    exc,
+                )
+                remaining.append(item)
+    finally:
+        _save_queue(remaining)
+    log.info("pending_workouts: uploaded %d, %d remaining in queue", uploaded, len(remaining))
+
+
 def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     start = _last_synced(state, "respiration")
     end = date.today()
@@ -836,6 +963,7 @@ SYNC_FUNCS = [
     sync_performance,
     sync_lactate_threshold,
     sync_respiration,
+    sync_pending_workouts,  # upload queued workouts before reading the calendar back
     sync_scheduled_workouts,
 ]
 

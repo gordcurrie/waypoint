@@ -17,7 +17,9 @@ services:
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
       # INFLUXDB_DATABASE accepts INFLUXDB_DATABASE first, falls back to INFLUXDB_BUCKET
       INFLUXDB_DATABASE: ${INFLUXDB_DATABASE:-${INFLUXDB_BUCKET:-garmin}}
-    command: ["--transport=http", "--addr=0.0.0.0:8080"]
+    command: ["--transport=http", "--addr=0.0.0.0:8080", "--data-dir=/data"]
+    volumes:
+      - sync_data:/data
     depends_on:
       influxdb:
         condition: service_healthy
