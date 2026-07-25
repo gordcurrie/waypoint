@@ -20,13 +20,18 @@ func TestQueryTrainingStatus_Empty(t *testing.T) {
 
 func TestQueryTrainingStatus_ReturnsRows(t *testing.T) {
 	now := time.Now().UTC()
-	statusNum := float64(3)
 	client := &mockClient{
 		rows: []map[string]any{
-			{"time": now.Format(time.RFC3339), "status_num": statusNum, "vo2max_running": 47.0, "fitness_age": 34.0},
+			{
+				"time":           now.Format(time.RFC3339),
+				"status_num":     float64(3),
+				"vo2max_running": float64(47),
+				"vo2max_cycling": float64(44),
+				"fitness_age":    float64(34),
+			},
 		},
 	}
-	status, err := queryTrainingStatus(context.Background(), client, 30)
+	status, err := queryTrainingStatus(context.Background(), client, 14)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +43,12 @@ func TestQueryTrainingStatus_ReturnsRows(t *testing.T) {
 	}
 	if status[0].VO2MaxRunning != 47 {
 		t.Errorf("vo2max_running: got %g, want 47", status[0].VO2MaxRunning)
+	}
+	if status[0].VO2MaxCycling != 44 {
+		t.Errorf("vo2max_cycling: got %g, want 44", status[0].VO2MaxCycling)
+	}
+	if status[0].FitnessAge != 34 {
+		t.Errorf("fitness_age: got %g, want 34", status[0].FitnessAge)
 	}
 }
 

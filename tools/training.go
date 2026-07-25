@@ -14,7 +14,7 @@ import (
 
 func registerTrainingTools(s *mcp.Server, client influxClient) {
 	type statusInput struct {
-		Days int `json:"days,omitempty" jsonschema:"lookback window in days, default 30"`
+		Days int `json:"days,omitempty" jsonschema:"lookback window in days, default 14"`
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -25,7 +25,7 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input statusInput) (*mcp.CallToolResult, any, error) {
 		days := input.Days
 		if days <= 0 {
-			days = 30
+			days = 14
 		} else if days > 365 {
 			days = 365
 		}
@@ -97,8 +97,8 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 func queryTrainingStatus(ctx context.Context, client influxClient, days int) ([]garmin.TrainingStatus, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-		influx.MeasurementTrainingStatus, start.Format(time.RFC3339), days,
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+		influx.MeasurementTrainingStatus, start.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
@@ -114,8 +114,8 @@ func queryTrainingStatus(ctx context.Context, client influxClient, days int) ([]
 func queryTrainingReadiness(ctx context.Context, client influxClient, days int) ([]garmin.TrainingReadiness, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-		influx.MeasurementTrainingReadiness, start.Format(time.RFC3339), days,
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+		influx.MeasurementTrainingReadiness, start.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
