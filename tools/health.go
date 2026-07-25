@@ -78,8 +78,8 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 func queryDailyStats(ctx context.Context, client influxClient, days int) ([]garmin.DailyStats, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-		influx.MeasurementDailyStats, start.Format(time.RFC3339), days,
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+		influx.MeasurementDailyStats, start.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
@@ -95,8 +95,8 @@ func queryDailyStats(ctx context.Context, client influxClient, days int) ([]garm
 func querySleep(ctx context.Context, client influxClient, days int) ([]garmin.Sleep, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-		influx.MeasurementSleep, start.Format(time.RFC3339), days,
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+		influx.MeasurementSleep, start.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
@@ -112,8 +112,8 @@ func querySleep(ctx context.Context, client influxClient, days int) ([]garmin.Sl
 func queryHRV(ctx context.Context, client influxClient, days int) ([]garmin.HRV, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time ASC LIMIT %d",
-		influx.MeasurementHRV, start.Format(time.RFC3339), days,
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time ASC",
+		influx.MeasurementHRV, start.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {

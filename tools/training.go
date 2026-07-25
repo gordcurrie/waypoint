@@ -13,6 +13,30 @@ import (
 )
 
 func registerTrainingTools(s *mcp.Server, client influxClient) {
+	type statusInput struct {
+		Days int `json:"days,omitempty" jsonschema:"lookback window in days, default 14"`
+	}
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "get_training_status",
+		Description: "Return Garmin training status including overall status (0=overreaching … 5=peaking), " +
+			"VO2max estimates for running and cycling, and Garmin fitness age.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input statusInput) (*mcp.CallToolResult, any, error) {
+		days := input.Days
+		if days <= 0 {
+			days = 14
+		} else if days > 365 {
+			days = 365
+		}
+		status, err := queryTrainingStatus(ctx, client, days)
+		if err != nil {
+			return errorResult(err)
+		}
+		return jsonResult(status)
+	})
+
+
 	type trainingLoadInput struct {
 		WindowDays int  `json:"window_days,omitempty" jsonschema:"days of ATL/CTL/TSB history to return, default 42"`
 		WriteBack  bool `json:"write_back,omitempty"  jsonschema:"if true, persist results to the training_load measurement for Grafana"`
@@ -70,11 +94,28 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 	})
 }
 
+func queryTrainingStatus(ctx context.Context, client influxClient, days int) ([]garmin.TrainingStatus, error) {
+	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
+	sql := fmt.Sprintf(
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+		influx.MeasurementTrainingStatus, start.Format(time.RFC3339),
+	)
+	rows, err := client.Query(ctx, sql)
+	if err != nil {
+		return nil, fmt.Errorf("get_training_status: %w", err)
+	}
+	result := make([]garmin.TrainingStatus, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, garmin.TrainingStatusFrom(row))
+	}
+	return result, nil
+}
+
 func queryTrainingReadiness(ctx context.Context, client influxClient, days int) ([]garmin.TrainingReadiness, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC LIMIT %d",
-		influx.MeasurementTrainingReadiness, start.Format(time.RFC3339), days,
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+		influx.MeasurementTrainingReadiness, start.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
