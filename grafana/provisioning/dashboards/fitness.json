@@ -538,32 +538,32 @@
             {
               "type": "value",
               "options": {
-                "Overreaching": {
+                "0": {
                   "color": "dark-red",
                   "index": 0,
                   "text": "Overreaching"
                 },
-                "Detraining": {
+                "1": {
                   "color": "orange",
                   "index": 1,
                   "text": "Detraining"
                 },
-                "Recovery": {
+                "2": {
                   "color": "yellow",
                   "index": 2,
                   "text": "Recovery"
                 },
-                "Productive": {
+                "3": {
                   "color": "green",
                   "index": 3,
                   "text": "Productive"
                 },
-                "Maintaining": {
+                "4": {
                   "color": "blue",
                   "index": 4,
                   "text": "Maintaining"
                 },
-                "Peaking": {
+                "5": {
                   "color": "dark-purple",
                   "index": 5,
                   "text": "Peaking"
@@ -603,7 +603,7 @@
             "uid": "garmin-influxdb"
           },
           "rawQuery": true,
-          "query": "SELECT time, CASE CAST(status_num AS INTEGER)\n  WHEN 0 THEN 'Overreaching'\n  WHEN 1 THEN 'Detraining'\n  WHEN 2 THEN 'Recovery'\n  WHEN 3 THEN 'Productive'\n  WHEN 4 THEN 'Maintaining'\n  WHEN 5 THEN 'Peaking'\n  ELSE 'Unknown'\nEND AS status\nFROM training_status WHERE $timeFilter ORDER BY time ASC",
+          "query": "SELECT status_num FROM training_status WHERE $timeFilter ORDER BY time ASC",
           "refId": "A"
         }
       ],
