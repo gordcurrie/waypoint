@@ -39,7 +39,7 @@ func registerFitnessTools(s *mcp.Server, client influxClient) {
 func queryPerformanceTrend(ctx context.Context, client influxClient, days int) ([]garmin.Performance, error) {
 	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -days)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
+		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time ASC",
 		influx.MeasurementPerformance, start.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)

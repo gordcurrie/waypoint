@@ -96,11 +96,19 @@ func TestPerformanceFrom(t *testing.T) {
 	if p.Date != "2026-07-06" {
 		t.Errorf("Date: got %q, want %q", p.Date, "2026-07-06")
 	}
-	if p.VO2Max != 53.2 {
+	if p.VO2Max == nil || *p.VO2Max != 53.2 {
 		t.Errorf("VO2Max: got %v, want 53.2", p.VO2Max)
 	}
-	if p.FitnessAge != 31 {
+	if p.FitnessAge == nil || *p.FitnessAge != 31 {
 		t.Errorf("FitnessAge: got %v, want 31", p.FitnessAge)
+	}
+}
+
+func TestPerformanceFrom_FitnessAgeAbsent(t *testing.T) {
+	row := map[string]any{"time": "2026-07-06T00:00:00Z", "vo2max": float64(53.2)}
+	p := garmin.PerformanceFrom(row)
+	if p.FitnessAge != nil {
+		t.Errorf("FitnessAge: got %v, want nil for absent field", p.FitnessAge)
 	}
 }
 

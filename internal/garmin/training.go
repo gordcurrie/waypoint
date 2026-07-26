@@ -50,17 +50,17 @@ func TrainingStatusFrom(row map[string]any) TrainingStatus {
 
 // Performance represents one row from the "performance" measurement.
 type Performance struct {
-	Date       string  `json:"date,omitempty"`
-	VO2Max     float64 `json:"vo2max"`
-	FitnessAge float64 `json:"fitness_age"`
+	Date       string   `json:"date,omitempty"`
+	VO2Max     *float64 `json:"vo2max,omitempty"`
+	FitnessAge *float64 `json:"fitness_age,omitempty"`
 }
 
 // PerformanceFrom converts a query row from the "performance" measurement.
 func PerformanceFrom(row map[string]any) Performance {
 	return Performance{
 		Date:       dateFrom(row, "time"),
-		VO2Max:     roundF(floatFrom(row, "vo2max")),
-		FitnessAge: roundF(floatFrom(row, "fitness_age")),
+		VO2Max:     roundFPtr(floatPtrFrom(row, "vo2max")),
+		FitnessAge: roundFPtr(floatPtrFrom(row, "fitness_age")),
 	}
 }
 

@@ -32,11 +32,11 @@ func TestQueryPerformanceTrend_ReturnsRows(t *testing.T) {
 	if len(trend) != 1 {
 		t.Fatalf("want 1 trend record, got %d", len(trend))
 	}
-	if trend[0].VO2Max != 47 {
-		t.Errorf("vo2max: got %g, want 47", trend[0].VO2Max)
+	if trend[0].VO2Max == nil || *trend[0].VO2Max != 47 {
+		t.Errorf("vo2max: got %v, want 47", trend[0].VO2Max)
 	}
-	if trend[0].FitnessAge != 34 {
-		t.Errorf("fitness_age: got %g, want 34", trend[0].FitnessAge)
+	if trend[0].FitnessAge == nil || *trend[0].FitnessAge != 34 {
+		t.Errorf("fitness_age: got %v, want 34", trend[0].FitnessAge)
 	}
 }
 
