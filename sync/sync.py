@@ -530,7 +530,16 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
 
 
 def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
-    """VO2 max / fitness age per day. Lactate threshold written to its own measurement."""
+    """VO2 max / fitness age per day. Lactate threshold written to its own measurement.
+
+    API shape (verified 2026-07-26 via get_max_metrics):
+    [{"userId": ..., "generic": {"calendarDate": "2025-01-08",
+      "vo2MaxPreciseValue": 39.4, "vo2MaxValue": 39.0, "fitnessAge": 47,
+      "fitnessAgeDescription": 0, "maxMetCategory": 0},
+      "cycling": null, "heatAltitudeAcclimation": null}]
+    A list, despite the garminconnect type hint claiming dict. Empty list
+    on days with no VO2max update (not an error).
+    """
     start = _last_synced(state, "performance")
     end = date.today()
     log.info("performance: %s → %s", start, end)
