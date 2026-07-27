@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -23,19 +22,13 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 			"VO2max estimates for running and cycling, and Garmin fitness age.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input statusInput) (*mcp.CallToolResult, any, error) {
-		days := input.Days
-		if days <= 0 {
-			days = 14
-		} else if days > 365 {
-			days = 365
-		}
+		days := clampDays(input.Days, 14, 365)
 		status, err := queryTrainingStatus(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
 		}
 		return jsonResult(status)
 	})
-
 
 	type trainingLoadInput struct {
 		WindowDays int  `json:"window_days,omitempty" jsonschema:"days of ATL/CTL/TSB history to return, default 42"`
@@ -80,12 +73,7 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 		Description: "Return Garmin training readiness scores including HRV status, sleep score, and acute/chronic workload ratio.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input readinessInput) (*mcp.CallToolResult, any, error) {
-		days := input.Days
-		if days <= 0 {
-			days = 7
-		} else if days > 365 {
-			days = 365
-		}
+		days := clampDays(input.Days, 7, 365)
 		readiness, err := queryTrainingReadiness(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -95,11 +83,7 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 }
 
 func queryTrainingStatus(ctx context.Context, client influxClient, days int) ([]garmin.TrainingStatus, error) {
-	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
-		influx.MeasurementTrainingStatus, start.Format(time.RFC3339),
-	)
+	sql := timeRangeQuery(influx.MeasurementTrainingStatus, days, "DESC")
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_training_status: %w", err)
@@ -112,11 +96,7 @@ func queryTrainingStatus(ctx context.Context, client influxClient, days int) ([]
 }
 
 func queryTrainingReadiness(ctx context.Context, client influxClient, days int) ([]garmin.TrainingReadiness, error) {
-	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
-		influx.MeasurementTrainingReadiness, start.Format(time.RFC3339),
-	)
+	sql := timeRangeQuery(influx.MeasurementTrainingReadiness, days, "DESC")
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_training_readiness: %w", err)
