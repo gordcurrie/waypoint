@@ -57,6 +57,19 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		}
 		return jsonResult(hrv)
 	})
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get_respiration",
+		Description: "Return daily respiration data: waking, sleep, highest, and lowest breaths per minute.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
+		days := clampDays(input.Days, 7, 365)
+		resp, err := queryRespiration(ctx, client, days)
+		if err != nil {
+			return errorResult(err)
+		}
+		return jsonResult(resp)
+	})
 }
 
 func queryDailyStats(ctx context.Context, client influxClient, days int) ([]garmin.DailyStats, error) {
@@ -94,6 +107,19 @@ func queryHRV(ctx context.Context, client influxClient, days int) ([]garmin.HRV,
 	result := make([]garmin.HRV, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, garmin.HRVFrom(row))
+	}
+	return result, nil
+}
+
+func queryRespiration(ctx context.Context, client influxClient, days int) ([]garmin.Respiration, error) {
+	sql := timeRangeQuery(influx.MeasurementRespiration, days, "DESC")
+	rows, err := client.Query(ctx, sql)
+	if err != nil {
+		return nil, fmt.Errorf("get_respiration: %w", err)
+	}
+	result := make([]garmin.Respiration, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, garmin.RespirationFrom(row))
 	}
 	return result, nil
 }
