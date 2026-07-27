@@ -36,7 +36,9 @@ func registerFitnessTools(s *mcp.Server, client influxClient) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "get_lactate_threshold",
 		Description: "Return lactate threshold heart rate and pace over time from the lactate_threshold measurement. " +
-			"Trend is only meaningful over longer windows; default lookback is 90 days.",
+			"Trend is only meaningful over longer windows; default lookback is 90 days. " +
+			"Caveat: lt_pace_s_per_km's unit conversion (s/m to s/km) has not been verified against a real " +
+			"lactate threshold test — treat this value as unconfirmed until cross-checked against Garmin Connect directly.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input lactateThresholdInput) (*mcp.CallToolResult, any, error) {
 		days := clampDays(input.Days, 90, 365)
