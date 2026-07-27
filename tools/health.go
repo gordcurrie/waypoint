@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -21,12 +20,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		Description: "Return daily Garmin stats: steps, resting HR, body battery, stress, and intensity minutes.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
-		days := input.Days
-		if days <= 0 {
-			days = 7
-		} else if days > 365 {
-			days = 365
-		}
+		days := clampDays(input.Days, 7, 365)
 		stats, err := queryDailyStats(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -39,12 +33,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		Description: "Return recent sleep data: duration, stages, sleep score, HRV, and SpO2.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
-		days := input.Days
-		if days <= 0 {
-			days = 7
-		} else if days > 365 {
-			days = 365
-		}
+		days := clampDays(input.Days, 7, 365)
 		sleep, err := querySleep(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -61,12 +50,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		Description: "Return HRV trend: weekly average, last-night reading, and status over time.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input hrvInput) (*mcp.CallToolResult, any, error) {
-		days := input.Days
-		if days <= 0 {
-			days = 14
-		} else if days > 365 {
-			days = 365
-		}
+		days := clampDays(input.Days, 14, 365)
 		hrv, err := queryHRV(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -76,11 +60,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 }
 
 func queryDailyStats(ctx context.Context, client influxClient, days int) ([]garmin.DailyStats, error) {
-	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
-		influx.MeasurementDailyStats, start.Format(time.RFC3339),
-	)
+	sql := timeRangeQuery(influx.MeasurementDailyStats, days, "DESC")
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_daily_stats: %w", err)
@@ -93,11 +73,7 @@ func queryDailyStats(ctx context.Context, client influxClient, days int) ([]garm
 }
 
 func querySleep(ctx context.Context, client influxClient, days int) ([]garmin.Sleep, error) {
-	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time DESC",
-		influx.MeasurementSleep, start.Format(time.RFC3339),
-	)
+	sql := timeRangeQuery(influx.MeasurementSleep, days, "DESC")
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_sleep_summary: %w", err)
@@ -110,11 +86,7 @@ func querySleep(ctx context.Context, client influxClient, days int) ([]garmin.Sl
 }
 
 func queryHRV(ctx context.Context, client influxClient, days int) ([]garmin.HRV, error) {
-	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time ASC",
-		influx.MeasurementHRV, start.Format(time.RFC3339),
-	)
+	sql := timeRangeQuery(influx.MeasurementHRV, days, "ASC")
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_hrv_trend: %w", err)

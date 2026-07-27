@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -22,12 +21,7 @@ func registerFitnessTools(s *mcp.Server, client influxClient) {
 			"Trend is only meaningful over longer windows; default lookback is 90 days.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input performanceTrendInput) (*mcp.CallToolResult, any, error) {
-		days := input.Days
-		if days <= 0 {
-			days = 90
-		} else if days > 365 {
-			days = 365
-		}
+		days := clampDays(input.Days, 90, 365)
 		trend, err := queryPerformanceTrend(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -37,11 +31,7 @@ func registerFitnessTools(s *mcp.Server, client influxClient) {
 }
 
 func queryPerformanceTrend(ctx context.Context, client influxClient, days int) ([]garmin.Performance, error) {
-	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -days)
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time ASC",
-		influx.MeasurementPerformance, start.Format(time.RFC3339),
-	)
+	sql := timeRangeQuery(influx.MeasurementPerformance, days, "ASC")
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_performance_trend: %w", err)
