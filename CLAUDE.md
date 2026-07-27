@@ -37,10 +37,21 @@ docker exec waypoint-sync-1 python3 /app/inspect_api.py get_sleep_data 2026-07-2
 ## Non-obvious constraints (don't re-litigate these)
 
 ### Python sidecar is required
-Garmin sync (`sync/`) must stay Python. Go cannot do it — Cloudflare TLS fingerprinting (JA3)
-blocks Go's `net/http` on Garmin SSO as of March 2026. Python uses `curl_cffi` Chrome
-impersonation. `github.com/Danny-Dasilva/CycleTLS` exists but has no Garmin client; building
-from scratch is not worth it.
+Garmin sync (`sync/`) must stay Python — not because Go is incapable, but because nobody's
+built the Garmin auth layer on Go's equivalent primitives yet.
+
+Cloudflare TLS fingerprinting (JA3) blocks Go's stdlib `net/http` on Garmin SSO as of March
+2026 — the ClientHello's cipher/extension order doesn't match a real browser's, so Cloudflare
+rejects it before any HTTP logic runs. Python's `curl_cffi` gets past this with real Chrome TLS
+impersonation, and `garminconnect` + `curl_cffi` already handle the full SSO/MFA/token flow.
+
+Go *can* do JA3 impersonation — `github.com/refraction-networking/utls` (and `CycleTLS`, which
+wraps it) let you construct a custom ClientHello that mimics Chrome exactly. The capability
+exists; what's missing is a Garmin-specific client built on top of it (SSO/OAuth, MFA,
+`skip_strategies`-style quirks, keeping pace with Chrome's real fingerprint over time). That's
+real, ongoing work with no existing library to start from — not a language limitation. See #43
+for the investigation into whether that work is worth doing (possible reusable Go library for
+others hitting the same Garmin JA3 wall).
 
 ### MCP server is pure data — no LLM calls in Go
 `cmd/mcp-server/` exposes read-only data tools (activities, sleep, HRV, training load, etc.).
