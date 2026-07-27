@@ -20,8 +20,12 @@ func clampDays(days, def, max int) int {
 }
 
 // timeRangeQuery builds a "SELECT * FROM <measurement> WHERE time >= since ORDER BY time <order>"
-// query over the window starting `days` ago. order must be "ASC" or "DESC".
+// query over the window starting `days` ago. order must be "ASC" or "DESC"; panics otherwise,
+// since order is always an internal constant, never user input.
 func timeRangeQuery(measurement string, days int, order string) string {
+	if order != "ASC" && order != "DESC" {
+		panic(fmt.Sprintf("timeRangeQuery: order must be ASC or DESC, got %q", order))
+	}
 	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -days)
 	return fmt.Sprintf(
 		"SELECT * FROM %s WHERE time >= '%s' ORDER BY time %s",
