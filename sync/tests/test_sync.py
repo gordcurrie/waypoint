@@ -1056,7 +1056,18 @@ def test_build_garmin_workout_distance_step():
     assert step["endConditionValue"] == 1000.0
 
 
-def test_build_garmin_workout_unknown_sport_passes_through():
+def test_build_garmin_workout_unknown_sport_raises():
     item = _queue_item(sport="kayaking")
-    w = sync._build_garmin_workout(item)
-    assert w["sportType"]["sportTypeKey"] == "kayaking"
+    with pytest.raises(ValueError, match="unsupported workout sport"):
+        sync._build_garmin_workout(item)
+
+
+def test_build_garmin_workout_swimming_and_strength_ids():
+    # Regression test: swimming and strength_training sportTypeIds were previously
+    # swapped/wrong (swimming=5 collided with strength_training; strength_training=13
+    # resolved to "rucking" on Garmin's backend). Verified live 2026-07-28.
+    swim = sync._build_garmin_workout(_queue_item(sport="swimming"))
+    assert swim["sportType"] == {"sportTypeId": 4, "sportTypeKey": "swimming"}
+
+    strength = sync._build_garmin_workout(_queue_item(sport="strength_training"))
+    assert strength["sportType"] == {"sportTypeId": 5, "sportTypeKey": "strength_training"}
