@@ -112,7 +112,7 @@ func queryHRV(ctx context.Context, client influxClient, days int) ([]garmin.HRV,
 }
 
 func queryRespiration(ctx context.Context, client influxClient, days int) ([]garmin.Respiration, error) {
-	sql := timeRangeQuery(influx.MeasurementRespiration, days, "DESC")
+	sql := timeRangeQuery(influx.MeasurementRespiration, days, "ASC")
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_respiration: %w", err)
