@@ -179,16 +179,21 @@ against this account's `/workout-service/workout/types` plus empirical round-tri
 | `cycling` | 2 | Empirical round-trip |
 | `swimming` | 4 | Empirical round-trip (previously wrongly 5) |
 | `strength_training` | 5 | Empirical round-trip (previously wrongly 13 → resolved to "rucking") |
-| `walking` | **no working ID found** | Both candidates tested — the documented enum value (11 → actually `mobility`) and a community-library guess (17) — came back nulled (`sportTypeId: 0, sportTypeKey: None`) on round-trip. Dropped from `validSports` in `tools/workouts.go` until a working ID is found. |
+| `walking` | **not supported by Garmin at all** | Confirmed two ways: (1) both candidate IDs (11 → actually `mobility`; 17, a community-library guess) came back nulled on round-trip; (2) Garmin Connect's own workout builder UI (connect.garmin.com/app/workouts → "Select a Workout Type") has no Walking option — only Run, Bike, Pool Swim, Multisport, Strength Training, Cardio, HIIT, Yoga, Pilates, Mobility, Custom. Dropped from `validSports` in `tools/workouts.go`. |
 
 Step types (`_STEP_TYPES` in `sync.py`) were already correct and verified the same way:
 `warmup`=1, `cooldown`=2, `interval`=3, `recovery`=4, `steady`→`other`=7.
 
 **If you need a sport type not listed here**: do not guess an ID from a public reference
 (the `python-garminconnect` library's own typed workout classes got `walking` wrong for
-this account). Verify empirically — upload a disposable probe workout with your candidate
-ID via `garmin.upload_workout`, read it back with `garmin.get_workout_by_id`, confirm the
-returned `sportTypeKey` matches, then delete it with `garmin.delete_workout`.
+this account). Two verification options, cheapest first:
+1. Open connect.garmin.com/app/workouts → create a workout → inspect the "Select a Workout
+   Type" dropdown's `<option value="...">` attributes in the page source/devtools — the
+   value is the real sportTypeId, no API calls needed.
+2. If the type isn't in that dropdown (or you want to confirm anyway), verify empirically:
+   upload a disposable probe workout with your candidate ID via `garmin.upload_workout`,
+   read it back with `garmin.get_workout_by_id`, confirm the returned `sportTypeKey`
+   matches, then delete it with `garmin.delete_workout`.
 
 ## Skill to invoke for MCP server work
 
