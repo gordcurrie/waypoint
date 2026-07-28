@@ -164,6 +164,32 @@ container. The backfill window is controlled by `BACKFILL_DAYS` (default 90).
 `lt_pace_s_per_km` in `lactate_threshold` may also need ×1000 (s/m → s/km) if
 a lactate threshold test exists in the DB — unverifiable until LT data is present.
 
+## Garmin workout-service sport/step type IDs (verified — don't re-guess)
+
+`create_workout` uploads write a `sportTypeId`/`sportTypeKey` pair and Garmin's backend
+resolves the *ID*, silently overwriting whatever key was sent if the two don't match. A bug
+shipped from guessed IDs: `strength_training` was sent as ID 13, which Garmin resolves to
+`rucking`; `swimming` was sent as ID 5, which is `strength_training`. Verified 2026-07-28
+against this account's `/workout-service/workout/types` plus empirical round-trip tests
+(upload a probe workout, read back the sportType Garmin actually assigned, delete it):
+
+| Sport | sportTypeId | Verified how |
+|-------|-------------|--------------|
+| `running` | 1 | Live in production workouts pre-dating this fix |
+| `cycling` | 2 | Empirical round-trip |
+| `swimming` | 4 | Empirical round-trip (previously wrongly 5) |
+| `strength_training` | 5 | Empirical round-trip (previously wrongly 13 → resolved to "rucking") |
+| `walking` | **no working ID found** | Both candidates tested — the documented enum value (11 → actually `mobility`) and a community-library guess (17) — came back nulled (`sportTypeId: 0, sportTypeKey: None`) on round-trip. Dropped from `validSports` in `tools/workouts.go` until a working ID is found. |
+
+Step types (`_STEP_TYPES` in `sync.py`) were already correct and verified the same way:
+`warmup`=1, `cooldown`=2, `interval`=3, `recovery`=4, `steady`→`other`=7.
+
+**If you need a sport type not listed here**: do not guess an ID from a public reference
+(the `python-garminconnect` library's own typed workout classes got `walking` wrong for
+this account). Verify empirically — upload a disposable probe workout with your candidate
+ID via `garmin.upload_workout`, read it back with `garmin.get_workout_by_id`, confirm the
+returned `sportTypeKey` matches, then delete it with `garmin.delete_workout`.
+
 ## Skill to invoke for MCP server work
 
 When building `tools/` or `cmd/mcp-server/`, invoke the `generate-mcp` skill:

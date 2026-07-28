@@ -808,14 +808,21 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     log.info("scheduled_workouts: wrote %d points", len(points))
 
 
+# Verified 2026-07-28 against /workout-service/workout/types (live, this account) plus
+# empirical round-trip tests (upload a probe workout, read back the sportType Garmin
+# actually assigned). The original values here were guessed and wrong: strength_training
+# was 13 (which Garmin resolves to "rucking"), swimming was 5 (which is strength_training).
+# "walking" has no working sportTypeId — both the documented enum value (11, "mobility")
+# and a community-library guess (17) came back nulled by Garmin on round-trip. Dropped
+# from validSports in tools/workouts.go until a working ID is found — see issue tracker.
 _SPORT_TYPES: dict[str, dict[str, Any]] = {
     "running": {"sportTypeId": 1, "sportTypeKey": "running"},
     "cycling": {"sportTypeId": 2, "sportTypeKey": "cycling"},
-    "swimming": {"sportTypeId": 5, "sportTypeKey": "swimming"},
-    "walking": {"sportTypeId": 11, "sportTypeKey": "walking"},
-    "strength_training": {"sportTypeId": 13, "sportTypeKey": "strength_training"},
+    "swimming": {"sportTypeId": 4, "sportTypeKey": "swimming"},
+    "strength_training": {"sportTypeId": 5, "sportTypeKey": "strength_training"},
 }
 
+# Verified 2026-07-28 against /workout-service/workout/types (live, this account).
 _STEP_TYPES: dict[str, dict[str, Any]] = {
     "warmup": {"stepTypeId": 1, "stepTypeKey": "warmup"},
     "cooldown": {"stepTypeId": 2, "stepTypeKey": "cooldown"},
@@ -868,7 +875,13 @@ def _build_garmin_step(order: int, step: dict[str, Any]) -> dict[str, Any]:
 
 def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
     sport = item.get("sport", "running")
-    sport_type = _SPORT_TYPES.get(sport, {"sportTypeId": 1, "sportTypeKey": sport})
+    # No silent fallback: an unrecognized sport previously defaulted to sportTypeId 1
+    # ("running") while keeping the wrong key, which Garmin resolves by ID — silently
+    # mislabeling the workout as a run. Fail loudly instead; the item stays queued for
+    # retry (see sync_pending_workouts) rather than uploading with a wrong sport.
+    if sport not in _SPORT_TYPES:
+        raise ValueError(f"unsupported workout sport {sport!r} — no verified Garmin sportTypeId")
+    sport_type = _SPORT_TYPES[sport]
     steps = [_build_garmin_step(i + 1, s) for i, s in enumerate(item.get("steps") or [])]
     return {
         "workoutId": None,

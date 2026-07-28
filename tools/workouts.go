@@ -37,8 +37,10 @@ var validStepTypes = map[string]bool{
 	"cooldown": true, "steady": true,
 }
 
+// "walking" is deliberately excluded: no working Garmin workout-service sportTypeId
+// has been found for it (verified 2026-07-28 — see sync.py's _SPORT_TYPES comment).
 var validSports = map[string]bool{
-	"running": true, "cycling": true, "walking": true,
+	"running": true, "cycling": true,
 	"swimming": true, "strength_training": true,
 }
 
@@ -70,7 +72,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 
 	type createWorkoutInput struct {
 		Name  string        `json:"name"  jsonschema:"workout name e.g. Tuesday tempo run"`
-		Sport string        `json:"sport" jsonschema:"sport type: running cycling walking swimming strength_training"`
+		Sport string        `json:"sport" jsonschema:"sport type: running cycling swimming strength_training"`
 		Steps []WorkoutStep `json:"steps" jsonschema:"ordered list of workout steps"`
 	}
 
@@ -83,7 +85,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			return errorResult(fmt.Errorf("name is required"))
 		}
 		if !validSports[input.Sport] {
-			return errorResult(fmt.Errorf("invalid sport %q (valid: running, cycling, walking, swimming, strength_training)", input.Sport))
+			return errorResult(fmt.Errorf("invalid sport %q (valid: running, cycling, swimming, strength_training)", input.Sport))
 		}
 		if len(input.Steps) == 0 {
 			return errorResult(fmt.Errorf("steps must not be empty"))
