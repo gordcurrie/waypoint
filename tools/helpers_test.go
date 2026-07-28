@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestClampDays(t *testing.T) {
+func TestClampInt(t *testing.T) {
 	tests := []struct {
 		name           string
 		days, def, max int
@@ -22,9 +22,9 @@ func TestClampDays(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := clampDays(tt.days, tt.def, tt.max)
+			got := clampInt(tt.days, tt.def, tt.max)
 			if got != tt.want {
-				t.Errorf("clampDays(%d, %d, %d) = %d, want %d", tt.days, tt.def, tt.max, got, tt.want)
+				t.Errorf("clampInt(%d, %d, %d) = %d, want %d", tt.days, tt.def, tt.max, got, tt.want)
 			}
 		})
 	}

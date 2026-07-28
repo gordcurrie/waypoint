@@ -823,38 +823,56 @@ _SPORT_TYPES: dict[str, dict[str, Any]] = {
 }
 
 # Verified 2026-07-28 against /workout-service/workout/types (live, this account).
+# "rest" and "repeat" are internal-only: synthesized by _build_garmin_repeat_group,
+# never read from a user-supplied step["type"] (create_workout's validStepTypes never
+# includes them — see tools/workouts.go).
 _STEP_TYPES: dict[str, dict[str, Any]] = {
     "warmup": {"stepTypeId": 1, "stepTypeKey": "warmup"},
     "cooldown": {"stepTypeId": 2, "stepTypeKey": "cooldown"},
     "interval": {"stepTypeId": 3, "stepTypeKey": "interval"},
     "recovery": {"stepTypeId": 4, "stepTypeKey": "recovery"},
+    "rest": {"stepTypeId": 5, "stepTypeKey": "rest"},
+    "repeat": {"stepTypeId": 6, "stepTypeKey": "repeat"},
     "steady": {"stepTypeId": 7, "stepTypeKey": "other"},
 }
 
 
-def _build_garmin_step(order: int, step: dict[str, Any]) -> dict[str, Any]:
+def _build_garmin_step(
+    order: int, step: dict[str, Any], child_step_id: int | None = None
+) -> dict[str, Any]:
     step_type = _STEP_TYPES.get(step["type"], {"stepTypeId": 7, "stepTypeKey": "other"})
 
     duration_s = step.get("duration_s")
     distance_m = step.get("distance_m")
+    reps = step.get("reps")
     if duration_s is not None:
         end_condition: dict[str, Any] = {"conditionTypeId": 2, "conditionTypeKey": "time"}
         end_value: float | None = float(duration_s)
     elif distance_m is not None:
         end_condition = {"conditionTypeId": 3, "conditionTypeKey": "distance"}
         end_value = float(distance_m)
+    elif reps is not None:
+        end_condition = {"conditionTypeId": 10, "conditionTypeKey": "reps"}
+        end_value = float(reps)
     else:
         end_condition = {"conditionTypeId": 1, "conditionTypeKey": "lap.button"}
         end_value = None
 
     hr_zone = step.get("target_hr_zone")
     if hr_zone is not None:
-        target_type: dict[str, Any] = {
+        target_type: dict[str, Any] | None = {
             "workoutTargetTypeId": 4,
             "workoutTargetTypeKey": "heart.rate.zone",
         }
         target_val1: float | None = float(hr_zone)
         target_val2: float | None = float(hr_zone)
+    elif step["type"] == "rest":
+        # Real Garmin rest steps serialize targetType as null, not the explicit
+        # no.target object exercise-performing steps get (confirmed against the
+        # captured fixture — see sync/tests/fixtures/workout_1646566436.json).
+        target_type = None
+        target_val1 = None
+        target_val2 = None
     else:
         target_type = {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target"}
         target_val1 = None
@@ -864,13 +882,66 @@ def _build_garmin_step(order: int, step: dict[str, Any]) -> dict[str, Any]:
         "type": "ExecutableStepDTO",
         "stepOrder": order,
         "stepType": step_type,
+        "childStepId": child_step_id,
         "endCondition": end_condition,
         "endConditionValue": end_value,
         "targetType": target_type,
         "targetValueOne": target_val1,
         "targetValueTwo": target_val2,
-        "description": step.get("description") or "",
+        # Real Garmin workouts serialize these as explicit nulls when unset, not
+        # omitted keys (confirmed against a captured real workout) — match that
+        # shape for round-trip fidelity.
+        "category": step.get("category"),
+        "exerciseName": step.get("exercise_name"),
+        "description": step.get("description"),
     }
+
+
+def _build_garmin_repeat_group(
+    order: int, group_index: int, step: dict[str, Any]
+) -> tuple[dict[str, Any], int, int]:
+    """Wrap one exercise+rest pair in a RepeatGroupDTO, repeated `sets` times.
+
+    Mirrors the real structure of a hand-built Garmin strength workout: the repeat
+    group itself and each of its children get sequential, gap-free stepOrder values
+    (confirmed against a captured real workout — order is a running counter across
+    the whole step tree, not reset per group), and share one childStepId marking
+    group membership.
+
+    Scope limit: only ever builds one [exercise, rest] pair — Garmin's real format
+    also supports multi-exercise supersets (the captured fixture,
+    sync/tests/fixtures/workout_1646566436.json, has groups with two alternating
+    exercises), but WorkoutStep/create_workout don't model that; adding it would need
+    changes to the queue schema and validation, not just this function.
+
+    Returns (repeat_group_dto, next_order, next_group_index) so the caller can keep
+    threading both counters through subsequent steps.
+    """
+    sets = step.get("sets")
+    rest_s = step.get("rest_s")
+    if not sets or sets < 2 or not rest_s or rest_s <= 0:
+        # create_workout's validation should have caught this before queueing — a
+        # malformed item (hand-edited queue file, a future second producer) reaching
+        # here fails loudly instead of raising an unlabeled KeyError.
+        raise ValueError(f"invalid sets/rest_s for repeat group: sets={sets!r} rest_s={rest_s!r}")
+
+    exercise_step = _build_garmin_step(order + 1, step, child_step_id=group_index)
+    rest_step = _build_garmin_step(
+        order + 2, {"type": "rest", "duration_s": rest_s}, child_step_id=group_index
+    )
+    children = [exercise_step, rest_step]
+
+    group = {
+        "type": "RepeatGroupDTO",
+        "stepOrder": order,
+        "stepType": _STEP_TYPES["repeat"],
+        "childStepId": group_index,
+        "numberOfIterations": sets,
+        "workoutSteps": children,
+        "endCondition": {"conditionTypeId": 7, "conditionTypeKey": "iterations"},
+        "endConditionValue": float(sets),
+    }
+    return group, order + 1 + len(children), group_index + 1
 
 
 def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
@@ -882,7 +953,23 @@ def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
     if sport not in _SPORT_TYPES:
         raise ValueError(f"unsupported workout sport {sport!r} — no verified Garmin sportTypeId")
     sport_type = _SPORT_TYPES[sport]
-    steps = [_build_garmin_step(i + 1, s) for i, s in enumerate(item.get("steps") or [])]
+
+    steps: list[dict[str, Any]] = []
+    order = 1
+    group_index = 1
+    for raw_step in item.get("steps") or []:
+        # Route to the repeat-group builder whenever either field is present, not
+        # just "sets >= 2" — that way an invalid combination (sets=1, or rest_s
+        # without sets) fails loudly via _build_garmin_repeat_group's own
+        # validation instead of silently falling through to a flat step that
+        # drops the sets/rest_s fields entirely.
+        if raw_step.get("sets") is not None or raw_step.get("rest_s") is not None:
+            group, order, group_index = _build_garmin_repeat_group(order, group_index, raw_step)
+            steps.append(group)
+        else:
+            steps.append(_build_garmin_step(order, raw_step))
+            order += 1
+
     return {
         "workoutId": None,
         "ownerId": None,

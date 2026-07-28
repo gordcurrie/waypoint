@@ -1071,3 +1071,160 @@ def test_build_garmin_workout_swimming_and_strength_ids():
 
     strength = sync._build_garmin_workout(_queue_item(sport="strength_training"))
     assert strength["sportType"] == {"sportTypeId": 5, "sportTypeKey": "strength_training"}
+
+
+def test_build_garmin_workout_reps_only_flat_step():
+    item = _queue_item(steps=[{"type": "interval", "reps": 8}])
+    step = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"][0]
+    assert step["type"] == "ExecutableStepDTO"
+    assert step["endCondition"]["conditionTypeKey"] == "reps"
+    assert step["endConditionValue"] == 8.0
+    assert step["childStepId"] is None
+
+
+def test_build_garmin_workout_category_exercise_name_passthrough():
+    item = _queue_item(
+        steps=[
+            {
+                "type": "interval",
+                "reps": 8,
+                "category": "BENCH_PRESS",
+                "exercise_name": "BARBELL_BENCH_PRESS",
+            }
+        ]
+    )
+    step = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"][0]
+    assert step["category"] == "BENCH_PRESS"
+    assert step["exerciseName"] == "BARBELL_BENCH_PRESS"
+
+
+def test_build_garmin_workout_category_null_on_plain_steps():
+    # Real Garmin workouts serialize category/exerciseName as explicit nulls on
+    # non-strength steps, not omitted keys (confirmed against a captured real
+    # workout) — match that for round-trip fidelity.
+    item = _queue_item(steps=[{"type": "warmup", "duration_s": 300}])
+    step = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"][0]
+    assert step["category"] is None
+    assert step["exerciseName"] is None
+
+
+def test_build_garmin_workout_sets_creates_repeat_group():
+    item = _queue_item(
+        steps=[
+            {
+                "type": "interval",
+                "reps": 8,
+                "sets": 3,
+                "rest_s": 20,
+                "category": "BENCH_PRESS",
+                "exercise_name": "BARBELL_BENCH_PRESS",
+            }
+        ]
+    )
+    steps = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"]
+    assert len(steps) == 1
+    group = steps[0]
+    assert group["type"] == "RepeatGroupDTO"
+    assert group["stepType"] == {"stepTypeId": 6, "stepTypeKey": "repeat"}
+    assert group["numberOfIterations"] == 3
+    assert group["endCondition"]["conditionTypeKey"] == "iterations"
+    assert group["endConditionValue"] == 3.0
+    assert group["stepOrder"] == 1
+    assert group["childStepId"] == 1
+
+    exercise_step, rest_step = group["workoutSteps"]
+    assert exercise_step["stepOrder"] == 2
+    assert exercise_step["childStepId"] == 1
+    assert exercise_step["endCondition"]["conditionTypeKey"] == "reps"
+    assert exercise_step["endConditionValue"] == 8.0
+    assert exercise_step["category"] == "BENCH_PRESS"
+    assert exercise_step["exerciseName"] == "BARBELL_BENCH_PRESS"
+
+    assert rest_step["stepOrder"] == 3
+    assert rest_step["childStepId"] == 1
+    assert rest_step["stepType"] == {"stepTypeId": 5, "stepTypeKey": "rest"}
+    assert rest_step["endCondition"]["conditionTypeKey"] == "time"
+    assert rest_step["endConditionValue"] == 20.0
+    # rest is synthesized, never linked to an exercise
+    assert rest_step["category"] is None
+    assert rest_step["exerciseName"] is None
+    # Real Garmin rest steps serialize targetType as null, not a no.target object
+    # (confirmed against the captured fixture) — regression test for PR review.
+    assert rest_step["targetType"] is None
+    assert exercise_step["targetType"] == {
+        "workoutTargetTypeId": 1,
+        "workoutTargetTypeKey": "no.target",
+    }
+
+
+def test_build_garmin_workout_invalid_sets_raises():
+    # sets=1 is meaningless (create_workout rejects it), but if a malformed item
+    # reaches sync.py anyway (hand-edited queue file, a future second producer),
+    # it must fail loudly rather than silently building a flat step that drops
+    # sets/rest_s entirely.
+    item = _queue_item(steps=[{"type": "interval", "reps": 8, "sets": 1, "rest_s": 20}])
+    with pytest.raises(ValueError, match="invalid sets/rest_s"):
+        sync._build_garmin_workout(item)
+
+
+def test_build_garmin_workout_rest_s_without_sets_raises():
+    item = _queue_item(steps=[{"type": "interval", "reps": 8, "rest_s": 20}])
+    with pytest.raises(ValueError, match="invalid sets/rest_s"):
+        sync._build_garmin_workout(item)
+
+
+def test_build_garmin_workout_multiple_sets_groups_sequential_order():
+    # Regression: stepOrder/childStepId must stay a running counter across the whole
+    # tree — confirmed against a captured real workout (sync/tests/fixtures/
+    # workout_1646566436.json), not reset per group, and not skipping or reusing
+    # values for flat steps that follow.
+    item = _queue_item(
+        steps=[
+            {
+                "type": "interval",
+                "reps": 8,
+                "sets": 3,
+                "rest_s": 20,
+                "category": "BENCH_PRESS",
+                "exercise_name": "BARBELL_BENCH_PRESS",
+            },
+            {
+                "type": "interval",
+                "reps": 8,
+                "sets": 3,
+                "rest_s": 60,
+                "category": "SQUAT",
+                "exercise_name": "BARBELL_BACK_SQUAT",
+            },
+            {"type": "cooldown", "duration_s": 300},
+        ]
+    )
+    steps = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"]
+    assert len(steps) == 3
+
+    group1, group2, cooldown = steps
+    assert group1["stepOrder"] == 1
+    assert group1["childStepId"] == 1
+    assert [s["stepOrder"] for s in group1["workoutSteps"]] == [2, 3]
+
+    assert group2["stepOrder"] == 4
+    assert group2["childStepId"] == 2
+    assert [s["stepOrder"] for s in group2["workoutSteps"]] == [5, 6]
+
+    assert cooldown["stepOrder"] == 7
+    assert cooldown["childStepId"] is None
+
+
+def test_build_garmin_workout_rest_distinct_from_recovery():
+    item = _queue_item(
+        steps=[
+            {"type": "recovery", "duration_s": 60},
+            {"type": "interval", "reps": 8, "sets": 2, "rest_s": 30},
+        ]
+    )
+    steps = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"]
+    recovery_step = steps[0]
+    rest_step = steps[1]["workoutSteps"][1]
+    assert recovery_step["stepType"] == {"stepTypeId": 4, "stepTypeKey": "recovery"}
+    assert rest_step["stepType"] == {"stepTypeId": 5, "stepTypeKey": "rest"}
+    assert recovery_step["stepType"] != rest_step["stepType"]

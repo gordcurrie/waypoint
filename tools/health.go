@@ -20,7 +20,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		Description: "Return daily Garmin stats: steps, resting HR, body battery, stress, and intensity minutes.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
-		days := clampDays(input.Days, 7, 365)
+		days := clampInt(input.Days, 7, 365)
 		stats, err := queryDailyStats(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -33,7 +33,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		Description: "Return recent sleep data: duration, stages, sleep score, HRV, and SpO2.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
-		days := clampDays(input.Days, 7, 365)
+		days := clampInt(input.Days, 7, 365)
 		sleep, err := querySleep(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -50,7 +50,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		Description: "Return HRV trend: weekly average, last-night reading, and status over time.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input hrvInput) (*mcp.CallToolResult, any, error) {
-		days := clampDays(input.Days, 14, 365)
+		days := clampInt(input.Days, 14, 365)
 		hrv, err := queryHRV(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -63,7 +63,7 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 		Description: "Return daily respiration data: waking, sleep, highest, and lowest breaths per minute.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
-		days := clampDays(input.Days, 7, 365)
+		days := clampInt(input.Days, 7, 365)
 		resp, err := queryRespiration(ctx, client, days)
 		if err != nil {
 			return errorResult(err)

@@ -21,7 +21,7 @@ func registerFitnessTools(s *mcp.Server, client influxClient) {
 			"Trend is only meaningful over longer windows; default lookback is 90 days.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input performanceTrendInput) (*mcp.CallToolResult, any, error) {
-		days := clampDays(input.Days, 90, 365)
+		days := clampInt(input.Days, 90, 365)
 		trend, err := queryPerformanceTrend(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -41,7 +41,7 @@ func registerFitnessTools(s *mcp.Server, client influxClient) {
 			"lactate threshold test — treat this value as unconfirmed until cross-checked against Garmin Connect directly.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input lactateThresholdInput) (*mcp.CallToolResult, any, error) {
-		days := clampDays(input.Days, 90, 365)
+		days := clampInt(input.Days, 90, 365)
 		trend, err := queryLactateThreshold(ctx, client, days)
 		if err != nil {
 			return errorResult(err)

@@ -182,7 +182,9 @@ against this account's `/workout-service/workout/types` plus empirical round-tri
 | `walking` | **not supported by Garmin at all** | Confirmed two ways: (1) both candidate IDs (11 → actually `mobility`; 17, a community-library guess) came back nulled on round-trip; (2) Garmin Connect's own workout builder UI (connect.garmin.com/app/workouts → "Select a Workout Type") has no Walking option — only Run, Bike, Pool Swim, Multisport, Strength Training, Cardio, HIIT, Yoga, Pilates, Mobility, Custom. Dropped from `validSports` in `tools/workouts.go`. |
 
 Step types (`_STEP_TYPES` in `sync.py`) were already correct and verified the same way:
-`warmup`=1, `cooldown`=2, `interval`=3, `recovery`=4, `steady`→`other`=7.
+`warmup`=1, `cooldown`=2, `interval`=3, `recovery`=4, `steady`→`other`=7. `rest`=5 and
+`repeat`=6 were added later (see below) — internal-only, synthesized by
+`_build_garmin_repeat_group`, never reachable from a user-supplied step type.
 
 **If you need a sport type not listed here**: do not guess an ID from a public reference
 (the `python-garminconnect` library's own typed workout classes got `walking` wrong for
@@ -194,6 +196,48 @@ this account). Two verification options, cheapest first:
    upload a disposable probe workout with your candidate ID via `garmin.upload_workout`,
    read it back with `garmin.get_workout_by_id`, confirm the returned `sportTypeKey`
    matches, then delete it with `garmin.delete_workout`.
+
+## Garmin exercise catalog + strength workout structure (verified — don't re-guess)
+
+`create_workout` links a strength step to Garmin's built-in exercise picker via a
+`category`/`exerciseName` string pair (e.g. `"BENCH_PRESS"`/`"BARBELL_BENCH_PRESS"`) —
+this is what drives the demo animation shown for hand-built workouts. No Garmin API
+endpoint exists for this catalog (confirmed 404 on `/workout-service/exercises`,
+`/workout-service/exercise/categories`, `/workout-service/workout/exercises`,
+`/workout-service/exerciseTypes`). It's a static asset the workout editor's exercise
+picker fetches directly:
+
+```
+GET https://connect.garmin.com/web-api/web-data/exercises/Exercises.json
+```
+
+Direct `curl` gets a 403 — it requires an authenticated browser session (cookies +
+same-origin fetch), not a bare request. Capture it from a logged-in browser tab via
+`fetch('/web-api/web-data/exercises/Exercises.json', {credentials: 'include'})`; the
+response is large (~200KB) so pull it out via a channel that doesn't truncate (a
+browser automation tool's direct return value may cap around ~1KB — logging it via
+`console.log` and reading it back via a console-log-reading tool worked; dumping into
+the page's accessibility tree did not, since that only surfaces short label previews).
+
+Vendored as `internal/garmin/exercises/catalog.json` (1510 exercises, 47 categories as
+of 2026-07-28), embedded via stdlib `go:embed` in `internal/garmin/exercises/catalog.go`.
+Regenerate with `scripts/generate_exercise_catalog.py` — see that script's docstring for
+the exact capture steps. Verified against 8 real `(category, exercise_name)` pairs from
+a hand-built strength workout (`get_workout_by_id`) before trusting the capture.
+
+**Do not trust a third-party project's vendored catalog as ground truth** — a reference
+project (`cyberjunky/python-garminconnect`, `garminconnect/exercises.py`) exists and is
+useful only as a naming-convention sanity check. Exercise availability can differ by
+account/region and third-party scrapes go stale; verify against your own account.
+
+**RepeatGroupDTO structure** (how Garmin represents "N sets of X"): confirmed against a
+real hand-built workout (`sync/tests/fixtures/workout_1646566436.json`) that `stepOrder`
+is a single running counter across the *entire* step tree — the repeat group node itself
+consumes one value, then each child consumes the next, with **no reset per group and no
+gaps** before the next sibling. `childStepId` marks group membership (shared by the group
+node and its children, sequential per group in order of appearance, `null` for ungrouped
+steps). `numberOfIterations` and `endConditionValue` on the group must both be set to the
+same set count — redundant-looking, but both required.
 
 ## Skill to invoke for MCP server work
 
