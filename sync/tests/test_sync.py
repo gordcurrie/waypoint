@@ -1148,6 +1148,29 @@ def test_build_garmin_workout_sets_creates_repeat_group():
     # rest is synthesized, never linked to an exercise
     assert rest_step["category"] is None
     assert rest_step["exerciseName"] is None
+    # Real Garmin rest steps serialize targetType as null, not a no.target object
+    # (confirmed against the captured fixture) — regression test for PR review.
+    assert rest_step["targetType"] is None
+    assert exercise_step["targetType"] == {
+        "workoutTargetTypeId": 1,
+        "workoutTargetTypeKey": "no.target",
+    }
+
+
+def test_build_garmin_workout_invalid_sets_raises():
+    # sets=1 is meaningless (create_workout rejects it), but if a malformed item
+    # reaches sync.py anyway (hand-edited queue file, a future second producer),
+    # it must fail loudly rather than silently building a flat step that drops
+    # sets/rest_s entirely.
+    item = _queue_item(steps=[{"type": "interval", "reps": 8, "sets": 1, "rest_s": 20}])
+    with pytest.raises(ValueError, match="invalid sets/rest_s"):
+        sync._build_garmin_workout(item)
+
+
+def test_build_garmin_workout_rest_s_without_sets_raises():
+    item = _queue_item(steps=[{"type": "interval", "reps": 8, "rest_s": 20}])
+    with pytest.raises(ValueError, match="invalid sets/rest_s"):
+        sync._build_garmin_workout(item)
 
 
 def test_build_garmin_workout_multiple_sets_groups_sequential_order():

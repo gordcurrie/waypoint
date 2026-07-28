@@ -860,12 +860,19 @@ def _build_garmin_step(
 
     hr_zone = step.get("target_hr_zone")
     if hr_zone is not None:
-        target_type: dict[str, Any] = {
+        target_type: dict[str, Any] | None = {
             "workoutTargetTypeId": 4,
             "workoutTargetTypeKey": "heart.rate.zone",
         }
         target_val1: float | None = float(hr_zone)
         target_val2: float | None = float(hr_zone)
+    elif step["type"] == "rest":
+        # Real Garmin rest steps serialize targetType as null, not the explicit
+        # no.target object exercise-performing steps get (confirmed against the
+        # captured fixture — see sync/tests/fixtures/workout_1646566436.json).
+        target_type = None
+        target_val1 = None
+        target_val2 = None
     else:
         target_type = {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target"}
         target_val1 = None
@@ -951,8 +958,12 @@ def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
     order = 1
     group_index = 1
     for raw_step in item.get("steps") or []:
-        sets = raw_step.get("sets")
-        if sets is not None and sets >= 2:
+        # Route to the repeat-group builder whenever either field is present, not
+        # just "sets >= 2" — that way an invalid combination (sets=1, or rest_s
+        # without sets) fails loudly via _build_garmin_repeat_group's own
+        # validation instead of silently falling through to a flat step that
+        # drops the sets/rest_s fields entirely.
+        if raw_step.get("sets") is not None or raw_step.get("rest_s") is not None:
             group, order, group_index = _build_garmin_repeat_group(order, group_index, raw_step)
             steps.append(group)
         else:
