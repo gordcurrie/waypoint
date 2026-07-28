@@ -82,3 +82,56 @@ func TestQueryHRV_ReturnsRows(t *testing.T) {
 		t.Errorf("weekly avg: got %g, want 42", hrv[0].WeeklyAvgMS)
 	}
 }
+
+func TestQueryRespiration_Empty(t *testing.T) {
+	client := &mockClient{rows: nil}
+	resp, err := queryRespiration(context.Background(), client, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp) != 0 {
+		t.Errorf("want 0 respiration records, got %d", len(resp))
+	}
+}
+
+func TestQueryRespiration_ReturnsRows(t *testing.T) {
+	now := time.Now().UTC()
+	client := &mockClient{
+		rows: []map[string]any{
+			{
+				"time":            now.Format(time.RFC3339),
+				"avg_waking_brpm": float64(15),
+				"avg_sleep_brpm":  float64(13),
+				"highest_brpm":    float64(22),
+				"lowest_brpm":     float64(11),
+			},
+		},
+	}
+	resp, err := queryRespiration(context.Background(), client, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("want 1 respiration record, got %d", len(resp))
+	}
+	if resp[0].AvgWakingBRPM != 15 {
+		t.Errorf("avg_waking_brpm: got %g, want 15", resp[0].AvgWakingBRPM)
+	}
+	if resp[0].AvgSleepBRPM != 13 {
+		t.Errorf("avg_sleep_brpm: got %g, want 13", resp[0].AvgSleepBRPM)
+	}
+	if resp[0].HighestBRPM != 22 {
+		t.Errorf("highest_brpm: got %g, want 22", resp[0].HighestBRPM)
+	}
+	if resp[0].LowestBRPM != 11 {
+		t.Errorf("lowest_brpm: got %g, want 11", resp[0].LowestBRPM)
+	}
+}
+
+func TestQueryRespiration_PropagatesError(t *testing.T) {
+	client := &mockClient{err: errors.New("timeout")}
+	_, err := queryRespiration(context.Background(), client, 7)
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+}
