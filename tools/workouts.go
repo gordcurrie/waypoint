@@ -12,16 +12,28 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/gordcurrie/waypoint/internal/garmin"
+	"github.com/gordcurrie/waypoint/internal/garmin/exercises"
 	"github.com/gordcurrie/waypoint/internal/influx"
 )
 
 // WorkoutStep is a single step in a structured workout.
+//
+// A strength exercise step sets Category/ExerciseName (a validated pair from Garmin's
+// exercise catalog — see search_exercises) and Reps as its end condition. Sets/RestS
+// turn the step into a repeated set: sync.py wraps it in a Garmin RepeatGroupDTO with
+// a synthesized rest step between each rep, rather than the caller listing out each
+// set and rest individually.
 type WorkoutStep struct {
-	Type         string `json:"type"`
-	DurationS    *int   `json:"duration_s,omitempty"`
-	DistanceM    *int   `json:"distance_m,omitempty"`
-	TargetHRZone *int   `json:"target_hr_zone,omitempty"`
-	Description  string `json:"description,omitempty"`
+	Type         string  `json:"type"`
+	DurationS    *int    `json:"duration_s,omitempty"`
+	DistanceM    *int    `json:"distance_m,omitempty"`
+	Reps         *int    `json:"reps,omitempty"`
+	Sets         *int    `json:"sets,omitempty"`
+	RestS        *int    `json:"rest_s,omitempty"`
+	Category     *string `json:"category,omitempty"`
+	ExerciseName *string `json:"exercise_name,omitempty"`
+	TargetHRZone *int    `json:"target_hr_zone,omitempty"`
+	Description  string  `json:"description,omitempty"`
 }
 
 // WorkoutQueueItem is written to the shared queue file for the Python sidecar to consume.
@@ -77,8 +89,11 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "create_workout",
-		Description: "Queue a structured workout for upload to Garmin Connect. The Python sidecar uploads it on the next sync run (every 30 minutes by default; set via SYNC_SCHEDULE). Requires --data-dir pointing to the shared sync volume. Returns the queue ID. Each step needs type (warmup/interval/recovery/cooldown/steady) and either duration_s or distance_m. Optional target: target_hr_zone (1–5).",
+		Name: "create_workout",
+		Description: "Queue a structured workout for upload to Garmin Connect. The Python sidecar uploads it on the next sync run (every 30 minutes by default; set via SYNC_SCHEDULE). Requires --data-dir pointing to the shared sync volume. Returns the queue ID. " +
+			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
+			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. " +
+			"Optional target: target_hr_zone (1–5).",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false},
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input createWorkoutInput) (*mcp.CallToolResult, any, error) {
 		if input.Name == "" {
@@ -94,14 +109,36 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			if !validStepTypes[step.Type] {
 				return errorResult(fmt.Errorf("create_workout: step %d: invalid type %q (valid: warmup, interval, recovery, cooldown, steady)", i+1, step.Type))
 			}
-			if step.DurationS == nil && step.DistanceM == nil {
-				return errorResult(fmt.Errorf("create_workout: step %d: must specify duration_s or distance_m", i+1))
+			endConditions := 0
+			if step.DurationS != nil {
+				endConditions++
 			}
-			if step.DurationS != nil && step.DistanceM != nil {
-				return errorResult(fmt.Errorf("create_workout: step %d: specify duration_s or distance_m, not both", i+1))
+			if step.DistanceM != nil {
+				endConditions++
+			}
+			if step.Reps != nil {
+				endConditions++
+			}
+			if endConditions != 1 {
+				return errorResult(fmt.Errorf("create_workout: step %d: specify exactly one of duration_s, distance_m, or reps", i+1))
 			}
 			if step.TargetHRZone != nil && (*step.TargetHRZone < 1 || *step.TargetHRZone > 5) {
 				return errorResult(fmt.Errorf("create_workout: step %d: target_hr_zone must be 1–5", i+1))
+			}
+			if (step.Category == nil) != (step.ExerciseName == nil) {
+				return errorResult(fmt.Errorf("create_workout: step %d: category and exercise_name must be set together", i+1))
+			}
+			if step.Category != nil && !exercises.Valid(*step.Category, *step.ExerciseName) {
+				return errorResult(fmt.Errorf("create_workout: step %d: %q/%q is not a real Garmin exercise — use search_exercises to find a valid pair", i+1, *step.Category, *step.ExerciseName))
+			}
+			if step.Sets != nil && *step.Sets < 2 {
+				return errorResult(fmt.Errorf("create_workout: step %d: sets must be >= 2 (omit sets entirely for a single set)", i+1))
+			}
+			if step.Sets != nil && (step.RestS == nil || *step.RestS <= 0) {
+				return errorResult(fmt.Errorf("create_workout: step %d: sets requires rest_s > 0", i+1))
+			}
+			if step.Sets == nil && step.RestS != nil {
+				return errorResult(fmt.Errorf("create_workout: step %d: rest_s requires sets", i+1))
 			}
 		}
 		item := WorkoutQueueItem{
