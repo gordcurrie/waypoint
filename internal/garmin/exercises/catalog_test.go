@@ -34,6 +34,12 @@ func TestValid_RightExerciseWrongCategory(t *testing.T) {
 	}
 }
 
+func TestValid_CaseInsensitive(t *testing.T) {
+	if !Valid("bench_press", "barbell_bench_press") {
+		t.Error("Valid should match regardless of case")
+	}
+}
+
 func TestSearch_FindsKnownExercise(t *testing.T) {
 	results := Search("bench press", "", 20)
 	found := false
@@ -84,5 +90,17 @@ func TestSearch_NoMatch(t *testing.T) {
 	results := Search("zzzznotarealexercise", "", 20)
 	if len(results) != 0 {
 		t.Errorf("want 0 results for nonsense query, got %d", len(results))
+	}
+}
+
+func TestSearch_CategoryFilterCaseInsensitive(t *testing.T) {
+	results := Search("", "squat", 50)
+	if len(results) == 0 {
+		t.Fatal("want at least one result for lowercase category filter")
+	}
+	for _, e := range results {
+		if e.Category != "SQUAT" {
+			t.Errorf("category filter leaked: got %q, want SQUAT", e.Category)
+		}
 	}
 }

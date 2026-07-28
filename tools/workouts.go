@@ -68,13 +68,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		Description: "Return workouts scheduled on the Garmin calendar for the next N days (default 14). Use before creating new workouts to avoid scheduling conflicts.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input scheduledWorkoutsInput) (*mcp.CallToolResult, any, error) {
-		days := input.Days
-		if days <= 0 {
-			days = 14
-		}
-		if days > 60 {
-			days = 60
-		}
+		days := clampInt(input.Days, 14, 60)
 		workouts, err := queryScheduledWorkouts(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -108,6 +102,9 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		for i, step := range input.Steps {
 			if !validStepTypes[step.Type] {
 				return errorResult(fmt.Errorf("create_workout: step %d: invalid type %q (valid: warmup, interval, recovery, cooldown, steady)", i+1, step.Type))
+			}
+			if (step.Reps != nil || step.Sets != nil || step.Category != nil) && step.Type != "interval" {
+				return errorResult(fmt.Errorf("create_workout: step %d: reps/sets/category/exercise_name require type \"interval\" — Garmin's exercise-performing steps always use that stepType, got %q", i+1, step.Type))
 			}
 			endConditions := 0
 			if step.DurationS != nil {

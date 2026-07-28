@@ -12,27 +12,6 @@ func TestRegisterExerciseTools_NoPanic(t *testing.T) {
 	registerExerciseTools(s)
 }
 
-func TestClampInt_ForSearchLimit(t *testing.T) {
-	tests := []struct {
-		name string
-		n    int
-		want int
-	}{
-		{"zero uses default", 0, 20},
-		{"negative uses default", -5, 20},
-		{"within range unchanged", 10, 10},
-		{"exceeds max clamps to max", 100, 50},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := clampInt(tt.n, 20, 50)
-			if got != tt.want {
-				t.Errorf("clampInt(%d, 20, 50) = %d, want %d", tt.n, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestSearchExercisesTool_ReturnsResults(t *testing.T) {
 	s := mcp.NewServer(&mcp.Implementation{Name: "waypoint", Version: "test"}, nil)
 	registerExerciseTools(s)

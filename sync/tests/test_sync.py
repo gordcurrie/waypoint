@@ -1069,6 +1069,9 @@ def test_build_garmin_workout_swimming_and_strength_ids():
     swim = sync._build_garmin_workout(_queue_item(sport="swimming"))
     assert swim["sportType"] == {"sportTypeId": 4, "sportTypeKey": "swimming"}
 
+    strength = sync._build_garmin_workout(_queue_item(sport="strength_training"))
+    assert strength["sportType"] == {"sportTypeId": 5, "sportTypeKey": "strength_training"}
+
 
 def test_build_garmin_workout_reps_only_flat_step():
     item = _queue_item(steps=[{"type": "interval", "reps": 8}])
@@ -1202,6 +1205,3 @@ def test_build_garmin_workout_rest_distinct_from_recovery():
     assert recovery_step["stepType"] == {"stepTypeId": 4, "stepTypeKey": "recovery"}
     assert rest_step["stepType"] == {"stepTypeId": 5, "stepTypeKey": "rest"}
     assert recovery_step["stepType"] != rest_step["stepType"]
-
-    strength = sync._build_garmin_workout(_queue_item(sport="strength_training"))
-    assert strength["sportType"] == {"sportTypeId": 5, "sportTypeKey": "strength_training"}

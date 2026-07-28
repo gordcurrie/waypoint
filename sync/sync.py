@@ -881,12 +881,12 @@ def _build_garmin_step(
         "targetType": target_type,
         "targetValueOne": target_val1,
         "targetValueTwo": target_val2,
-        # Real Garmin workouts serialize these as explicit nulls on non-strength
-        # steps, not omitted keys (confirmed against a captured real workout) —
-        # match that shape for round-trip fidelity.
+        # Real Garmin workouts serialize these as explicit nulls when unset, not
+        # omitted keys (confirmed against a captured real workout) — match that
+        # shape for round-trip fidelity.
         "category": step.get("category"),
         "exerciseName": step.get("exercise_name"),
-        "description": step.get("description") or "",
+        "description": step.get("description"),
     }
 
 
@@ -901,16 +901,28 @@ def _build_garmin_repeat_group(
     the whole step tree, not reset per group), and share one childStepId marking
     group membership.
 
+    Scope limit: only ever builds one [exercise, rest] pair — Garmin's real format
+    also supports multi-exercise supersets (the captured fixture,
+    sync/tests/fixtures/workout_1646566436.json, has groups with two alternating
+    exercises), but WorkoutStep/create_workout don't model that; adding it would need
+    changes to the queue schema and validation, not just this function.
+
     Returns (repeat_group_dto, next_order, next_group_index) so the caller can keep
     threading both counters through subsequent steps.
     """
-    sets = step["sets"]
-    rest_s = step["rest_s"]
+    sets = step.get("sets")
+    rest_s = step.get("rest_s")
+    if not sets or sets < 2 or not rest_s or rest_s <= 0:
+        # create_workout's validation should have caught this before queueing — a
+        # malformed item (hand-edited queue file, a future second producer) reaching
+        # here fails loudly instead of raising an unlabeled KeyError.
+        raise ValueError(f"invalid sets/rest_s for repeat group: sets={sets!r} rest_s={rest_s!r}")
 
     exercise_step = _build_garmin_step(order + 1, step, child_step_id=group_index)
     rest_step = _build_garmin_step(
         order + 2, {"type": "rest", "duration_s": rest_s}, child_step_id=group_index
     )
+    children = [exercise_step, rest_step]
 
     group = {
         "type": "RepeatGroupDTO",
@@ -918,11 +930,11 @@ def _build_garmin_repeat_group(
         "stepType": _STEP_TYPES["repeat"],
         "childStepId": group_index,
         "numberOfIterations": sets,
-        "workoutSteps": [exercise_step, rest_step],
+        "workoutSteps": children,
         "endCondition": {"conditionTypeId": 7, "conditionTypeKey": "iterations"},
         "endConditionValue": float(sets),
     }
-    return group, order + 3, group_index + 1
+    return group, order + 1 + len(children), group_index + 1
 
 
 def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:

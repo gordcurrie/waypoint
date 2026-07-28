@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestClampDays(t *testing.T) {
+func TestClampInt(t *testing.T) {
 	tests := []struct {
 		name           string
 		days, def, max int
