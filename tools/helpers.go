@@ -8,15 +8,15 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// clampDays returns def when days <= 0, otherwise days clamped to max.
-func clampDays(days, def, max int) int {
-	if days <= 0 {
+// clampInt returns def when n <= 0, otherwise n clamped to max.
+func clampInt(n, def, max int) int {
+	if n <= 0 {
 		return def
 	}
-	if days > max {
+	if n > max {
 		return max
 	}
-	return days
+	return n
 }
 
 // timeRangeQuery builds a "SELECT * FROM <measurement> WHERE time >= since ORDER BY time <order>"

@@ -10,4 +10,5 @@ func RegisterAll(s *mcp.Server, client influxClient, dataDir string) {
 	registerFitnessTools(s, client)
 	registerSplitTools(s, client)
 	registerWorkoutTools(s, client, dataDir)
+	registerExerciseTools(s)
 }

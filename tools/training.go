@@ -22,7 +22,7 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 			"VO2max estimates for running and cycling, and Garmin fitness age.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input statusInput) (*mcp.CallToolResult, any, error) {
-		days := clampDays(input.Days, 14, 365)
+		days := clampInt(input.Days, 14, 365)
 		status, err := queryTrainingStatus(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -73,7 +73,7 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 		Description: "Return Garmin training readiness scores including HRV status, sleep score, and acute/chronic workload ratio.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input readinessInput) (*mcp.CallToolResult, any, error) {
-		days := clampDays(input.Days, 7, 365)
+		days := clampInt(input.Days, 7, 365)
 		readiness, err := queryTrainingReadiness(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
