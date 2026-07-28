@@ -8,6 +8,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// boolPtr returns a pointer to b, for optional *bool fields like ToolAnnotations.DestructiveHint.
+func boolPtr(b bool) *bool { return &b }
+
 // clampInt returns def when n <= 0, otherwise n clamped to max.
 func clampInt(n, def, max int) int {
 	if n <= 0 {

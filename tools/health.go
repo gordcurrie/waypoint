@@ -16,8 +16,10 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "get_daily_stats",
-		Description: "Return daily Garmin stats: steps, resting HR, body battery, stress, and intensity minutes.",
+		Name:  "get_daily_stats",
+		Title: "Daily Stats",
+		Description: "Return daily Garmin stats: steps, resting HR, body battery, stress, and intensity minutes. " +
+			"For sleep, HRV, and respiration detail (also daily) see get_sleep_summary, get_hrv_trend, and get_respiration.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 7, 365)
@@ -29,8 +31,11 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 	})
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "get_sleep_summary",
-		Description: "Return recent sleep data: duration, stages, sleep score, HRV, and SpO2.",
+		Name:  "get_sleep_summary",
+		Title: "Sleep Summary",
+		Description: "Return recent sleep data: duration, stages, sleep score, SpO2, breathing rate, and stress. " +
+			"Garmin's sleep API reports no HRV data — for HRV use get_hrv_trend. " +
+			"Feeds into get_training_readiness.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 7, 365)
@@ -46,8 +51,10 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "get_hrv_trend",
-		Description: "Return HRV trend: weekly average, last-night reading, and status over time.",
+		Name:  "get_hrv_trend",
+		Title: "HRV Trend",
+		Description: "Return HRV trend: weekly average, last-night reading, and status over time. " +
+			"Feeds into get_training_readiness's HRV status; get_sleep_summary does not include HRV.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input hrvInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 14, 365)
@@ -59,8 +66,10 @@ func registerHealthTools(s *mcp.Server, client influxClient) {
 	})
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "get_respiration",
-		Description: "Return daily respiration data: waking, sleep, highest, and lowest breaths per minute.",
+		Name:  "get_respiration",
+		Title: "Respiration",
+		Description: "Return daily respiration data: waking, sleep, highest, and lowest breaths per minute. " +
+			"Separate from get_sleep_summary's single avg_breathing_rate — this breaks it out by waking/sleep/high/low.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input daysInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 7, 365)

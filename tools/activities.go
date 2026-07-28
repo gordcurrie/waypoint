@@ -32,8 +32,10 @@ func registerActivityTools(s *mcp.Server, client influxClient) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "get_recent_activities",
-		Description: "Return recent Garmin activities including distance, duration, heart rate, and training load.",
+		Name:  "get_recent_activities",
+		Title: "Recent Activities",
+		Description: "Return recent Garmin activities including distance, duration, heart rate, and training load. " +
+			"Each activity's activity_id can be passed to get_activity_splits (per-lap detail) or get_activity_hr_zones (time in HR zone) for a deeper look at one activity.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input listActivitiesInput) (*mcp.CallToolResult, any, error) {
 		limit := input.Limit
@@ -62,8 +64,10 @@ func registerActivityTools(s *mcp.Server, client influxClient) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "get_weekly_volume",
-		Description: "Return total distance, duration, and training load per sport per week.",
+		Name:  "get_weekly_volume",
+		Title: "Weekly Training Volume",
+		Description: "Return total distance, duration, and training load per sport per week — a rollup across activities, not per-activity detail. " +
+			"For raw per-activity numbers use get_recent_activities; for a fitness-trend read on the same underlying data use get_training_load.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input weeklyVolumeInput) (*mcp.CallToolResult, any, error) {
 		weeks := input.Weeks
@@ -86,7 +90,7 @@ func queryActivities(ctx context.Context, client influxClient, days, limit int, 
 	if sport != "" && !validSport.MatchString(sport) {
 		return nil, fmt.Errorf("get_recent_activities: invalid sport %q — use lowercase letters, digits, and underscores only", sport)
 	}
-	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
+	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -days)
 
 	sportClause := ""
 	if sport != "" {
@@ -111,7 +115,7 @@ func queryActivities(ctx context.Context, client influxClient, days, limit int, 
 }
 
 func queryWeeklyVolume(ctx context.Context, client influxClient, weeks int) ([]WeeklyVolume, error) {
-	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -weeks*7)
+	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -weeks*7)
 
 	sql := fmt.Sprintf(
 		"SELECT * FROM %s WHERE time >= '%s' AND training_load IS NOT NULL ORDER BY time ASC",
