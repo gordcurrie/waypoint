@@ -44,11 +44,14 @@ func registerTrainingTools(s *mcp.Server, client influxClient) {
 			"and TSB (training stress balance = CTL - ATL) from activity data. This is computed on demand, not a " +
 			"Garmin-reported field — for Garmin's own status assessment see get_training_status. " +
 			"Set write_back=true to also persist results to InfluxDB for Grafana; the tool always returns the computed values regardless.",
-		// write_back=true performs an additive, idempotent write (same window recomputed
-		// and overwritten) — not a destructive delete/mutate, so DestructiveHint stays default-false-equivalent
-		// by being explicit here rather than leaving Annotations unset (which defaults every hint to the
-		// conservative/destructive assumption per MCP spec).
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: boolPtr(false), IdempotentHint: true},
+		// write_back=true performs an additive write (new points, no delete/mutate of
+		// unrelated data) — not destructive, so DestructiveHint is explicit here rather
+		// than left unset (which defaults to the conservative/destructive assumption per
+		// MCP spec). IdempotentHint is left at its false default: repeated calls land on
+		// the same InfluxDB points, but whether same-timestamp writes overwrite-in-place
+		// vs. behave otherwise isn't verified for InfluxDB 3 Core specifically, so this
+		// doesn't advertise a retry-safety guarantee it hasn't confirmed.
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: boolPtr(false)},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input trainingLoadInput) (*mcp.CallToolResult, any, error) {
 		windowDays := input.WindowDays
 		if windowDays <= 0 {
