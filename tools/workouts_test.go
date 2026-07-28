@@ -27,7 +27,7 @@ func callCreateWorkout(t *testing.T, args map[string]any) *mcp.CallToolResult {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "create_workout", Arguments: args})
 	if err != nil {

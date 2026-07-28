@@ -26,7 +26,7 @@ func TestSearchExercisesTool_ReturnsResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "search_exercises",
