@@ -868,8 +868,8 @@ def _build_garmin_step(
         target_val2: float | None = float(hr_zone)
     elif step["type"] == "rest":
         # Real Garmin rest steps serialize targetType as null, not the explicit
-        # no.target object exercise-performing steps get (confirmed against the
-        # captured fixture — see sync/tests/fixtures/workout_1646566436.json).
+        # no.target object exercise-performing steps get (confirmed against a
+        # captured real hand-built strength workout).
         target_type = None
         target_val1 = None
         target_val2 = None
@@ -909,10 +909,10 @@ def _build_garmin_repeat_group(
     group membership.
 
     Scope limit: only ever builds one [exercise, rest] pair — Garmin's real format
-    also supports multi-exercise supersets (the captured fixture,
-    sync/tests/fixtures/workout_1646566436.json, has groups with two alternating
-    exercises), but WorkoutStep/create_workout don't model that; adding it would need
-    changes to the queue schema and validation, not just this function.
+    also supports multi-exercise supersets (a captured real hand-built workout had
+    groups with two alternating exercises), but WorkoutStep/create_workout don't
+    model that; adding it would need changes to the queue schema and validation,
+    not just this function.
 
     Returns (repeat_group_dto, next_order, next_group_index) so the caller can keep
     threading both counters through subsequent steps.

@@ -231,8 +231,8 @@ useful only as a naming-convention sanity check. Exercise availability can diffe
 account/region and third-party scrapes go stale; verify against your own account.
 
 **RepeatGroupDTO structure** (how Garmin represents "N sets of X"): confirmed against a
-real hand-built workout (`sync/tests/fixtures/workout_1646566436.json`) that `stepOrder`
-is a single running counter across the *entire* step tree — the repeat group node itself
+real hand-built workout that `stepOrder` is a single running counter across the *entire*
+step tree — the repeat group node itself
 consumes one value, then each child consumes the next, with **no reset per group and no
 gaps** before the next sibling. `childStepId` marks group membership (shared by the group
 node and its children, sequential per group in order of appearance, `null` for ungrouped

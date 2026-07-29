@@ -347,9 +347,10 @@ non-negotiable verification rule):
    rather than guess** — need to confirm whether inner steps restart numbering per
    group or use a global counter.
 
-   Fixture: save the already-fetched full JSON for workout `1646566436` as
-   `sync/tests/fixtures/workout_1646566436.json` (real, captured this session, not
-   yet committed anywhere) — golden reference for the builder and its tests.
+   Fixture: the already-fetched full JSON for workout `1646566436` served as the
+   golden reference for the builder and its tests during development. Later removed
+   from the repo (contained real account PII — owner name/profile URLs) once its
+   structural findings were captured in code comments and CLAUDE.md instead.
 
 4. **Testing** — `internal/garmin/exercises/catalog_test.go` (loads, realistic size,
    `Valid`/`Search` behavior), `tools/exercises_test.go` (search tool shape/clamping),

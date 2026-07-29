@@ -1,0 +1,24 @@
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "zoneNumber": {
+        "type": "integer",
+        "description": "Consumed as the zN_s field selector (z1_s..z5_s)."
+      },
+      "secsInZone": {
+        "type": "number",
+        "description": "Consumed as the zN_s value."
+      },
+      "zoneLowBoundary": {
+        "type": "integer"
+      }
+    },
+    "additionalProperties": true
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/activity_hr_zones.schema.json",
+  "title": "Activity HR zones (get_activity_hr_in_timezones)",
+  "description": "Returned by garminconnect's get_activity_hr_in_timezones(activity_id) as a flat list (this account/activity) \u2014 sync_activity_details also handles a {hrTimeInZones: [...]} wrapped shape defensively, not observed live here. Consumed by sync_activity_details (activity_hr_zones measurement).\n\nVerified against: one real running activity, 2026-07-28 (activity_id 23765008303), 5 zones. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

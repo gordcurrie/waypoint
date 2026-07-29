@@ -1,0 +1,104 @@
+{
+  "type": "object",
+  "properties": {
+    "userProfilePk": {
+      "type": "integer"
+    },
+    "hrvSummary": {
+      "type": "object",
+      "properties": {
+        "calendarDate": {
+          "type": "string"
+        },
+        "weeklyAvg": {
+          "type": "integer",
+          "description": "Consumed as weekly_avg_ms."
+        },
+        "lastNightAvg": {
+          "type": "integer",
+          "description": "Consumed as last_night_ms."
+        },
+        "lastNight5MinHigh": {
+          "type": "integer",
+          "description": "Consumed as last_5min_high_ms."
+        },
+        "baseline": {
+          "type": "object",
+          "properties": {
+            "lowUpper": {
+              "type": "integer"
+            },
+            "balancedLow": {
+              "type": "integer"
+            },
+            "balancedUpper": {
+              "type": "integer"
+            },
+            "markerValue": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": true
+        },
+        "status": {
+          "type": "string",
+          "description": "String enum. Observed values: BALANCED, UNBALANCED. POOR is mapped in code (_HRV_STATUS) but not observed live in these samples. Mapped to float for InfluxDB: BALANCED=2.0, UNBALANCED=1.0, POOR=0.0."
+        },
+        "feedbackPhrase": {
+          "type": "string"
+        },
+        "createTimeStamp": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "hrvReadings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "hrvValue": {
+            "type": "integer"
+          },
+          "readingTimeGMT": {
+            "type": "string"
+          },
+          "readingTimeLocal": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "startTimestampGMT": {
+      "type": "string"
+    },
+    "endTimestampGMT": {
+      "type": "string"
+    },
+    "startTimestampLocal": {
+      "type": "string"
+    },
+    "endTimestampLocal": {
+      "type": "string"
+    },
+    "sleepStartTimestampGMT": {
+      "type": "string"
+    },
+    "sleepEndTimestampGMT": {
+      "type": "string"
+    },
+    "sleepStartTimestampLocal": {
+      "type": "string"
+    },
+    "sleepEndTimestampLocal": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/hrv.schema.json",
+  "title": "HRV data (get_hrv_data)",
+  "description": "Returned by garminconnect's get_hrv_data(date). sync_hrv normalizes: raw can be a list or dict at the top level (`item = raw[0] if isinstance(raw, list) else raw`); the fields actually read live under `hrvSummary` OR flat on `item` (`summary = item.get('hrvSummary') or item`) \u2014 this fixture shows the hrvSummary-nested shape live for this account.\n\nVerified against: 2026-07-28 (status UNBALANCED), 2026-07-15 (status BALANCED) \u2014 both dict-shaped (not list), both hrvSummary-nested. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

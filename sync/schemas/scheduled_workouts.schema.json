@@ -1,0 +1,252 @@
+{
+  "type": "object",
+  "properties": {
+    "startDayOfMonth": {
+      "type": "integer"
+    },
+    "numOfDaysInMonth": {
+      "type": "integer"
+    },
+    "numOfDaysInPrevMonth": {
+      "type": "integer"
+    },
+    "month": {
+      "type": "integer"
+    },
+    "year": {
+      "type": "integer"
+    },
+    "calendarItems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "groupId": {
+            "description": "observed null in captured sample"
+          },
+          "trainingPlanId": {
+            "description": "observed null in captured sample"
+          },
+          "itemType": {
+            "type": "string",
+            "description": "Observed values in this account: activity, fbtAdaptiveWorkout, nap, bloodpressure, weight, trainingPlan. fbtAdaptiveWorkout is Garmin's auto-generated adaptive daily suggestion \u2014 has a trainingPlanId but workoutId is still null, so it's correctly skipped by the current filter, not a real user-schedulable workout."
+          },
+          "activityTypeId": {
+            "description": "observed null in captured sample"
+          },
+          "wellnessActivityUuid": {
+            "description": "observed null in captured sample"
+          },
+          "title": {
+            "description": "observed null in captured sample"
+          },
+          "date": {
+            "type": "string",
+            "description": "Consumed as scheduled_date (code also falls back to calendarDate, not observed as a real key in this account's items)."
+          },
+          "duration": {
+            "description": "observed null in captured sample"
+          },
+          "distance": {
+            "description": "observed null in captured sample"
+          },
+          "calories": {
+            "description": "observed null in captured sample"
+          },
+          "floorsClimbed": {
+            "description": "observed null in captured sample"
+          },
+          "avgRespirationRate": {
+            "description": "observed null in captured sample"
+          },
+          "unitOfPoolLength": {
+            "description": "observed null in captured sample"
+          },
+          "weight": {
+            "type": "number"
+          },
+          "difference": {
+            "type": "number"
+          },
+          "courseId": {
+            "description": "observed null in captured sample"
+          },
+          "courseName": {
+            "description": "observed null in captured sample"
+          },
+          "sportTypeKey": {
+            "description": "Consumed as sport tag (code also checks item.sport as an object with typeKey, not observed as a real key in this account's items \u2014 sportTypeKey is the flat string that actually appears)."
+          },
+          "url": {
+            "description": "observed null in captured sample"
+          },
+          "isStart": {
+            "description": "observed null in captured sample"
+          },
+          "isRace": {
+            "description": "observed null in captured sample"
+          },
+          "recurrenceId": {
+            "description": "observed null in captured sample"
+          },
+          "isParent": {
+            "description": "observed null in captured sample"
+          },
+          "parentId": {
+            "description": "observed null in captured sample"
+          },
+          "userBadgeId": {
+            "description": "observed null in captured sample"
+          },
+          "badgeCategoryTypeId": {
+            "description": "observed null in captured sample"
+          },
+          "badgeCategoryTypeDesc": {
+            "description": "observed null in captured sample"
+          },
+          "badgeAwardedDate": {
+            "description": "observed null in captured sample"
+          },
+          "badgeViewed": {
+            "description": "observed null in captured sample"
+          },
+          "hideBadge": {
+            "description": "observed null in captured sample"
+          },
+          "startTimestampLocal": {
+            "description": "observed null in captured sample"
+          },
+          "eventTimeLocal": {
+            "description": "observed null in captured sample"
+          },
+          "diveNumber": {
+            "description": "observed null in captured sample"
+          },
+          "maxDepth": {
+            "description": "observed null in captured sample"
+          },
+          "avgDepth": {
+            "description": "observed null in captured sample"
+          },
+          "surfaceInterval": {
+            "description": "observed null in captured sample"
+          },
+          "elapsedDuration": {
+            "description": "observed null in captured sample"
+          },
+          "lapCount": {
+            "description": "observed null in captured sample"
+          },
+          "bottomTime": {
+            "description": "observed null in captured sample"
+          },
+          "atpPlanId": {
+            "description": "observed null in captured sample"
+          },
+          "workoutId": {
+            "description": "Filter key: sync_scheduled_workouts skips any item where this is null. Always null in both captured months for this account \u2014 no positive example captured yet."
+          },
+          "protectedWorkoutSchedule": {
+            "type": "boolean"
+          },
+          "activeSets": {
+            "description": "observed null in captured sample"
+          },
+          "strokes": {
+            "description": "observed null in captured sample"
+          },
+          "noOfSplits": {
+            "description": "observed null in captured sample"
+          },
+          "maxGradeValue": {
+            "description": "observed null in captured sample"
+          },
+          "totalAscent": {
+            "description": "observed null in captured sample"
+          },
+          "differenceStress": {
+            "description": "observed null in captured sample"
+          },
+          "climbDuration": {
+            "description": "observed null in captured sample"
+          },
+          "maxSpeed": {
+            "description": "observed null in captured sample"
+          },
+          "averageHR": {
+            "description": "observed null in captured sample"
+          },
+          "activeSplitSummaryDuration": {
+            "description": "observed null in captured sample"
+          },
+          "activeSplitSummaryDistance": {
+            "description": "observed null in captured sample"
+          },
+          "maxSplitDistance": {
+            "description": "observed null in captured sample"
+          },
+          "maxDistanceWithPrecision": {
+            "description": "observed null in captured sample"
+          },
+          "maxSplitSpeed": {
+            "description": "observed null in captured sample"
+          },
+          "location": {
+            "description": "observed null in captured sample"
+          },
+          "shareableEventUuid": {
+            "description": "observed null in captured sample"
+          },
+          "splitSummaryMode": {
+            "description": "observed null in captured sample"
+          },
+          "completionTarget": {
+            "description": "observed null in captured sample"
+          },
+          "workoutUuid": {
+            "description": "observed null in captured sample"
+          },
+          "napStartTimeLocal": {
+            "description": "observed null in captured sample"
+          },
+          "beginPackWeight": {
+            "description": "observed null in captured sample"
+          },
+          "hasSplits": {
+            "description": "observed null in captured sample"
+          },
+          "maxPackWeight": {
+            "description": "observed null in captured sample"
+          },
+          "decoDive": {
+            "description": "observed null in captured sample"
+          },
+          "phasedTrainingPlan": {
+            "description": "observed null in captured sample"
+          },
+          "autoCalcCalories": {
+            "description": "observed null in captured sample"
+          },
+          "shareableEvent": {
+            "type": "boolean"
+          },
+          "primaryEvent": {
+            "description": "observed null in captured sample"
+          },
+          "subscribed": {
+            "description": "observed null in captured sample"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/scheduled_workouts.schema.json",
+  "title": "Scheduled workouts calendar (get_scheduled_workouts)",
+  "description": "Returned by garminconnect's get_scheduled_workouts(year, month). Consumed by sync_scheduled_workouts, which filters calendarItems to only those with a non-null workoutId \u2014 this account's captured months had zero such items (all items were itemType activity/fbtAdaptiveWorkout/nap/bloodpressure/weight/trainingPlan, all with workoutId: null). No positive fixture yet for a real scheduled/uploaded workout item (see README gaps).\n\nVerified against: 2026-07 (30 items, 0 with workoutId), 2026-08 (9 items, 0 with workoutId). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

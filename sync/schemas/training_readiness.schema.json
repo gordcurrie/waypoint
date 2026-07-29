@@ -1,0 +1,106 @@
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "userProfilePK": {
+        "type": "integer"
+      },
+      "calendarDate": {
+        "type": "string"
+      },
+      "timestamp": {
+        "type": "string"
+      },
+      "timestampLocal": {
+        "type": "string"
+      },
+      "deviceId": {
+        "type": "integer"
+      },
+      "level": {
+        "type": "string"
+      },
+      "feedbackLong": {
+        "type": "string"
+      },
+      "feedbackShort": {
+        "type": "string"
+      },
+      "score": {
+        "type": "integer",
+        "description": "Consumed as score."
+      },
+      "sleepScore": {
+        "type": "integer",
+        "description": "Consumed as sleep_score."
+      },
+      "sleepScoreFactorPercent": {
+        "type": "integer"
+      },
+      "sleepScoreFactorFeedback": {
+        "type": "string"
+      },
+      "recoveryTime": {
+        "type": "integer",
+        "description": "Unit: MINUTES. sync.py's recovery_time_h field divides by 60 to store hours (CLAUDE.md unit-quirk table)."
+      },
+      "recoveryTimeFactorPercent": {
+        "type": "integer"
+      },
+      "recoveryTimeFactorFeedback": {
+        "type": "string"
+      },
+      "acwrFactorPercent": {
+        "type": "integer",
+        "description": "Consumed directly as acw_pct (no conversion \u2014 matches the acwrFactorPercent name/unit exactly)."
+      },
+      "acwrFactorFeedback": {
+        "type": "string"
+      },
+      "acuteLoad": {
+        "type": "integer"
+      },
+      "stressHistoryFactorPercent": {
+        "type": "integer"
+      },
+      "stressHistoryFactorFeedback": {
+        "type": "string"
+      },
+      "hrvFactorPercent": {
+        "type": "integer",
+        "description": "NOT currently consumed. sync.py incorrectly reads a nonexistent 'hrvStatus' key expecting a BALANCED/UNBALANCED/POOR enum (see bug #58) \u2014 this field and hrvFactorFeedback are the real HRV-related data here, but they're a 0-100 contribution score + feedback phrase (e.g. \"GOOD\"), not that enum. That enum lives in get_hrv_data instead (already correctly synced separately as hrv.status)."
+      },
+      "hrvFactorFeedback": {
+        "type": "string",
+        "description": "String, observed value: GOOD. Shares vocabulary with other *FactorFeedback fields (acwrFactorFeedback, recoveryTimeFactorFeedback, sleepHistoryFactorFeedback, stressHistoryFactorFeedback) \u2014 full enum range unconfirmed from a single sample. See bug #58."
+      },
+      "hrvWeeklyAverage": {
+        "type": "integer"
+      },
+      "sleepHistoryFactorPercent": {
+        "type": "integer"
+      },
+      "sleepHistoryFactorFeedback": {
+        "type": "string"
+      },
+      "validSleep": {
+        "type": "boolean"
+      },
+      "inputContext": {
+        "type": "string"
+      },
+      "primaryActivityTracker": {
+        "type": "boolean"
+      },
+      "recoveryTimeChangePhrase": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": true
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/training_readiness.schema.json",
+  "title": "Training readiness (get_training_readiness)",
+  "description": "Returned by garminconnect's get_training_readiness(date) as a list (single-element in samples observed). Consumed by sync_training_readiness.\n\nVerified against: 2026-07-24 (activity day), 2026-07-25 (rest day). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}
