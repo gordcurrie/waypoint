@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/vo2max.schema.json",
+  "title": "Shared VO2max/acclimation shape",
+  "description": "get_max_metrics's per-item 'generic'/'heatAltitudeAcclimation' objects and get_training_status's mostRecentVO2Max.generic/heatAltitudeAcclimation are the same underlying Garmin object, returned by two different endpoints. Defined once here and referenced via $ref from performance.schema.json and training_status.schema.json so the two don't drift independently.",
+  "$defs": {
+    "generic": {
+      "type": "object",
+      "properties": {
+        "calendarDate": {
+          "type": "string"
+        },
+        "vo2MaxPreciseValue": {
+          "type": "number"
+        },
+        "vo2MaxValue": {
+          "type": "number"
+        },
+        "fitnessAge": {
+          "description": "Observed null in captured samples."
+        },
+        "fitnessAgeDescription": {
+          "description": "observed null in captured sample"
+        },
+        "maxMetCategory": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "heatAltitudeAcclimation": {
+      "type": "object",
+      "properties": {
+        "calendarDate": {
+          "type": "string"
+        },
+        "altitudeAcclimationDate": {
+          "type": "string"
+        },
+        "previousAltitudeAcclimationDate": {
+          "type": "string"
+        },
+        "heatAcclimationDate": {
+          "type": "string"
+        },
+        "previousHeatAcclimationDate": {
+          "type": "string"
+        },
+        "altitudeAcclimation": {
+          "type": "integer"
+        },
+        "previousAltitudeAcclimation": {
+          "type": "integer"
+        },
+        "heatAcclimationPercentage": {
+          "type": "integer"
+        },
+        "previousHeatAcclimationPercentage": {
+          "type": "integer"
+        },
+        "heatTrend": {
+          "type": "string"
+        },
+        "altitudeTrend": {
+          "description": "observed null in captured sample"
+        },
+        "currentAltitude": {
+          "type": "integer"
+        },
+        "previousAltitude": {
+          "type": "integer"
+        },
+        "acclimationPercentage": {
+          "type": "integer"
+        },
+        "previousAcclimationPercentage": {
+          "type": "integer"
+        },
+        "altitudeAcclimationLocalTimestamp": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

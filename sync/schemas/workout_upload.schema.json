@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/workout_upload.schema.json",
+  "title": "Workout upload request body (garmin.upload_workout)",
+  "description": "Shape of the body sync_pending_workouts (sync/sync.py, _build_garmin_workout/_build_garmin_step/_build_garmin_repeat_group) sends to garminconnect's upload_workout. Unlike the other schemas in this directory, this isn't derived from a currently-committed fixture — it documents the confirmed-correct structure that a real captured hand-built workout (sync/tests/fixtures/workout_1646566436.json) verified during development, before that fixture was removed for containing real account PII (ownerId, author.userProfilePk). The structural facts below (stepOrder as a single running counter, childStepId grouping, explicit-null serialization, rest-step targetType) are still true and load-bearing for _build_garmin_workout/_build_garmin_repeat_group — see CLAUDE.md's 'RepeatGroupDTO structure' section.\n\nThis is a request-body schema, not a response schema — it covers only the fields sync.py constructs and sends, not the additional server-assigned fields (author, timestamps, ownerId, etc.) a GET on the resulting workout would return.",
+  "type": "object",
+  "properties": {
+    "workoutId": {
+      "description": "Always null on upload — Garmin assigns this and returns it in the response."
+    },
+    "ownerId": {
+      "description": "Always null on upload — Garmin assigns this from the authenticated session."
+    },
+    "workoutName": {
+      "type": "string"
+    },
+    "description": {
+      "description": "Always null — not currently settable via create_workout."
+    },
+    "sportType": {
+      "$ref": "#/$defs/sportType"
+    },
+    "workoutSegments": {
+      "type": "array",
+      "description": "sync.py always emits exactly one segment.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "segmentOrder": {
+            "const": 1
+          },
+          "sportType": {
+            "$ref": "#/$defs/sportType"
+          },
+          "workoutSteps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/workoutStep"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sportType": {
+      "type": "object",
+      "description": "One of the verified {sportTypeId, sportTypeKey} pairs in CLAUDE.md's 'Garmin workout-service sport/step type IDs' table (running=1, cycling=2, swimming=4, strength_training=5). Both id and key must match Garmin's own mapping — a mismatched pair is silently resolved by id, mislabeling the workout (see the strength_training=13/swimming=5 bug this table exists to prevent).",
+      "properties": {
+        "sportTypeId": {
+          "type": "integer"
+        },
+        "sportTypeKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "stepType": {
+      "type": "object",
+      "description": "One of the verified {stepTypeId, stepTypeKey} pairs in CLAUDE.md (warmup=1, cooldown=2, interval=3, recovery=4, rest=5, repeat=6, other=7). rest/repeat are internal-only — synthesized by _build_garmin_repeat_group, never read from a user-supplied step type.",
+      "properties": {
+        "stepTypeId": {
+          "type": "integer"
+        },
+        "stepTypeKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "endCondition": {
+      "type": "object",
+      "description": "Selected by which of duration_s/distance_m/reps is present on the source step, in that priority order. Falls back to lap.button (manual) if none are set.",
+      "properties": {
+        "conditionTypeId": {
+          "enum": [1, 2, 3, 10]
+        },
+        "conditionTypeKey": {
+          "enum": ["lap.button", "time", "distance", "reps"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "targetType": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "Real Garmin rest steps serialize targetType as null — confirmed against a captured real hand-built strength workout. _build_garmin_step emits null here whenever the source step's type is \"rest\" and no explicit HR zone target is set."
+        },
+        {
+          "type": "object",
+          "description": "heart.rate.zone when a target_hr_zone is set on the source step; no.target (still an explicit object, not null/omitted) for every other non-rest step.",
+          "properties": {
+            "workoutTargetTypeId": {
+              "enum": [1, 4]
+            },
+            "workoutTargetTypeKey": {
+              "enum": ["no.target", "heart.rate.zone"]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "executableStep": {
+      "type": "object",
+      "title": "ExecutableStepDTO",
+      "properties": {
+        "type": {
+          "const": "ExecutableStepDTO"
+        },
+        "stepOrder": {
+          "type": "integer",
+          "description": "A single running counter across the ENTIRE step tree, confirmed against a captured real workout — not reset per repeat group, and the repeat group node itself consumes one value before its children. No gaps between siblings."
+        },
+        "stepType": {
+          "$ref": "#/$defs/stepType"
+        },
+        "childStepId": {
+          "description": "Integer group-membership marker, shared by a RepeatGroupDTO node and its children (sequential per group in order of appearance); null for steps outside any repeat group."
+        },
+        "endCondition": {
+          "$ref": "#/$defs/endCondition"
+        },
+        "endConditionValue": {
+          "description": "float matching the chosen end condition's unit (seconds/meters/rep count), or null for lap.button."
+        },
+        "targetType": {
+          "$ref": "#/$defs/targetType"
+        },
+        "targetValueOne": {
+          "description": "HR zone number (both targetValueOne and targetValueTwo set to the same value) when targetType is heart.rate.zone; null otherwise."
+        },
+        "targetValueTwo": {
+          "description": "See targetValueOne."
+        },
+        "category": {
+          "description": "Exercise catalog category (e.g. \"BENCH_PRESS\") for strength steps — see internal/garmin/exercises/catalog.json. Real Garmin workouts serialize this as an explicit null when unset, not an omitted key — confirmed against a captured real workout; _build_garmin_step always emits the key."
+        },
+        "exerciseName": {
+          "description": "Exercise catalog exercise_name (e.g. \"BARBELL_BENCH_PRESS\") paired with category. Same explicit-null convention as category."
+        },
+        "description": {
+          "description": "Same explicit-null convention as category/exerciseName. Not currently settable via create_workout (always null)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "repeatGroup": {
+      "type": "object",
+      "title": "RepeatGroupDTO",
+      "description": "Wraps one [exercise, rest] pair, repeated `sets` times. Scope limit in _build_garmin_repeat_group: only ever one exercise+rest pair per group — Garmin's real format also supports multi-exercise supersets (a captured real workout had groups with two alternating exercises before a rest), but WorkoutStep/create_workout don't model that.",
+      "properties": {
+        "type": {
+          "const": "RepeatGroupDTO"
+        },
+        "stepOrder": {
+          "type": "integer",
+          "description": "The group node itself consumes one stepOrder value before its children — see executableStep.stepOrder."
+        },
+        "stepType": {
+          "const": {
+            "stepTypeId": 6,
+            "stepTypeKey": "repeat"
+          }
+        },
+        "childStepId": {
+          "type": "integer",
+          "description": "Shared by this group node and both its children."
+        },
+        "numberOfIterations": {
+          "type": "integer",
+          "description": "Set count. Must equal endConditionValue — redundant-looking, but both are required by Garmin."
+        },
+        "workoutSteps": {
+          "type": "array",
+          "description": "Always exactly [exercise step, rest step], in that order.",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/executableStep"
+          }
+        },
+        "endCondition": {
+          "const": {
+            "conditionTypeId": 7,
+            "conditionTypeKey": "iterations"
+          }
+        },
+        "endConditionValue": {
+          "type": "number",
+          "description": "Must equal numberOfIterations."
+        }
+      },
+      "additionalProperties": false
+    },
+    "workoutStep": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/executableStep"
+        },
+        {
+          "$ref": "#/$defs/repeatGroup"
+        }
+      ]
+    }
+  }
+}
