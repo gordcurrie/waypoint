@@ -36,12 +36,12 @@ Not currently consumed by any sync field — re-verify before relying on this no
    validation against live output isn't wired up yet (#55), so still confirm live for
    anything new or if drift is suspected.
 2. Run the live capture helper:
-```bash
-docker exec waypoint-sync-1 python3 /app/inspect_api.py <method> <date>
-# Examples:
-docker exec waypoint-sync-1 python3 /app/inspect_api.py get_training_readiness 2026-07-24
-docker exec waypoint-sync-1 python3 /app/inspect_api.py get_sleep_data 2026-07-24
-```
+   ```bash
+   docker exec waypoint-sync-1 python3 /app/inspect_api.py <method> <date>
+   # Examples:
+   docker exec waypoint-sync-1 python3 /app/inspect_api.py get_training_readiness 2026-07-24
+   docker exec waypoint-sync-1 python3 /app/inspect_api.py get_sleep_data 2026-07-24
+   ```
 3. Identify exact field names, nesting, and types from the real response
 4. Include the actual response shape as a comment in the sync function (see `sync_training_status` for the pattern)
 5. Do not commit the raw captured response as a fixture — it contains real account PII
