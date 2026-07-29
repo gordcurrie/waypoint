@@ -137,6 +137,13 @@ Or run the individual Go/Python commands directly — see `Makefile` for the ful
 
 CI runs all checks on every push/PR to `main` via `.github/workflows/ci.yml`.
 
+### Regenerating the exercise catalog
+
+`internal/garmin/exercises/catalog.json` (used by `create_workout`/`search_exercises`)
+is vendored from Garmin's workout-editor UI, not a documented API — see the docstring
+in `scripts/generate_exercise_catalog.py` for the exact capture steps if it needs
+refreshing.
+
 ## Deployment (homelab)
 
 ```bash
