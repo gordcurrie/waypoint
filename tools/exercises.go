@@ -16,7 +16,8 @@ func registerExerciseTools(s *mcp.Server) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "search_exercises",
+		Name:  "search_exercises",
+		Title: "Search Exercise Catalog",
 		Description: "Search Garmin Connect's exercise catalog for valid category/exercise_name pairs. " +
 			"Always call this before setting category/exercise_name on a create_workout strength step — " +
 			"free-text guesses will be rejected since only real Garmin catalog entries are accepted.",

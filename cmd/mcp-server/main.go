@@ -21,6 +21,21 @@ import (
 
 var version = "dev"
 
+// serverInstructions is sent to clients on initialize, giving a cold-start
+// overview of what data is available and how tools relate to each other —
+// most MCP clients surface this automatically without an extra round-trip,
+// unlike a resource or prompt the client would have to fetch explicitly.
+const serverInstructions = `Waypoint exposes mostly read-only Garmin Connect fitness data (synced to InfluxDB). Two tools have side effects: create_workout always queues a workout for upload, and get_training_load writes computed results back to InfluxDB only when called with write_back=true.
+
+Data domains and their tools:
+- Activities: get_recent_activities (list), get_weekly_volume (aggregated by sport/week). Use an activity's activity_id from get_recent_activities with get_activity_splits (per-lap) and get_activity_hr_zones (time in HR zone) for detail on one activity.
+- Daily health: get_daily_stats (steps, resting HR, body battery, stress), get_sleep_summary, get_hrv_trend, get_respiration.
+- Training status: get_training_status (Garmin's own overreaching/peaking status + VO2max), get_training_readiness (day-to-day readiness score, informed by HRV/sleep — see get_hrv_trend/get_sleep_summary for the underlying detail), get_training_load (computed ATL/CTL/TSB from activity data, not a Garmin field; write_back=true persists it).
+- Longer-term fitness: get_performance_trend (VO2max/fitness age over months), get_lactate_threshold.
+- Workouts: get_scheduled_workouts (check the calendar before scheduling to avoid conflicts) and create_workout (queues a workout for upload on the next sync run). For any strength_training step, call search_exercises first to get a valid category/exercise_name pair — free-text guesses are rejected.
+
+When in doubt about which tool answers "what training data exists for date X", start with get_recent_activities and get_daily_stats — most other tools narrow or aggregate from there.`
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("fatal", "err", err)
@@ -41,7 +56,9 @@ func run() error {
 	}
 	defer func() { _ = client.Close() }()
 
-	s := mcp.NewServer(&mcp.Implementation{Name: "waypoint", Version: version}, nil)
+	s := mcp.NewServer(&mcp.Implementation{Name: "waypoint", Version: version}, &mcp.ServerOptions{
+		Instructions: serverInstructions,
+	})
 	tools.RegisterAll(s, client, dataDir)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

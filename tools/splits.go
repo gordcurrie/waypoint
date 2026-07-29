@@ -17,6 +17,7 @@ func registerSplitTools(s *mcp.Server, client influxClient) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "get_activity_splits",
+		Title:       "Activity Splits",
 		Description: "Return per-lap split data for a specific activity: distance, duration, average speed, heart rate, cadence, and power per lap.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input activityDetailInput) (*mcp.CallToolResult, any, error) {
@@ -32,6 +33,7 @@ func registerSplitTools(s *mcp.Server, client influxClient) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "get_activity_hr_zones",
+		Title:       "Activity HR Zones",
 		Description: "Return heart rate zone distribution for a specific activity. Fields z1_s through z5_s report seconds in each zone; zones with zero seconds are omitted. Use alongside get_activity_splits to understand aerobic vs threshold intensity.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input activityDetailInput) (*mcp.CallToolResult, any, error) {

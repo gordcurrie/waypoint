@@ -65,7 +65,8 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "get_scheduled_workouts",
-		Description: "Return workouts scheduled on the Garmin calendar for the next N days (default 14). Use before creating new workouts to avoid scheduling conflicts.",
+		Title:       "Scheduled Workouts",
+		Description: "Return workouts scheduled on the Garmin calendar for the next N days (default 14). Use before create_workout to avoid scheduling conflicts.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input scheduledWorkoutsInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 14, 60)
@@ -83,12 +84,17 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "create_workout",
+		Name:  "create_workout",
+		Title: "Create Workout",
 		Description: "Queue a structured workout for upload to Garmin Connect. The Python sidecar uploads it on the next sync run (every 30 minutes by default; set via SYNC_SCHEDULE). Requires --data-dir pointing to the shared sync volume. Returns the queue ID. " +
+			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
 			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. " +
 			"Optional target: target_hr_zone (1–5).",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false},
+		// Queues a new item onto the shared file — additive, not destructive (nothing is
+		// overwritten or deleted), and each call creates a distinct queue entry so it's not
+		// idempotent. Explicit because the SDK defaults DestructiveHint to true when unset.
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: boolPtr(false)},
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input createWorkoutInput) (*mcp.CallToolResult, any, error) {
 		if input.Name == "" {
 			return errorResult(fmt.Errorf("name is required"))

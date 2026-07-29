@@ -16,9 +16,11 @@ func registerFitnessTools(s *mcp.Server, client influxClient) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "get_performance_trend",
+		Name:  "get_performance_trend",
+		Title: "Performance Trend (VO2max/Fitness Age)",
 		Description: "Return VO2max and Garmin fitness age over time from the performance measurement. " +
-			"Trend is only meaningful over longer windows; default lookback is 90 days.",
+			"Trend is only meaningful over longer windows; default lookback is 90 days. " +
+			"get_training_status also reports current VO2max/fitness age as a snapshot — use this tool for the trend instead.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input performanceTrendInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 90, 365)
@@ -34,7 +36,8 @@ func registerFitnessTools(s *mcp.Server, client influxClient) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "get_lactate_threshold",
+		Name:  "get_lactate_threshold",
+		Title: "Lactate Threshold",
 		Description: "Return lactate threshold heart rate and pace over time from the lactate_threshold measurement. " +
 			"Trend is only meaningful over longer windows; default lookback is 90 days. " +
 			"Caveat: lt_pace_s_per_km's unit conversion (s/m to s/km) has not been verified against a real " +
