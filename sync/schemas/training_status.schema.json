@@ -1,0 +1,317 @@
+{
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "integer"
+    },
+    "mostRecentVO2Max": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "integer"
+        },
+        "generic": {
+          "type": "object",
+          "properties": {
+            "calendarDate": {
+              "type": "string"
+            },
+            "vo2MaxPreciseValue": {
+              "type": "number",
+              "description": "Consumed as vo2max_running (path: mostRecentVO2Max.generic.vo2MaxPreciseValue)."
+            },
+            "vo2MaxValue": {
+              "type": "number"
+            },
+            "fitnessAge": {
+              "description": "Consumed as fitness_age. Observed null in this sample."
+            },
+            "fitnessAgeDescription": {
+              "description": "observed null in captured sample"
+            },
+            "maxMetCategory": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": true
+        },
+        "cycling": {
+          "description": "Consumed as vo2max_cycling when non-null (path: mostRecentVO2Max.cycling.vo2MaxPreciseValue) \u2014 observed null in this sample (no cycling VO2max data for this account/date)."
+        },
+        "heatAltitudeAcclimation": {
+          "type": "object",
+          "properties": {
+            "calendarDate": {
+              "type": "string"
+            },
+            "altitudeAcclimationDate": {
+              "type": "string"
+            },
+            "previousAltitudeAcclimationDate": {
+              "type": "string"
+            },
+            "heatAcclimationDate": {
+              "type": "string"
+            },
+            "previousHeatAcclimationDate": {
+              "type": "string"
+            },
+            "altitudeAcclimation": {
+              "type": "integer"
+            },
+            "previousAltitudeAcclimation": {
+              "type": "integer"
+            },
+            "heatAcclimationPercentage": {
+              "type": "integer"
+            },
+            "previousHeatAcclimationPercentage": {
+              "type": "integer"
+            },
+            "heatTrend": {
+              "type": "string"
+            },
+            "altitudeTrend": {
+              "description": "observed null in captured sample"
+            },
+            "currentAltitude": {
+              "type": "integer"
+            },
+            "previousAltitude": {
+              "type": "integer"
+            },
+            "acclimationPercentage": {
+              "type": "integer"
+            },
+            "previousAcclimationPercentage": {
+              "type": "integer"
+            },
+            "altitudeAcclimationLocalTimestamp": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "mostRecentTrainingLoadBalance": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "integer"
+        },
+        "metricsTrainingLoadBalanceDTOMap": {
+          "type": "object",
+          "additionalProperties": true,
+          "patternProperties": {
+            "^[0-9]+$": {
+              "type": "object",
+              "properties": {
+                "calendarDate": {
+                  "type": "string"
+                },
+                "deviceId": {
+                  "type": "integer"
+                },
+                "monthlyLoadAerobicLow": {
+                  "type": "number"
+                },
+                "monthlyLoadAerobicHigh": {
+                  "type": "number"
+                },
+                "monthlyLoadAnaerobic": {
+                  "type": "number"
+                },
+                "monthlyLoadAerobicLowTargetMin": {
+                  "type": "integer"
+                },
+                "monthlyLoadAerobicLowTargetMax": {
+                  "type": "integer"
+                },
+                "monthlyLoadAerobicHighTargetMin": {
+                  "type": "integer"
+                },
+                "monthlyLoadAerobicHighTargetMax": {
+                  "type": "integer"
+                },
+                "monthlyLoadAnaerobicTargetMin": {
+                  "type": "integer"
+                },
+                "monthlyLoadAnaerobicTargetMax": {
+                  "type": "integer"
+                },
+                "trainingBalanceFeedbackPhrase": {
+                  "type": "string"
+                },
+                "primaryTrainingDevice": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "description": "Keyed by deviceId as a string (e.g. \"DEVICE_ID\") \u2014 device-keyed dict, not a fixed set of properties. Represented with patternProperties matching any numeric device ID."
+        },
+        "recordedDevices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "deviceId": {
+                "type": "integer"
+              },
+              "imageURL": {
+                "type": "string"
+              },
+              "deviceName": {
+                "type": "string"
+              },
+              "category": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "mostRecentTrainingStatus": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "integer"
+        },
+        "latestTrainingStatusData": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Keyed by deviceId as a string (e.g. \"DEVICE_ID\"), not a fixed schema. Represented with patternProperties matching any numeric device ID. CLAUDE.md quirk: code must iterate .values() and pick the entry with primaryTrainingDevice=true \u2014 there's no guarantee the primary device is the only or first key.",
+          "patternProperties": {
+            "^[0-9]+$": {
+              "type": "object",
+              "properties": {
+                "calendarDate": {
+                  "type": "string"
+                },
+                "sinceDate": {
+                  "type": "string"
+                },
+                "weeklyTrainingLoad": {
+                  "description": "observed null in captured sample"
+                },
+                "trainingStatus": {
+                  "type": "integer"
+                },
+                "timestamp": {
+                  "type": "integer"
+                },
+                "deviceId": {
+                  "type": "integer"
+                },
+                "loadTunnelMin": {
+                  "description": "observed null in captured sample"
+                },
+                "loadTunnelMax": {
+                  "description": "observed null in captured sample"
+                },
+                "loadLevelTrend": {
+                  "description": "observed null in captured sample"
+                },
+                "sport": {
+                  "type": "string"
+                },
+                "subSport": {
+                  "type": "string"
+                },
+                "fitnessTrendSport": {
+                  "type": "string"
+                },
+                "fitnessTrend": {
+                  "type": "integer"
+                },
+                "trainingStatusFeedbackPhrase": {
+                  "type": "string",
+                  "description": "String like \"PRODUCTIVE_2\" \u2014 code lowercases and matches by startswith against a name->float map (peaking/maintaining/productive/recovery/detraining/overreaching), consumed as status_num."
+                },
+                "trainingPaused": {
+                  "type": "boolean"
+                },
+                "acuteTrainingLoadDTO": {
+                  "type": "object",
+                  "properties": {
+                    "acwrPercent": {
+                      "type": "integer"
+                    },
+                    "acwrStatus": {
+                      "type": "string"
+                    },
+                    "acwrStatusFeedback": {
+                      "type": "string"
+                    },
+                    "dailyTrainingLoadAcute": {
+                      "type": "integer"
+                    },
+                    "maxTrainingLoadChronic": {
+                      "type": "number"
+                    },
+                    "minTrainingLoadChronic": {
+                      "type": "number"
+                    },
+                    "dailyTrainingLoadChronic": {
+                      "type": "integer"
+                    },
+                    "dailyAcuteChronicWorkloadRatio": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "primaryTrainingDevice": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "recordedDevices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "deviceId": {
+                "type": "integer"
+              },
+              "imageURL": {
+                "description": "observed null in captured sample"
+              },
+              "deviceName": {
+                "type": "string"
+              },
+              "category": {
+                "description": "observed null in captured sample"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "showSelector": {
+          "type": "boolean"
+        },
+        "lastPrimarySyncDate": {
+          "description": "observed null in captured sample"
+        }
+      },
+      "additionalProperties": true
+    },
+    "heatAltitudeAcclimationDTO": {
+      "description": "observed null in captured sample"
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/training_status.schema.json",
+  "title": "Training status (get_training_status)",
+  "description": "Returned by garminconnect's get_training_status(date). Consumed by sync_training_status. Device-keyed nesting confirmed live: mostRecentTrainingStatus.latestTrainingStatusData is keyed by deviceId (string), not a flat dict \u2014 code must iterate .values() and pick the entry with primaryTrainingDevice=true.\n\nVerified against: 2026-07-24. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

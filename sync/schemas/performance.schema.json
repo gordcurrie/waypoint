@@ -1,0 +1,98 @@
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "userId": {
+        "type": "integer"
+      },
+      "generic": {
+        "type": "object",
+        "properties": {
+          "calendarDate": {
+            "type": "string"
+          },
+          "vo2MaxPreciseValue": {
+            "type": "number",
+            "description": "Consumed as vo2max."
+          },
+          "vo2MaxValue": {
+            "type": "number"
+          },
+          "fitnessAge": {
+            "description": "Consumed as fitness_age. Observed null in this sample."
+          },
+          "fitnessAgeDescription": {
+            "description": "observed null in captured sample"
+          },
+          "maxMetCategory": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "cycling": {
+        "description": "observed null in captured sample"
+      },
+      "heatAltitudeAcclimation": {
+        "type": "object",
+        "properties": {
+          "calendarDate": {
+            "type": "string"
+          },
+          "altitudeAcclimationDate": {
+            "type": "string"
+          },
+          "previousAltitudeAcclimationDate": {
+            "type": "string"
+          },
+          "heatAcclimationDate": {
+            "type": "string"
+          },
+          "previousHeatAcclimationDate": {
+            "type": "string"
+          },
+          "altitudeAcclimation": {
+            "type": "integer"
+          },
+          "previousAltitudeAcclimation": {
+            "type": "integer"
+          },
+          "heatAcclimationPercentage": {
+            "type": "integer"
+          },
+          "previousHeatAcclimationPercentage": {
+            "type": "integer"
+          },
+          "heatTrend": {
+            "type": "string"
+          },
+          "altitudeTrend": {
+            "description": "observed null in captured sample"
+          },
+          "currentAltitude": {
+            "type": "integer"
+          },
+          "previousAltitude": {
+            "type": "integer"
+          },
+          "acclimationPercentage": {
+            "type": "integer"
+          },
+          "previousAcclimationPercentage": {
+            "type": "integer"
+          },
+          "altitudeAcclimationLocalTimestamp": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "additionalProperties": true
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/performance.schema.json",
+  "title": "Performance / max metrics (get_max_metrics)",
+  "description": "Returned by garminconnect's get_max_metrics(date) as a list, despite the garminconnect type hint claiming dict. Consumed by sync_performance. IMPORTANT: returns an empty list [] on days with no VO2max update \u2014 this is normal, not an error (confirmed via get_max_metrics_restday_2026-07-25.json fixture, not merged into this draft since it contributes no fields, only the empty-array possibility).\n\nVerified against: 2026-07-28 (non-empty), 2026-07-25 (empty list \u2014 normal, no update that day). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

@@ -1,0 +1,697 @@
+{
+  "type": "object",
+  "properties": {
+    "dailySleepDTO": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "userProfilePK": {
+          "type": "integer"
+        },
+        "calendarDate": {
+          "type": "string"
+        },
+        "sleepTimeSeconds": {
+          "type": "integer",
+          "description": "Consumed as total_sleep_s."
+        },
+        "napTimeSeconds": {
+          "type": "integer"
+        },
+        "sleepWindowConfirmed": {
+          "type": "boolean"
+        },
+        "sleepWindowConfirmationType": {
+          "type": "string"
+        },
+        "sleepStartTimestampGMT": {
+          "type": "integer"
+        },
+        "sleepEndTimestampGMT": {
+          "type": "integer"
+        },
+        "sleepStartTimestampLocal": {
+          "type": "integer"
+        },
+        "sleepEndTimestampLocal": {
+          "type": "integer"
+        },
+        "autoSleepStartTimestampGMT": {
+          "description": "observed null in captured sample"
+        },
+        "autoSleepEndTimestampGMT": {
+          "description": "observed null in captured sample"
+        },
+        "sleepQualityTypePK": {
+          "description": "observed null in captured sample"
+        },
+        "sleepResultTypePK": {
+          "description": "observed null in captured sample"
+        },
+        "unmeasurableSleepSeconds": {
+          "type": "integer"
+        },
+        "deepSleepSeconds": {
+          "type": "integer",
+          "description": "Consumed as deep_sleep_s."
+        },
+        "lightSleepSeconds": {
+          "type": "integer",
+          "description": "Consumed as light_sleep_s."
+        },
+        "remSleepSeconds": {
+          "type": "integer",
+          "description": "Consumed as rem_sleep_s."
+        },
+        "awakeSleepSeconds": {
+          "type": "integer",
+          "description": "Consumed as awake_s."
+        },
+        "deviceRemCapable": {
+          "type": "boolean"
+        },
+        "retro": {
+          "type": "boolean"
+        },
+        "sleepFromDevice": {
+          "type": "boolean"
+        },
+        "averageSpO2Value": {
+          "type": "number",
+          "description": "Consumed as avg_spo2_pct."
+        },
+        "lowestSpO2Value": {
+          "type": "integer"
+        },
+        "highestSpO2Value": {
+          "type": "integer"
+        },
+        "averageSpO2HRSleep": {
+          "type": "number"
+        },
+        "averageRespirationValue": {
+          "type": "number",
+          "description": "Consumed as avg_breathing_rate."
+        },
+        "lowestRespirationValue": {
+          "type": "number"
+        },
+        "highestRespirationValue": {
+          "type": "number"
+        },
+        "awakeCount": {
+          "type": "integer"
+        },
+        "avgSleepStress": {
+          "type": "number",
+          "description": "Consumed as avg_stress."
+        },
+        "ageGroup": {
+          "type": "string"
+        },
+        "avgHeartRate": {
+          "type": "number"
+        },
+        "sleepScoreFeedback": {
+          "type": "string"
+        },
+        "sleepScoreInsight": {
+          "type": "string"
+        },
+        "sleepScorePersonalizedInsight": {
+          "type": "string"
+        },
+        "sleepScores": {
+          "type": "object",
+          "properties": {
+            "totalDuration": {
+              "type": "object",
+              "properties": {
+                "qualifierKey": {
+                  "type": "string"
+                },
+                "optimalStart": {
+                  "type": "number"
+                },
+                "optimalEnd": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            },
+            "stress": {
+              "type": "object",
+              "properties": {
+                "qualifierKey": {
+                  "type": "string"
+                },
+                "optimalStart": {
+                  "type": "number"
+                },
+                "optimalEnd": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            },
+            "awakeCount": {
+              "type": "object",
+              "properties": {
+                "qualifierKey": {
+                  "type": "string"
+                },
+                "optimalStart": {
+                  "type": "number"
+                },
+                "optimalEnd": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            },
+            "overall": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "description": "Consumed as sleep_score (dailySleepDTO.sleepScores.overall.value \u2014 not a top-level field)."
+                },
+                "qualifierKey": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "remPercentage": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "integer"
+                },
+                "qualifierKey": {
+                  "type": "string"
+                },
+                "optimalStart": {
+                  "type": "number"
+                },
+                "optimalEnd": {
+                  "type": "number"
+                },
+                "idealStartInSeconds": {
+                  "type": "number"
+                },
+                "idealEndInSeconds": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            },
+            "restlessness": {
+              "type": "object",
+              "properties": {
+                "qualifierKey": {
+                  "type": "string"
+                },
+                "optimalStart": {
+                  "type": "number"
+                },
+                "optimalEnd": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            },
+            "lightPercentage": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "integer"
+                },
+                "qualifierKey": {
+                  "type": "string"
+                },
+                "optimalStart": {
+                  "type": "number"
+                },
+                "optimalEnd": {
+                  "type": "number"
+                },
+                "idealStartInSeconds": {
+                  "type": "number"
+                },
+                "idealEndInSeconds": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            },
+            "deepPercentage": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "integer"
+                },
+                "qualifierKey": {
+                  "type": "string"
+                },
+                "optimalStart": {
+                  "type": "number"
+                },
+                "optimalEnd": {
+                  "type": "number"
+                },
+                "idealStartInSeconds": {
+                  "type": "number"
+                },
+                "idealEndInSeconds": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "sleepVersion": {
+          "type": "integer"
+        },
+        "sleepNeed": {
+          "type": "object",
+          "properties": {
+            "userProfilePk": {
+              "type": "integer"
+            },
+            "calendarDate": {
+              "type": "string"
+            },
+            "deviceId": {
+              "type": "integer"
+            },
+            "timestampGmt": {
+              "type": "string"
+            },
+            "baseline": {
+              "type": "integer"
+            },
+            "actual": {
+              "type": "integer"
+            },
+            "feedback": {
+              "type": "string"
+            },
+            "trainingFeedback": {
+              "type": "string"
+            },
+            "sleepHistoryAdjustment": {
+              "type": "string"
+            },
+            "hrvAdjustment": {
+              "type": "string"
+            },
+            "napAdjustment": {
+              "type": "string"
+            },
+            "displayedForTheDay": {
+              "type": "boolean"
+            },
+            "recommendedBedtimeStartMins": {
+              "type": "integer"
+            },
+            "recommendedBedtimeEndMins": {
+              "type": "integer"
+            },
+            "preferredActivityTracker": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        "nextSleepNeed": {
+          "type": "object",
+          "properties": {
+            "userProfilePk": {
+              "type": "integer"
+            },
+            "calendarDate": {
+              "type": "string"
+            },
+            "deviceId": {
+              "type": "integer"
+            },
+            "timestampGmt": {
+              "type": "string"
+            },
+            "baseline": {
+              "type": "integer"
+            },
+            "actual": {
+              "type": "integer"
+            },
+            "feedback": {
+              "type": "string"
+            },
+            "trainingFeedback": {
+              "type": "string"
+            },
+            "sleepHistoryAdjustment": {
+              "type": "string"
+            },
+            "hrvAdjustment": {
+              "type": "string"
+            },
+            "napAdjustment": {
+              "type": "string"
+            },
+            "displayedForTheDay": {
+              "type": "boolean"
+            },
+            "recommendedBedtimeStartMins": {
+              "type": "integer"
+            },
+            "recommendedBedtimeEndMins": {
+              "type": "integer"
+            },
+            "preferredActivityTracker": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        "breathingDisruptionSeverity": {
+          "type": "string"
+        },
+        "sleepAlignment": {
+          "type": "object",
+          "properties": {
+            "userId": {
+              "type": "integer"
+            },
+            "calendarDate": {
+              "type": "string"
+            },
+            "deviceId": {
+              "type": "integer"
+            },
+            "isPreferredActivityTracker": {
+              "type": "boolean"
+            },
+            "sleepNeedBaselineMins": {
+              "type": "integer"
+            },
+            "optimalSleepWindowStartMins": {
+              "type": "integer"
+            },
+            "optimalSleepWindowEndMins": {
+              "type": "integer"
+            },
+            "status": {
+              "type": "string"
+            },
+            "optimalSleepWindowMidpointMins": {
+              "type": "integer"
+            },
+            "lastSleepMidpointMins": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "sleepMovement": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startGMT": {
+            "type": "string"
+          },
+          "endGMT": {
+            "type": "string"
+          },
+          "activityLevel": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "remSleepData": {
+      "type": "boolean"
+    },
+    "sleepLevels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startGMT": {
+            "type": "string"
+          },
+          "endGMT": {
+            "type": "string"
+          },
+          "activityLevel": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "sleepRestlessMoments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer"
+          },
+          "startGMT": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "restlessMomentsCount": {
+      "type": "integer"
+    },
+    "wellnessSpO2SleepSummaryDTO": {
+      "type": "object",
+      "properties": {
+        "userProfilePk": {
+          "type": "integer"
+        },
+        "deviceId": {
+          "type": "integer"
+        },
+        "sleepMeasurementStartGMT": {
+          "type": "string"
+        },
+        "sleepMeasurementEndGMT": {
+          "type": "string"
+        },
+        "alertThresholdValue": {
+          "description": "observed null in captured sample"
+        },
+        "numberOfEventsBelowThreshold": {
+          "description": "observed null in captured sample"
+        },
+        "durationOfEventsBelowThreshold": {
+          "description": "observed null in captured sample"
+        },
+        "averageSPO2": {
+          "type": "number"
+        },
+        "averageSpO2HR": {
+          "type": "number"
+        },
+        "lowestSPO2": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "wellnessEpochSPO2DataDTOList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "userProfilePK": {
+            "type": "integer"
+          },
+          "epochTimestamp": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "integer"
+          },
+          "calendarDate": {
+            "type": "string"
+          },
+          "epochDuration": {
+            "type": "integer"
+          },
+          "spo2Reading": {
+            "type": "integer"
+          },
+          "readingConfidence": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "wellnessEpochRespirationDataDTOList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startTimeGMT": {
+            "type": "integer"
+          },
+          "respirationValue": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "wellnessEpochRespirationAveragesList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "epochEndTimestampGmt": {
+            "type": "integer"
+          },
+          "respirationAverageValue": {
+            "type": "number"
+          },
+          "respirationHighValue": {
+            "description": "observed null in captured sample"
+          },
+          "respirationLowValue": {
+            "description": "observed null in captured sample"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "respirationVersion": {
+      "type": "integer"
+    },
+    "sleepHeartRate": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer"
+          },
+          "startGMT": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "sleepStress": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer"
+          },
+          "startGMT": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "sleepBodyBattery": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer"
+          },
+          "startGMT": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "skinTempDataExists": {
+      "type": "boolean"
+    },
+    "hrvData": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "startGMT": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "description": "Array of {value, startGMT} HRV readings during sleep. See avgOvernightHrv note above."
+    },
+    "breathingDisruptionData": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer"
+          },
+          "startGMT": {
+            "type": "integer"
+          },
+          "endGMT": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "avgSkinTempDeviationC": {
+      "type": "number"
+    },
+    "avgSkinTempDeviationF": {
+      "type": "number"
+    },
+    "avgOvernightHrv": {
+      "type": "number",
+      "description": "IMPORTANT: this field exists live (verified 2026-07-28/07-15), contradicting CLAUDE.md's documented past finding that \"sleep API returns no HRV data at all\" (avg_hrv_ms bug note). Either Garmin added this field since that finding, or the original finding was checking the wrong path. Not currently consumed by sync_sleep \u2014 worth revisiting if per-sleep HRV is wanted (see also hrvStatus, hrvData below)."
+    },
+    "hrvStatus": {
+      "type": "string",
+      "description": "See avgOvernightHrv note above \u2014 sleep-scoped HRV data appears to be available now."
+    },
+    "bodyBatteryChange": {
+      "type": "integer"
+    },
+    "skinTempCalibrationDays": {
+      "type": "integer"
+    },
+    "restingHeartRate": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/sleep.schema.json",
+  "title": "Sleep data (get_sleep_data)",
+  "description": "Returned by garminconnect's get_sleep_data(date). Consumed by sync_sleep, which reads only dailySleepDTO and its nested sleepScores \u2014 the many sibling keys (sleepMovement, sleepHeartRate, hrvData, etc.) are captured here for completeness but not currently synced.\n\nVerified against: 2026-07-28, 2026-07-15 \u2014 both nights with full sleep recorded; no fixture yet for a night with none (see README gaps). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

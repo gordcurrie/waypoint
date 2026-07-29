@@ -1,0 +1,122 @@
+{
+  "type": "object",
+  "properties": {
+    "userProfilePK": {
+      "type": "integer"
+    },
+    "calendarDate": {
+      "type": "string"
+    },
+    "startTimestampGMT": {
+      "type": "string"
+    },
+    "endTimestampGMT": {
+      "type": "string"
+    },
+    "startTimestampLocal": {
+      "type": "string"
+    },
+    "endTimestampLocal": {
+      "type": "string"
+    },
+    "sleepStartTimestampGMT": {
+      "type": "string"
+    },
+    "sleepEndTimestampGMT": {
+      "type": "string"
+    },
+    "sleepStartTimestampLocal": {
+      "type": "string"
+    },
+    "sleepEndTimestampLocal": {
+      "type": "string"
+    },
+    "tomorrowSleepStartTimestampGMT": {
+      "type": "string"
+    },
+    "tomorrowSleepEndTimestampGMT": {
+      "type": "string"
+    },
+    "tomorrowSleepStartTimestampLocal": {
+      "type": "string"
+    },
+    "tomorrowSleepEndTimestampLocal": {
+      "type": "string"
+    },
+    "lowestRespirationValue": {
+      "type": "number",
+      "description": "Consumed as lowest_brpm."
+    },
+    "highestRespirationValue": {
+      "type": "number",
+      "description": "Consumed as highest_brpm."
+    },
+    "avgWakingRespirationValue": {
+      "type": "number",
+      "description": "Consumed as avg_waking_brpm."
+    },
+    "avgSleepRespirationValue": {
+      "type": "number",
+      "description": "Consumed as avg_sleep_brpm."
+    },
+    "avgTomorrowSleepRespirationValue": {
+      "type": "number"
+    },
+    "respirationValueDescriptorsDTOList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "respirationValuesArray": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      }
+    },
+    "respirationAveragesValueDescriptorDTOList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "respirationAveragesValueDescriptorIndex": {
+            "type": "integer"
+          },
+          "respirationAveragesValueDescriptionKey": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "respirationAveragesValuesArray": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      }
+    },
+    "respirationVersion": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/respiration.schema.json",
+  "title": "Respiration (get_respiration_data)",
+  "description": "Returned by garminconnect's get_respiration_data(date). Consumed by sync_respiration.\n\nVerified against: 2026-07-28, 2026-07-15. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

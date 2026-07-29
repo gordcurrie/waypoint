@@ -1175,9 +1175,8 @@ def test_build_garmin_workout_rest_s_without_sets_raises():
 
 def test_build_garmin_workout_multiple_sets_groups_sequential_order():
     # Regression: stepOrder/childStepId must stay a running counter across the whole
-    # tree — confirmed against a captured real workout (sync/tests/fixtures/
-    # workout_1646566436.json), not reset per group, and not skipping or reusing
-    # values for flat steps that follow.
+    # tree — confirmed against a captured real hand-built workout, not reset per
+    # group, and not skipping or reusing values for flat steps that follow.
     item = _queue_item(
         steps=[
             {

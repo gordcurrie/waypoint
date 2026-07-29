@@ -1,0 +1,417 @@
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "activityId": {
+        "type": "integer"
+      },
+      "activityName": {
+        "type": "string"
+      },
+      "startTimeLocal": {
+        "type": "string"
+      },
+      "startTimeGMT": {
+        "type": "string"
+      },
+      "activityType": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "integer"
+          },
+          "typeKey": {
+            "type": "string",
+            "description": "Sport key, e.g. \"running\", \"track_running\", \"cycling\". Only running-family keys have been observed live in this account; cycling/swimming/strength_training shapes for run-specific fields (cadence, vertical oscillation etc.) are unconfirmed \u2014 those fields are expected null for non-running sports."
+          },
+          "parentTypeId": {
+            "type": "integer"
+          },
+          "isHidden": {
+            "type": "boolean"
+          },
+          "restricted": {
+            "type": "boolean"
+          },
+          "trimmable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "eventType": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "integer"
+          },
+          "typeKey": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "distance": {
+        "type": "number"
+      },
+      "duration": {
+        "type": "number"
+      },
+      "elapsedDuration": {
+        "type": "number"
+      },
+      "movingDuration": {
+        "type": "number"
+      },
+      "elevationGain": {
+        "type": "number"
+      },
+      "elevationLoss": {
+        "type": "number"
+      },
+      "averageSpeed": {
+        "type": "number"
+      },
+      "maxSpeed": {
+        "type": "number"
+      },
+      "startLatitude": {
+        "type": "number"
+      },
+      "startLongitude": {
+        "type": "number"
+      },
+      "hasPolyline": {
+        "type": "boolean"
+      },
+      "hasImages": {
+        "type": "boolean"
+      },
+      "ownerId": {
+        "type": "integer"
+      },
+      "ownerDisplayName": {
+        "type": "string"
+      },
+      "ownerFullName": {
+        "type": "string"
+      },
+      "ownerProfileImageUrlSmall": {
+        "type": "string"
+      },
+      "ownerProfileImageUrlMedium": {
+        "type": "string"
+      },
+      "ownerProfileImageUrlLarge": {
+        "type": "string"
+      },
+      "calories": {
+        "type": "number"
+      },
+      "bmrCalories": {
+        "type": "number"
+      },
+      "averageHR": {
+        "type": "number"
+      },
+      "maxHR": {
+        "type": "number"
+      },
+      "averageRunningCadenceInStepsPerMinute": {
+        "type": "number",
+        "description": "Only present/meaningful for running-family sports (running, trail_running, treadmill_running, indoor_running) \u2014 sync_activities only reads run-specific fields when sport is one of those."
+      },
+      "maxRunningCadenceInStepsPerMinute": {
+        "type": "number"
+      },
+      "steps": {
+        "type": "integer"
+      },
+      "userRoles": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "privacy": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "integer"
+          },
+          "typeKey": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "userPro": {
+        "type": "boolean"
+      },
+      "hasVideo": {
+        "type": "boolean"
+      },
+      "timeZoneId": {
+        "type": "integer"
+      },
+      "beginTimestamp": {
+        "type": "integer"
+      },
+      "sportTypeId": {
+        "type": "integer"
+      },
+      "avgPower": {
+        "type": "number"
+      },
+      "maxPower": {
+        "type": "number"
+      },
+      "aerobicTrainingEffect": {
+        "type": "number",
+        "description": "Consumed as aerobic_te."
+      },
+      "anaerobicTrainingEffect": {
+        "type": "number",
+        "description": "Consumed as anaerobic_te."
+      },
+      "normPower": {
+        "type": "number"
+      },
+      "avgVerticalOscillation": {
+        "type": "number",
+        "description": "Unit: centimeters. sync.py's vertical_oscillation_mm field scales this x10 to store millimeters \u2014 do not write the raw value directly (CLAUDE.md unit-quirk table)."
+      },
+      "avgGroundContactTime": {
+        "type": "number"
+      },
+      "avgStrideLength": {
+        "type": "number",
+        "description": "Unit: centimeters. sync.py's stride_length_mm field scales this x10 to store millimeters (CLAUDE.md unit-quirk table)."
+      },
+      "vO2MaxValue": {
+        "type": "number",
+        "description": "Consumed as vo2max. Note unusual casing (vO2, not vo2)."
+      },
+      "avgVerticalRatio": {
+        "type": "number"
+      },
+      "deviceId": {
+        "type": "integer"
+      },
+      "minElevation": {
+        "type": "number"
+      },
+      "maxElevation": {
+        "type": "number"
+      },
+      "avgElevation": {
+        "type": "number"
+      },
+      "maxDoubleCadence": {
+        "type": "number"
+      },
+      "summarizedDiveInfo": {
+        "type": "object",
+        "properties": {
+          "summarizedDiveGases": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": true
+      },
+      "maxVerticalSpeed": {
+        "type": "number"
+      },
+      "manufacturer": {
+        "type": "string"
+      },
+      "locationName": {
+        "type": "string"
+      },
+      "lapCount": {
+        "type": "integer"
+      },
+      "endLatitude": {
+        "type": "number"
+      },
+      "endLongitude": {
+        "type": "number"
+      },
+      "waterEstimated": {
+        "type": "number"
+      },
+      "trainingEffectLabel": {
+        "type": "string"
+      },
+      "activityTrainingLoad": {
+        "type": "number",
+        "description": "Consumed as training_load."
+      },
+      "minActivityLapDuration": {
+        "type": "number"
+      },
+      "aerobicTrainingEffectMessage": {
+        "type": "string"
+      },
+      "anaerobicTrainingEffectMessage": {
+        "type": "string"
+      },
+      "splitSummaries": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "noOfSplits": {
+              "type": "integer"
+            },
+            "totalAscent": {
+              "type": "number"
+            },
+            "duration": {
+              "type": "number"
+            },
+            "splitType": {
+              "type": "string"
+            },
+            "numClimbSends": {
+              "type": "integer"
+            },
+            "maxElevationGain": {
+              "type": "number"
+            },
+            "averageElevationGain": {
+              "type": "number"
+            },
+            "maxDistance": {
+              "type": "integer"
+            },
+            "maxDistanceWithPrecision": {
+              "type": "number"
+            },
+            "distance": {
+              "type": "number"
+            },
+            "averageSpeed": {
+              "type": "number"
+            },
+            "maxSpeed": {
+              "type": "number"
+            },
+            "numFalls": {
+              "type": "integer"
+            },
+            "elevationLoss": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "hasSplits": {
+        "type": "boolean"
+      },
+      "hasIntensityIntervals": {
+        "type": "boolean"
+      },
+      "moderateIntensityMinutes": {
+        "type": "integer"
+      },
+      "vigorousIntensityMinutes": {
+        "type": "integer"
+      },
+      "avgGradeAdjustedSpeed": {
+        "type": "number"
+      },
+      "differenceBodyBattery": {
+        "type": "integer"
+      },
+      "hasHeatMap": {
+        "type": "boolean"
+      },
+      "fastestSplit_1000": {
+        "type": "number"
+      },
+      "fastestSplit_1609": {
+        "type": "number"
+      },
+      "fastestSplit_5000": {
+        "type": "number"
+      },
+      "hrTimeInZone_1": {
+        "type": "number"
+      },
+      "hrTimeInZone_2": {
+        "type": "number"
+      },
+      "hrTimeInZone_3": {
+        "type": "number"
+      },
+      "hrTimeInZone_4": {
+        "type": "number"
+      },
+      "hrTimeInZone_5": {
+        "type": "number"
+      },
+      "powerTimeInZone_1": {
+        "type": "number"
+      },
+      "powerTimeInZone_2": {
+        "type": "number"
+      },
+      "powerTimeInZone_3": {
+        "type": "number"
+      },
+      "powerTimeInZone_4": {
+        "type": "number"
+      },
+      "powerTimeInZone_5": {
+        "type": "number"
+      },
+      "endTimeGMT": {
+        "type": "string"
+      },
+      "qualifyingDive": {
+        "type": "boolean"
+      },
+      "activityUUID": {
+        "type": "string"
+      },
+      "pr": {
+        "type": "boolean"
+      },
+      "parent": {
+        "type": "boolean"
+      },
+      "purposeful": {
+        "type": "boolean"
+      },
+      "manualActivity": {
+        "type": "boolean"
+      },
+      "favorite": {
+        "type": "boolean"
+      },
+      "decoDive": {
+        "type": "boolean"
+      },
+      "autoCalcCalories": {
+        "type": "boolean"
+      },
+      "elevationCorrected": {
+        "type": "boolean"
+      },
+      "atpActivity": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": true
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/activities.schema.json",
+  "title": "Garmin activity (get_activities_by_date item)",
+  "description": "One element of the array returned by garminconnect's get_activities_by_date. Consumed by sync_activities and sync_activity_details.\n\nVerified against: 2026-07-15..2026-07-29, 7 running/track_running activities. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

@@ -1,0 +1,183 @@
+{
+  "type": "object",
+  "properties": {
+    "activityId": {
+      "type": "integer"
+    },
+    "lapDTOs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startTimeGMT": {
+            "type": "string"
+          },
+          "startLatitude": {
+            "type": "number"
+          },
+          "startLongitude": {
+            "type": "number"
+          },
+          "distance": {
+            "type": "number",
+            "description": "Consumed as distance_m."
+          },
+          "duration": {
+            "type": "number",
+            "description": "Consumed as duration_s."
+          },
+          "movingDuration": {
+            "type": "number"
+          },
+          "elapsedDuration": {
+            "type": "number"
+          },
+          "elevationGain": {
+            "type": "number",
+            "description": "sync.py currently reads a nonexistent \"totalAscent\" key instead of this real one \u2014 always None until fixed (bug #59). Should be consumed as elevation_gain_m."
+          },
+          "elevationLoss": {
+            "type": "number"
+          },
+          "maxElevation": {
+            "type": "number"
+          },
+          "minElevation": {
+            "type": "number"
+          },
+          "averageSpeed": {
+            "type": "number",
+            "description": "Consumed as avg_speed_m_s."
+          },
+          "averageMovingSpeed": {
+            "type": "number"
+          },
+          "maxSpeed": {
+            "type": "number"
+          },
+          "calories": {
+            "type": "number"
+          },
+          "bmrCalories": {
+            "type": "number"
+          },
+          "averageHR": {
+            "type": "number",
+            "description": "Consumed as avg_hr_bpm."
+          },
+          "maxHR": {
+            "type": "number",
+            "description": "Consumed as max_hr_bpm."
+          },
+          "averageRunCadence": {
+            "type": "number",
+            "description": "Consumed as avg_cadence_spm."
+          },
+          "maxRunCadence": {
+            "type": "number"
+          },
+          "averagePower": {
+            "type": "number",
+            "description": "sync.py currently reads a nonexistent \"avgPower\" key instead of this real one \u2014 always None until fixed (bug #59). Should be consumed as avg_power_w."
+          },
+          "maxPower": {
+            "type": "number"
+          },
+          "minPower": {
+            "type": "number"
+          },
+          "normalizedPower": {
+            "type": "number"
+          },
+          "totalWork": {
+            "type": "number"
+          },
+          "groundContactTime": {
+            "type": "number"
+          },
+          "strideLength": {
+            "type": "number"
+          },
+          "verticalOscillation": {
+            "type": "number"
+          },
+          "verticalRatio": {
+            "type": "number"
+          },
+          "endLatitude": {
+            "type": "number"
+          },
+          "endLongitude": {
+            "type": "number"
+          },
+          "maxVerticalSpeed": {
+            "type": "number"
+          },
+          "directWorkoutComplianceScore": {
+            "type": "integer"
+          },
+          "avgGradeAdjustedSpeed": {
+            "type": "number"
+          },
+          "lapIndex": {
+            "type": "integer"
+          },
+          "wktStepIndex": {
+            "type": "integer"
+          },
+          "lengthDTOs": {
+            "type": "array"
+          },
+          "wktIndex": {
+            "type": "integer"
+          },
+          "connectIQMeasurement": {
+            "type": "array"
+          },
+          "intensityType": {
+            "type": "string"
+          },
+          "messageIndex": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "eventDTOs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startTimeGMT": {
+            "type": "string"
+          },
+          "startTimeGMTDoubleValue": {
+            "type": "number"
+          },
+          "sectionTypeDTO": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "key": {
+                "type": "string"
+              },
+              "sectionTypeKey": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/activity_splits.schema.json",
+  "title": "Activity splits/laps (get_activity_splits)",
+  "description": "Returned by garminconnect's get_activity_splits(activity_id). Consumed by sync_activity_details (per-lap points in the activity_lap measurement).\n\nVerified against: one real running activity, 2026-07-28 (activity_id 23765008303). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

@@ -1,0 +1,376 @@
+{
+  "type": "object",
+  "properties": {
+    "userProfileId": {
+      "type": "integer"
+    },
+    "totalKilocalories": {
+      "type": "number"
+    },
+    "activeKilocalories": {
+      "type": "number"
+    },
+    "bmrKilocalories": {
+      "type": "number"
+    },
+    "wellnessKilocalories": {
+      "type": "number"
+    },
+    "burnedKilocalories": {
+      "description": "observed null in captured sample"
+    },
+    "consumedKilocalories": {
+      "description": "observed null in captured sample"
+    },
+    "remainingKilocalories": {
+      "description": "observed null in captured sample"
+    },
+    "totalSteps": {
+      "type": "integer",
+      "description": "Consumed as steps."
+    },
+    "netCalorieGoal": {
+      "description": "observed null in captured sample"
+    },
+    "totalDistanceMeters": {
+      "type": "integer"
+    },
+    "wellnessDistanceMeters": {
+      "type": "integer"
+    },
+    "wellnessActiveKilocalories": {
+      "type": "number"
+    },
+    "netRemainingKilocalories": {
+      "type": "number"
+    },
+    "userDailySummaryId": {
+      "type": "integer"
+    },
+    "calendarDate": {
+      "type": "string"
+    },
+    "rule": {
+      "type": "object",
+      "properties": {
+        "typeId": {
+          "type": "integer"
+        },
+        "typeKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "uuid": {
+      "type": "string"
+    },
+    "dailyStepGoal": {
+      "type": "integer"
+    },
+    "wellnessStartTimeGmt": {
+      "type": "string"
+    },
+    "wellnessStartTimeLocal": {
+      "type": "string"
+    },
+    "wellnessEndTimeGmt": {
+      "type": "string"
+    },
+    "wellnessEndTimeLocal": {
+      "type": "string"
+    },
+    "durationInMilliseconds": {
+      "type": "integer"
+    },
+    "wellnessDescription": {
+      "description": "observed null in captured sample"
+    },
+    "highlyActiveSeconds": {
+      "type": "integer"
+    },
+    "activeSeconds": {
+      "type": "integer"
+    },
+    "sedentarySeconds": {
+      "type": "integer"
+    },
+    "sleepingSeconds": {
+      "type": "integer"
+    },
+    "includesWellnessData": {
+      "type": "boolean"
+    },
+    "includesActivityData": {
+      "type": "boolean"
+    },
+    "includesCalorieConsumedData": {
+      "type": "boolean"
+    },
+    "privacyProtected": {
+      "type": "boolean"
+    },
+    "moderateIntensityMinutes": {
+      "type": "integer"
+    },
+    "vigorousIntensityMinutes": {
+      "type": "integer"
+    },
+    "floorsAscendedInMeters": {
+      "type": "number"
+    },
+    "floorsDescendedInMeters": {
+      "type": "number"
+    },
+    "floorsAscended": {
+      "type": "number",
+      "description": "Consumed as floors_ascended."
+    },
+    "floorsDescended": {
+      "type": "number"
+    },
+    "intensityMinutesGoal": {
+      "type": "integer"
+    },
+    "userFloorsAscendedGoal": {
+      "type": "integer"
+    },
+    "minHeartRate": {
+      "type": "integer"
+    },
+    "maxHeartRate": {
+      "type": "integer"
+    },
+    "restingHeartRate": {
+      "type": "integer",
+      "description": "Consumed as resting_hr_bpm."
+    },
+    "lastSevenDaysAvgRestingHeartRate": {
+      "type": "integer"
+    },
+    "source": {
+      "type": "string"
+    },
+    "averageStressLevel": {
+      "type": "integer"
+    },
+    "maxStressLevel": {
+      "type": "integer"
+    },
+    "stressDuration": {
+      "type": "integer"
+    },
+    "restStressDuration": {
+      "type": "integer"
+    },
+    "activityStressDuration": {
+      "type": "integer"
+    },
+    "uncategorizedStressDuration": {
+      "type": "integer"
+    },
+    "totalStressDuration": {
+      "type": "integer"
+    },
+    "lowStressDuration": {
+      "type": "integer"
+    },
+    "mediumStressDuration": {
+      "type": "integer"
+    },
+    "highStressDuration": {
+      "type": "integer"
+    },
+    "stressPercentage": {
+      "type": "number"
+    },
+    "restStressPercentage": {
+      "type": "number"
+    },
+    "activityStressPercentage": {
+      "type": "number"
+    },
+    "uncategorizedStressPercentage": {
+      "type": "number"
+    },
+    "lowStressPercentage": {
+      "type": "number"
+    },
+    "mediumStressPercentage": {
+      "type": "number"
+    },
+    "highStressPercentage": {
+      "type": "number"
+    },
+    "stressQualifier": {
+      "type": "string"
+    },
+    "measurableAwakeDuration": {
+      "type": "integer"
+    },
+    "measurableAsleepDuration": {
+      "type": "integer"
+    },
+    "lastSyncTimestampGMT": {
+      "description": "observed null in captured sample"
+    },
+    "minAvgHeartRate": {
+      "type": "integer"
+    },
+    "maxAvgHeartRate": {
+      "type": "integer"
+    },
+    "bodyBatteryChargedValue": {
+      "type": "integer"
+    },
+    "bodyBatteryDrainedValue": {
+      "type": "integer"
+    },
+    "bodyBatteryHighestValue": {
+      "type": "integer"
+    },
+    "bodyBatteryLowestValue": {
+      "type": "integer"
+    },
+    "bodyBatteryMostRecentValue": {
+      "type": "integer"
+    },
+    "bodyBatteryDuringSleep": {
+      "type": "integer"
+    },
+    "bodyBatteryAtWakeTime": {
+      "type": "integer"
+    },
+    "bodyBatteryVersion": {
+      "type": "number"
+    },
+    "abnormalHeartRateAlertsCount": {
+      "description": "observed null in captured sample"
+    },
+    "averageSpo2": {
+      "type": "number"
+    },
+    "lowestSpo2": {
+      "type": "integer"
+    },
+    "latestSpo2": {
+      "type": "integer"
+    },
+    "latestSpo2ReadingTimeGmt": {
+      "type": "string"
+    },
+    "latestSpo2ReadingTimeLocal": {
+      "type": "string"
+    },
+    "averageMonitoringEnvironmentAltitude": {
+      "type": "number"
+    },
+    "restingCaloriesFromActivity": {
+      "type": "number"
+    },
+    "bodyBatteryDynamicFeedbackEvent": {
+      "type": "object",
+      "properties": {
+        "eventTimestampGmt": {
+          "type": "string"
+        },
+        "bodyBatteryLevel": {
+          "type": "string"
+        },
+        "feedbackShortType": {
+          "type": "string"
+        },
+        "feedbackLongType": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "endOfDayBodyBatteryDynamicFeedbackEvent": {
+      "type": "object",
+      "properties": {
+        "eventTimestampGmt": {
+          "type": "string"
+        },
+        "bodyBatteryLevel": {
+          "type": "string"
+        },
+        "feedbackShortType": {
+          "type": "string"
+        },
+        "feedbackLongType": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "bodyBatteryActivityEventList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "eventType": {
+            "type": "string"
+          },
+          "eventStartTimeGmt": {
+            "type": "string"
+          },
+          "timezoneOffset": {
+            "type": "integer"
+          },
+          "durationInMilliseconds": {
+            "type": "integer"
+          },
+          "bodyBatteryImpact": {
+            "type": "integer"
+          },
+          "feedbackType": {
+            "type": "string"
+          },
+          "shortFeedback": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "integer"
+          },
+          "activityName": {
+            "description": "observed null in captured sample"
+          },
+          "activityType": {
+            "description": "observed null in captured sample"
+          },
+          "activityId": {
+            "description": "observed null in captured sample"
+          },
+          "eventUpdateTimeGmt": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "avgWakingRespirationValue": {
+      "type": "number"
+    },
+    "highestRespirationValue": {
+      "type": "number"
+    },
+    "lowestRespirationValue": {
+      "type": "number"
+    },
+    "latestRespirationValue": {
+      "type": "number"
+    },
+    "latestRespirationTimeGMT": {
+      "type": "string"
+    },
+    "respirationAlgorithmVersion": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/daily_stats.schema.json",
+  "title": "Daily stats (get_stats)",
+  "description": "Returned by garminconnect's get_stats(date). 24/7 wellness metrics \u2014 present even on rest days with no logged activity. Consumed by sync_daily_stats.\n\nVerified against: 2026-07-28 (activity day), 2026-07-25 (rest day) \u2014 both full responses, confirming these are day-level not activity-level stats. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}
