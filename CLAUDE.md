@@ -16,23 +16,37 @@ Garmin Connect: verify the actual API response first.** Do not guess field names
 response structure — the Garmin API has non-obvious shapes (nested device-keyed dicts,
 integer enums, percent values named "Ratio", missing fields that seem like they should exist).
 
-Two bugs burned from skipping this step: `acwRatio` (doesn't exist; real field is
-`acwrFactorPercent`), `avg_hrv_ms` in sleep (sleep API returns no HRV data at all),
-and the entire `training_status` response structure (wrong path, wrong type, wrong field names).
+Bugs burned from skipping this step: `acwRatio` (doesn't exist; real field is
+`acwrFactorPercent`), the entire `training_status` response structure (wrong path, wrong
+type, wrong field names), `sync_lactate_threshold` reading fields that don't exist at all
+(#56), `sync_training_readiness` reading a nonexistent `hrvStatus` key (#58), and
+`sync_activity_details`'s lap builder reading `avgPower`/`totalAscent` instead of the real
+`averagePower`/`elevationGain` (#59).
 
-**How to verify** (use the helper script):
+Note: an earlier version of this doc claimed "sleep API returns no HRV data at all"
+(`avg_hrv_ms` bug). That's now out of date — deriving the schemas below found
+`avgOvernightHrv`/`hrvStatus`/`hrvData` present live in `get_sleep_data`. Either Garmin
+added these fields since that finding, or the original finding checked the wrong path.
+Not currently consumed by any sync field — re-verify before relying on this note either way.
+
+**How to verify:**
+1. Check `sync/schemas/*.schema.json` first — one schema per `garminconnect` method
+   currently used by `sync.py`, with field names/types/nesting/units/known quirks already
+   documented (see `sync/schemas/README.md`). This covers the methods already in use;
+   validation against live output isn't wired up yet (#55), so still confirm live for
+   anything new or if drift is suspected.
+2. Run the live capture helper:
 ```bash
 docker exec waypoint-sync-1 python3 /app/inspect_api.py <method> <date>
 # Examples:
 docker exec waypoint-sync-1 python3 /app/inspect_api.py get_training_readiness 2026-07-24
 docker exec waypoint-sync-1 python3 /app/inspect_api.py get_sleep_data 2026-07-24
 ```
-
-**Required before implementation:**
-1. Run the relevant `get_*` method and capture the full JSON response
-2. Identify exact field names, nesting, and types from the real response
-3. Include the actual response shape as a comment in the sync function (see `sync_training_status` for the pattern)
-4. Use the real response as the fixture in tests (not invented field names)
+3. Identify exact field names, nesting, and types from the real response
+4. Include the actual response shape as a comment in the sync function (see `sync_training_status` for the pattern)
+5. Do not commit the raw captured response as a fixture — it contains real account PII
+   (owner name, profile URLs, GPS lat/long). Encode the shape in a schema instead (see
+   `sync/schemas/`), or use a hand-written synthetic payload for tests.
 
 ## Non-obvious constraints (don't re-litigate these)
 

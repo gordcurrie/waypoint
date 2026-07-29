@@ -122,6 +122,7 @@ cmd/cli/          Go CLI — waypoint status/analyze/plan
 internal/         Shared Go packages (influx, garmin, analysis, llm)
 tools/            MCP tool registration
 sync/             Python Garmin → InfluxDB sync service
+sync/schemas/     JSON Schema for each Garmin API response sync.py reads
 grafana/          Provisioning config + dashboard JSON
 ```
 
