@@ -7,86 +7,15 @@
         "type": "integer"
       },
       "generic": {
-        "type": "object",
-        "properties": {
-          "calendarDate": {
-            "type": "string"
-          },
-          "vo2MaxPreciseValue": {
-            "type": "number",
-            "description": "Consumed as vo2max."
-          },
-          "vo2MaxValue": {
-            "type": "number"
-          },
-          "fitnessAge": {
-            "description": "Consumed as fitness_age. Observed null in this sample."
-          },
-          "fitnessAgeDescription": {
-            "description": "observed null in captured sample"
-          },
-          "maxMetCategory": {
-            "type": "integer"
-          }
-        },
-        "additionalProperties": true
+        "$ref": "vo2max.schema.json#/$defs/generic",
+        "description": "vo2MaxPreciseValue consumed as vo2max; fitnessAge consumed as fitness_age."
       },
       "cycling": {
         "description": "observed null in captured sample"
       },
       "heatAltitudeAcclimation": {
-        "type": "object",
-        "properties": {
-          "calendarDate": {
-            "type": "string"
-          },
-          "altitudeAcclimationDate": {
-            "type": "string"
-          },
-          "previousAltitudeAcclimationDate": {
-            "type": "string"
-          },
-          "heatAcclimationDate": {
-            "type": "string"
-          },
-          "previousHeatAcclimationDate": {
-            "type": "string"
-          },
-          "altitudeAcclimation": {
-            "type": "integer"
-          },
-          "previousAltitudeAcclimation": {
-            "type": "integer"
-          },
-          "heatAcclimationPercentage": {
-            "type": "integer"
-          },
-          "previousHeatAcclimationPercentage": {
-            "type": "integer"
-          },
-          "heatTrend": {
-            "type": "string"
-          },
-          "altitudeTrend": {
-            "description": "observed null in captured sample"
-          },
-          "currentAltitude": {
-            "type": "integer"
-          },
-          "previousAltitude": {
-            "type": "integer"
-          },
-          "acclimationPercentage": {
-            "type": "integer"
-          },
-          "previousAcclimationPercentage": {
-            "type": "integer"
-          },
-          "altitudeAcclimationLocalTimestamp": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": true
+        "$ref": "vo2max.schema.json#/$defs/heatAltitudeAcclimation",
+        "description": "Not currently consumed by sync_performance."
       }
     },
     "additionalProperties": true

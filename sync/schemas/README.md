@@ -37,6 +37,21 @@ edge cases used are noted in each schema's top-level `description`. In summary:
 | `get_scheduled_workouts` | `scheduled_workouts.schema.json` | two months, zero real scheduled workouts in either |
 | `get_respiration_data` | `respiration.schema.json` | two days |
 
+`vo2max.schema.json` is a shared `$defs` file, not tied to one method — `get_max_metrics`'s
+`generic`/`heatAltitudeAcclimation` objects and `get_training_status`'s
+`mostRecentVO2Max.generic`/`heatAltitudeAcclimation` are the same underlying Garmin
+object returned by two different endpoints; `performance.schema.json` and
+`training_status.schema.json` both `$ref` into it so the two can't drift independently.
+
+`workout_upload.schema.json` documents the outbound `upload_workout` request body
+built by `sync.py`'s `_build_garmin_workout`/`_build_garmin_step`/`_build_garmin_repeat_group`
+— not derived from a live capture like the others (`upload_workout` is a write endpoint,
+out of scope for the read-method sweep above). It's the structural record for what used
+to be verified against `sync/tests/fixtures/workout_1646566436.json` before that file was
+removed for containing real account PII — see CLAUDE.md's "RepeatGroupDTO structure" note.
+Validated against `_build_garmin_workout`'s actual output (a warmup + 3-set bench-press
+repeat group + cooldown) with zero schema violations.
+
 ## Known gaps (not covered — see per-field notes in the schemas themselves)
 
 - Sleep data on a night with no recording at all
@@ -59,6 +74,8 @@ each filed separately (not fixed here — this PR is schema-only):
   `get_hrv_data` (already synced correctly, separately).
 - **#59** — `sync_activity_details`'s lap builder reads `avgPower`/`totalAscent`;
   real keys are `averagePower`/`elevationGain`.
+- **#62** — `sync_scheduled_workouts` reads `item.get("sport") or item.get("activityType")`,
+  neither of which exist. Real key is the flat string `sportTypeKey`.
 
 ## Validation not yet wired up
 
