@@ -519,42 +519,21 @@ def test_training_readiness_recovery_time_none_propagated():
 
 
 @freeze_time("2026-07-06")
-def test_training_readiness_hrv_status_balanced_maps_to_2():
-    """HRV status string enum must be converted to numeric (BALANCED→2.0)."""
+def test_training_readiness_no_hrv_status_field():
+    """hrv_status was removed (bug #58: hrvStatus doesn't exist on this endpoint —
+    the BALANCED/UNBALANCED/POOR enum actually lives in get_hrv_data, already synced
+    separately as hrv.status). A stray hrvStatus key must not resurrect the field."""
     garmin = _make_readiness_garmin([{"score": 75, "hrvStatus": "BALANCED"}])
     fields = _captured_readiness_fields(garmin)
-    assert fields.get("hrv_status") == 2.0
-
-
-@freeze_time("2026-07-06")
-def test_training_readiness_hrv_status_unbalanced_maps_to_1():
-    garmin = _make_readiness_garmin([{"score": 40, "hrvStatus": "UNBALANCED"}])
-    fields = _captured_readiness_fields(garmin)
-    assert fields.get("hrv_status") == 1.0
-
-
-@freeze_time("2026-07-06")
-def test_training_readiness_hrv_status_poor_maps_to_0():
-    garmin = _make_readiness_garmin([{"score": 15, "hrvStatus": "POOR"}])
-    fields = _captured_readiness_fields(garmin)
-    assert fields.get("hrv_status") == 0.0
-
-
-@freeze_time("2026-07-06")
-def test_training_readiness_hrv_status_unknown_is_none():
-    """Unknown or missing hrv_status string must not be written."""
-    garmin = _make_readiness_garmin([{"score": 60, "hrvStatus": "SOMETHING_NEW"}])
-    fields = _captured_readiness_fields(garmin)
-    assert fields.get("hrv_status") is None
+    assert "hrv_status" not in fields
 
 
 @freeze_time("2026-07-06")
 def test_training_readiness_accepts_dict_payload():
     """API may return a dict instead of a list; both shapes must be handled."""
-    garmin = _make_readiness_garmin({"score": 65, "recoveryTime": 1800, "hrvStatus": "BALANCED"})
+    garmin = _make_readiness_garmin({"score": 65, "recoveryTime": 1800})
     fields = _captured_readiness_fields(garmin)
     assert fields.get("recovery_time_h") == pytest.approx(30.0)
-    assert fields.get("hrv_status") == 2.0
 
 
 @freeze_time("2026-07-06")
@@ -699,6 +678,67 @@ def test_training_status_unknown_phrase_status_num_not_written():
     assert "status_num" not in fields
 
 
+# ── sync_lactate_threshold ──────────────────────────────────────────────────────
+
+
+def _make_lt_garmin(payload: object) -> MagicMock:
+    g = MagicMock()
+    g.get_lactate_threshold.return_value = payload
+    return g
+
+
+@freeze_time("2026-07-06")
+def test_lactate_threshold_reads_nested_speed_and_heart_rate():
+    """HR/pace/date all live under speed_and_heart_rate (bug #56) — there is no
+    top-level heartRateThreshold/paceThreshold/testDate."""
+    garmin = _make_lt_garmin(
+        {
+            "speed_and_heart_rate": {
+                "calendarDate": "2026-07-06T11:42:53.885",
+                "speed": 0.5,
+                "heartRate": 165,
+            }
+        }
+    )
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_lactate_threshold(garmin, client, {})
+    points = _written_points(client)
+    assert len(points) == 1
+    assert "lt_hr_bpm=165" in str(points[0])
+    assert "lt_pace_s_per_km=2000" in str(points[0])  # 1000.0 / 0.5
+
+
+@freeze_time("2026-07-06")
+def test_lactate_threshold_speed_is_inverted_not_scaled():
+    """speed is m/s, not s/m — pace must be 1000/speed, not speed*1000 (bug #56)."""
+    garmin = _make_lt_garmin({"speed_and_heart_rate": {"speed": 4.0, "heartRate": 150}})
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_lactate_threshold(garmin, client, {})
+    points = _written_points(client)
+    assert "lt_pace_s_per_km=250" in str(points[0])  # 1000.0 / 4.0, not 4.0 * 1000.0
+
+
+@freeze_time("2026-07-06")
+def test_lactate_threshold_missing_response_writes_nothing():
+    garmin = _make_lt_garmin(None)
+    client = MagicMock()
+    sync.sync_lactate_threshold(garmin, client, {})
+    assert not client.write.called
+
+
+@freeze_time("2026-07-06")
+def test_lactate_threshold_skips_rewrite_of_same_test_date():
+    garmin = _make_lt_garmin(
+        {"speed_and_heart_rate": {"calendarDate": "2026-07-06", "speed": 0.5, "heartRate": 165}}
+    )
+    client = MagicMock()
+    state = {"lactate_threshold": "2026-07-06"}
+    sync.sync_lactate_threshold(garmin, client, state)
+    assert not client.write.called
+
+
 # ── sync_activity_details ──────────────────────────────────────────────────────
 
 
@@ -756,6 +796,39 @@ def test_activity_details_writes_lap_points():
     written = _written_points(client)
     lap_points = [p for p in written if "activity_lap" in str(p)]
     assert len(lap_points) == 2
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_lap_uses_real_power_and_elevation_keys():
+    """Lap power/elevation must come from averagePower/elevationGain — the real keys.
+
+    avgPower/totalAscent don't exist on a real lap object (bug #59); asserting the
+    real values are present and the wrong-key values are absent guards against
+    reintroducing either typo.
+    """
+    splits = {
+        "lapDTOs": [
+            {
+                "lapIndex": 1,
+                "startTimeGMT": "2026-07-06 10:00:00",
+                "distance": 1000.0,
+                "duration": 360.0,
+                "averagePower": 250.0,
+                "elevationGain": 12.0,
+                "avgPower": 999.0,
+                "totalAscent": 999.0,
+            },
+        ]
+    }
+    garmin = _make_details_garmin([_activity_stub()], splits=splits)
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, {})
+    written = _written_points(client)
+    lap_point = next(p for p in written if "activity_lap" in str(p))
+    assert "avg_power_w=250" in str(lap_point)
+    assert "elevation_gain_m=12" in str(lap_point)
+    assert "999" not in str(lap_point)
 
 
 @freeze_time("2026-07-06")
@@ -861,7 +934,7 @@ def _workout_item(
         "workoutId": workout_id,
         "date": date_str,
         "title": title,
-        "sport": sport,
+        "sportTypeKey": sport,
         "duration": duration,
     }
 
@@ -874,6 +947,16 @@ def test_scheduled_workouts_writes_points(no_sleep):
     client.write.assert_called_once()
     points = client.write.call_args[1]["record"]
     assert len(points) == 1
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_sport_tag_uses_sport_type_key(no_sleep):
+    """sport tag must come from sportTypeKey — the only sport field real calendar items have."""
+    garmin = _sched_garmin([_workout_item(sport="cycling")])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = client.write.call_args[1]["record"]
+    assert "sport=cycling" in str(points[0])
 
 
 @freeze_time("2026-07-06")

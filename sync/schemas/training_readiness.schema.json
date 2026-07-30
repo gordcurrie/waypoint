@@ -69,11 +69,11 @@
       },
       "hrvFactorPercent": {
         "type": "integer",
-        "description": "NOT currently consumed. sync.py incorrectly reads a nonexistent 'hrvStatus' key expecting a BALANCED/UNBALANCED/POOR enum (see bug #58) \u2014 this field and hrvFactorFeedback are the real HRV-related data here, but they're a 0-100 contribution score + feedback phrase (e.g. \"GOOD\"), not that enum. That enum lives in get_hrv_data instead (already correctly synced separately as hrv.status)."
+        "description": "NOT currently consumed. Bug #58 (fixed) previously read a nonexistent 'hrvStatus' key expecting a BALANCED/UNBALANCED/POOR enum here \u2014 the fix dropped that field entirely rather than mapping this one, since it's a different signal (0-100 contribution score + feedback phrase, not that enum) and the enum already lives in get_hrv_data (synced separately as hrv.status)."
       },
       "hrvFactorFeedback": {
         "type": "string",
-        "description": "String, observed value: GOOD. Shares vocabulary with other *FactorFeedback fields (acwrFactorFeedback, recoveryTimeFactorFeedback, sleepHistoryFactorFeedback, stressHistoryFactorFeedback) \u2014 full enum range unconfirmed from a single sample. See bug #58."
+        "description": "String, observed value: GOOD. Shares vocabulary with other *FactorFeedback fields (acwrFactorFeedback, recoveryTimeFactorFeedback, sleepHistoryFactorFeedback, stressHistoryFactorFeedback) \u2014 full enum range unconfirmed from a single sample. Not currently consumed (see hrvFactorPercent note, bug #58)."
       },
       "hrvWeeklyAverage": {
         "type": "integer"

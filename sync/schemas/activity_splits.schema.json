@@ -34,7 +34,7 @@
           },
           "elevationGain": {
             "type": "number",
-            "description": "sync.py currently reads a nonexistent \"totalAscent\" key instead of this real one \u2014 always None until fixed (bug #59). Should be consumed as elevation_gain_m."
+            "description": "Consumed as elevation_gain_m. Bug #59 (fixed): sync.py previously read a nonexistent \"totalAscent\" key instead of this real one."
           },
           "elevationLoss": {
             "type": "number"
@@ -78,7 +78,7 @@
           },
           "averagePower": {
             "type": "number",
-            "description": "sync.py currently reads a nonexistent \"avgPower\" key instead of this real one \u2014 always None until fixed (bug #59). Should be consumed as avg_power_w."
+            "description": "Consumed as avg_power_w. Bug #59 (fixed): sync.py previously read a nonexistent \"avgPower\" key instead of this real one."
           },
           "maxPower": {
             "type": "number"

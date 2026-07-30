@@ -173,10 +173,6 @@ def _scale(v: float | None, factor: float) -> float | None:
     return v * factor if v is not None else None
 
 
-# Garmin returns HRV status as a string enum; map to float for InfluxDB.
-_HRV_STATUS: dict[str, float] = {"BALANCED": 2.0, "UNBALANCED": 1.0, "POOR": 0.0}
-
-
 def _add_fields(p: Point, fields: dict[str, Any]) -> tuple[Point, int]:
     """Add non-None fields to point; return (point, count_added)."""
     count = 0
@@ -428,7 +424,6 @@ def sync_training_readiness(garmin: Garmin, client: InfluxDBClient3, state: dict
                 p = Point("training_readiness").time(_day_ts(d))
                 fields = {
                     "score": _fval(item, "score"),
-                    "hrv_status": _HRV_STATUS.get(str(item.get("hrvStatus", "")), None),
                     "sleep_score": _fval(item, "sleepScore"),
                     "recovery_time_h": _scale(_fval(item, "recoveryTime"), 1.0 / 60.0),
                     "acw_pct": _fval(item, "acwrFactorPercent"),
@@ -581,14 +576,23 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
 
 
 def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
-    """Most-recent lactate threshold result — separate measurement avoids timestamp collision with performance."""
+    """Most-recent lactate threshold result — separate measurement avoids timestamp collision with performance.
+
+    API shape (verified 2026-07-28, see sync/schemas/lactate_threshold.schema.json):
+    {"speed_and_heart_rate": {"calendarDate": ..., "speed": <m/s>, "heartRate": <bpm>, ...},
+     "power": {...}}
+    HR/pace/date all live under speed_and_heart_rate — there is no top-level
+    heartRateThreshold/paceThreshold/testDate. speed is m/s, not s/m — pace is
+    1000.0 / speed, not speed * 1000.0.
+    """
     log.info("lactate_threshold: fetching most recent")
     try:
         lt = garmin.get_lactate_threshold()
         if not lt:
             return
+        shr = lt.get("speed_and_heart_rate") or {}
         # Use the actual test date from the API response; fall back to today
-        raw_date = lt.get("testDate") or lt.get("date") or lt.get("dateTime")
+        raw_date = shr.get("calendarDate")
         if raw_date:
             try:
                 test_date = date.fromisoformat(str(raw_date)[:10])
@@ -603,12 +607,10 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[
             return
 
         p = Point("lactate_threshold").time(_day_ts(test_date))
-        # paceThreshold unit: garmin biometric-service returns s/m; multiply by 1000
-        # to convert to s/km (matching the field name). Verify against a real payload
-        # if this account ever completes an LT test.
+        speed_m_s = _fval(shr, "speed")
         fields = {
-            "lt_hr_bpm": _fval(lt, "heartRateThreshold"),
-            "lt_pace_s_per_km": _scale(_fval(lt, "paceThreshold"), 1000.0),
+            "lt_hr_bpm": _fval(shr, "heartRate"),
+            "lt_pace_s_per_km": (1000.0 / speed_m_s) if speed_m_s else None,
         }
         p, n = _add_fields(p, fields)
         if n:
@@ -668,8 +670,8 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
                     "max_hr_bpm": _fval(lap, "maxHR"),
                     "avg_speed_m_s": _fval(lap, "averageSpeed"),
                     "avg_cadence_spm": _fval(lap, "averageRunCadence"),
-                    "avg_power_w": _fval(lap, "avgPower"),
-                    "elevation_gain_m": _fval(lap, "totalAscent"),
+                    "avg_power_w": _fval(lap, "averagePower"),
+                    "elevation_gain_m": _fval(lap, "elevationGain"),
                 }
                 p, n = _add_fields(p, fields)
                 if n:
@@ -768,12 +770,7 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                         continue
                     scheduled_date = date.fromisoformat(str(date_str)[:10])
 
-                    sport_raw = item.get("sport") or item.get("activityType")
-                    sport_val = (
-                        str(sport_raw.get("typeKey") or "")
-                        if isinstance(sport_raw, dict)
-                        else str(sport_raw or "")
-                    )
+                    sport_val = str(item.get("sportTypeKey") or "")
 
                     p = (
                         Point("scheduled_workout")

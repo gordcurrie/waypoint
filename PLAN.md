@@ -150,7 +150,7 @@ Measurement: hrv
           status (2=BALANCED 1=UNBALANCED 0=POOR)
 
 Measurement: training_readiness
-  Fields: score, hrv_status, sleep_score, recovery_time_h, acw_ratio
+  Fields: score, sleep_score, recovery_time_h, acw_pct
 
 Measurement: training_status
   Fields: status_num (5=Peaking → 0=Overreaching), vo2max_running,

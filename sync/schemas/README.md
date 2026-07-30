@@ -62,19 +62,21 @@ repeat group + cooldown) with zero schema violations.
 
 ## Bugs found while deriving these schemas
 
-Comparing `sync.py`'s field reads against the real shapes surfaced three live bugs,
-each filed separately (not fixed here — this PR is schema-only):
+Comparing `sync.py`'s field reads against the real shapes surfaced four live bugs.
+All four are now fixed:
 
-- **#56** — `sync_lactate_threshold` reads `heartRateThreshold`/`paceThreshold`/`testDate`,
+- **#56** (fixed) — `sync_lactate_threshold` read `heartRateThreshold`/`paceThreshold`/`testDate`,
   none of which exist. Real data is nested under `speed_and_heart_rate`, and the pace
   field is m/s, not s/m as the old code comment assumed.
-- **#58** — `sync_training_readiness` reads a nonexistent `hrvStatus` key. The real
+- **#58** (fixed) — `sync_training_readiness` read a nonexistent `hrvStatus` key. The real
   HRV-related fields here (`hrvFactorPercent`/`hrvFactorFeedback`) are a different
   signal than the `BALANCED`/`UNBALANCED`/`POOR` enum, which actually lives in
-  `get_hrv_data` (already synced correctly, separately).
-- **#59** — `sync_activity_details`'s lap builder reads `avgPower`/`totalAscent`;
+  `get_hrv_data` (already synced correctly, separately) — fix dropped the broken
+  `hrv_status` field from `training_readiness` entirely rather than mapping the
+  differently-shaped real fields.
+- **#59** (fixed) — `sync_activity_details`'s lap builder read `avgPower`/`totalAscent`;
   real keys are `averagePower`/`elevationGain`.
-- **#62** — `sync_scheduled_workouts` reads `item.get("sport") or item.get("activityType")`,
+- **#62** (fixed) — `sync_scheduled_workouts` read `item.get("sport") or item.get("activityType")`,
   neither of which exist. Real key is the flat string `sportTypeKey`.
 
 ## Validation not yet wired up

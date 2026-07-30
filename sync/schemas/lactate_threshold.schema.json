@@ -12,18 +12,18 @@
         },
         "calendarDate": {
           "type": "string",
-          "description": "Candidate source for the test date currently read from nonexistent testDate/date/dateTime keys (bug #56)."
+          "description": "Source of the test date, consumed by sync_lactate_threshold. Bug #56 (fixed): code previously read nonexistent testDate/date/dateTime keys."
         },
         "sequence": {
           "type": "integer"
         },
         "speed": {
           "type": "number",
-          "description": "Unit: m/s (NOT s/m as the current code comment assumes). Should be consumed as lt_pace_s_per_km via 1000.0 / speed, not speed * 1000.0 (bug #56: code currently reads nonexistent top-level paceThreshold and multiplies instead of dividing)."
+          "description": "Unit: m/s. Consumed as lt_pace_s_per_km via 1000.0 / speed. Bug #56 (fixed): code previously read a nonexistent top-level paceThreshold and multiplied by 1000 instead of dividing."
         },
         "heartRate": {
           "type": "integer",
-          "description": "Should be consumed as lt_hr_bpm (bug #56: code currently reads nonexistent top-level heartRateThreshold instead)."
+          "description": "Consumed as lt_hr_bpm. Bug #56 (fixed): code previously read a nonexistent top-level heartRateThreshold instead."
         },
         "heartRateCycling": {
           "description": "observed null in captured sample"
@@ -73,5 +73,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/lactate_threshold.schema.json",
   "title": "Lactate threshold (get_lactate_threshold)",
-  "description": "Returned by garminconnect's get_lactate_threshold() \u2014 no date argument, most-recent test only. CRITICAL: sync_lactate_threshold currently reads heartRateThreshold/paceThreshold/testDate \u2014 NONE of these keys exist in the real response (see bug #56). Real shape is nested under speed_and_heart_rate and power.\n\nVerified against: most-recent test on this account, dated 2026-07-06 (speed_and_heart_rate) / 2026-07-19 (power) \u2014 the two sub-objects have different calendarDates, meaning unconfirmed (possibly last-updated timestamps for that specific metric, not the same test). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+  "description": "Returned by garminconnect's get_lactate_threshold() \u2014 no date argument, most-recent test only. Bug #56 (fixed): sync_lactate_threshold previously read heartRateThreshold/paceThreshold/testDate, none of which exist in the real response. Real shape is nested under speed_and_heart_rate and power.\n\nVerified against: most-recent test on this account, dated 2026-07-06 (speed_and_heart_rate) / 2026-07-19 (power) \u2014 the two sub-objects have different calendarDates, meaning unconfirmed (possibly last-updated timestamps for that specific metric, not the same test). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
 }
