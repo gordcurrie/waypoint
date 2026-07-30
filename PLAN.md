@@ -77,7 +77,7 @@ waypoint/
 
 ---
 
-## Phase 1: MCP Server (build first)
+## Phase 1: MCP Server ✓ done
 
 ### Go MCP server — `cmd/mcp-server/`
 
@@ -91,17 +91,12 @@ Follows `gordcurrie/agent-skills` → `generate-mcp` skill conventions:
 - `stdio` (default) — Claude Desktop/Code spawns it as subprocess. Local dev.
 - `http` — Streamable HTTP via `mcp.NewStreamableHTTPHandler`. Homelab deployment.
 
-**Tools (data only — no LLM calls):**
-
-| Tool | Description |
-|------|-------------|
-| `get_recent_activities` | Last N activities with type, distance, duration, HR, training load |
-| `get_weekly_volume` | Distance/time by sport for last N weeks |
-| `get_daily_stats` | Body Battery, resting HR, stress, steps for date range |
-| `get_sleep_summary` | Recent sleep data: duration, stages, HRV, SpO2 |
-| `get_hrv_trend` | HRV weekly average and status over time |
-| `get_training_load` | ATL (7-day EMA), CTL (42-day EMA), TSB — computed on demand; optional write-back to InfluxDB |
-| `get_training_readiness` | Training readiness scores: HRV status, sleep score, acute/chronic ratio |
+**Tools (data only — no LLM calls):** 15 read-only tools plus one write (`create_workout`,
+always queues an upload) — see `tools/register.go` for the authoritative, current list
+grouped by file (`activities.go`, `health.go`, `training.go`, `fitness.go`, `splits.go`,
+`workouts.go`, `exercises.go`). Full per-tool descriptions are in the `waypoint` MCP
+server's own instructions (surfaced to Claude at connect time), not duplicated here to
+avoid drift.
 
 Claude calls these tools and does its own analysis. No chained LLM calls from Go.
 
@@ -165,14 +160,32 @@ Measurement: lactate_threshold  (most recent LT test result)
 Measurement: respiration
   Fields: avg_waking_brpm, avg_sleep_brpm, highest_brpm, lowest_brpm
 
+Measurement: activity_lap  (per-lap splits, one point per lap)
+  Tags:   activity_id
+  Fields: lap_index, distance_m, duration_s, avg_hr_bpm, max_hr_bpm,
+          avg_speed_m_s, avg_cadence_spm, avg_power_w, elevation_gain_m
+
+Measurement: activity_hr_zones  (time-in-zone per activity)
+  Tags:   activity_id
+  Fields: z1_s, z2_s, z3_s, z4_s, z5_s
+
+Measurement: scheduled_workout  (Garmin Connect calendar entries with a workoutId)
+  Tags:   scheduled_id, sport
+  Fields: workout_id, name, duration_s
+
 Measurement: training_load  (computed by Go on demand, written for Grafana)
   Fields: atl_7day, ctl_42day, tsb
 ```
 
+Authoritative source is `sync.py`'s `Point(...)` calls and `sync/schemas/*.schema.json`
+(one schema per `garminconnect` method, documenting the real API shape each field is
+derived from) — re-check there before trusting this table if it's been a while.
+
 ### Python sync sidecar — `sync/`
 
 - `garminconnect` v0.3.6 with `curl_cffi` Chrome impersonation
-- Syncs all 9 data types above; first run backfills 90 days (configurable via `BACKFILL_DAYS`)
+- Syncs all measurements above (see `sync.py` for the current, authoritative list of
+  `sync_*` functions); first run backfills 90 days (configurable via `BACKFILL_DAYS`)
 - Incremental after first run: per-measurement last-synced date in `/data/sync_state.json`
 - Auth tokens cached in `/data/garmin_auth` (Docker volume); survives container restarts
 - Writes via `influxdb3-python`; skips points with no data (all fields None)
@@ -271,109 +284,20 @@ System prompt defines a fitness coach persona with access to user's training his
 
 ---
 
-## In progress: exercise catalog linking for `create_workout`
+## Done: exercise catalog linking for `create_workout` (#51)
 
-**Branch**: `feat/exercise-catalog-linking`. Approved implementation plan below — kept
-here (not just in the ephemeral plan-mode scratch file) so a fresh session can pick up
-mid-implementation without re-deriving context.
+`create_workout` links strength steps to Garmin's built-in exercise picker
+(`category`/`exerciseName`), and supports real sets/reps via a `RepeatGroupDTO`
+wrapper instead of fixed-duration "interval" hacks. Catalog vendored at
+`internal/garmin/exercises/catalog.json` (`go:embed`), regenerated via
+`scripts/generate_exercise_catalog.py`; `search_exercises` MCP tool added for
+LLM-side lookup before setting `category`/`exercise_name`. Full verified details
+(RepeatGroupDTO shape, step type IDs, catalog capture method) are in CLAUDE.md's
+"Garmin exercise catalog + strength workout structure" section — not duplicated here.
 
-### Context
-
-`create_workout` currently only writes a free-text `description` per step. Garmin
-Connect's own workout editor has a separate "Exercise > Type" dropdown that links a
-step to a specific catalog entry (`category` + `exerciseName`), which is what drives
-the built-in demo animation shown when a workout is built by hand in Connect — AI-
-generated workouts uploaded via this tool never populate this, so they look plain by
-comparison (confirmed via a real user-built workout, id `1646566436`, and a screenshot
-of the step editor). Goal: link AI-generated workout steps to real Garmin exercises,
-and support proper sets/reps for strength exercises instead of fixed-duration
-"interval" hacks.
-
-Discovered live against the real Garmin API this session (not guessed, per this repo's
-non-negotiable verification rule):
-
-- Real strength workout JSON nests sets as a `RepeatGroupDTO` (`stepTypeId=6`)
-  wrapping `numberOfIterations` iterations of `[exercise step, rest step]`.
-- The exercise-performing step's `stepType` is `interval` (id 3) — **the same
-  stepType cardio intervals already use**. No new user-facing step type is needed for
-  exercises. The only new stepType is `rest` (id 5), internal/synthesized, never
-  chosen directly by an LLM.
-- Exercise linking is two plain strings: `category` (e.g. `"BENCH_PRESS"`) and
-  `exerciseName` (e.g. `"BARBELL_BENCH_PRESS"`) on the step. No video URL field exists
-  anywhere — Garmin renders the demo purely from this catalog reference.
-- `reps` is a valid end condition (`conditionTypeId=10`, `conditionTypeKey="reps"`),
-  alongside the time/distance conditions already supported.
-- No Garmin API endpoint exists for the exercise catalog (confirmed 404 on four
-  plausible endpoints). It's undocumented static data — scrape our own account's
-  workout-editor exercise picker (via Claude-in-Chrome) rather than trust a third
-  party's list blind.
-
-### Approach
-
-1. **Exercise catalog** — capture via Claude-in-Chrome (prefer the underlying network
-   request/static JSON chunk over DOM-scraping; large dropdowns risk virtualization,
-   which would silently truncate the catalog if only currently-rendered `<li>`s are
-   scraped). Store as `internal/garmin/exercises/catalog.json` (generated, not hand-
-   edited) + `catalog.go` using stdlib `//go:embed` (zero new dependency):
-   ```go
-   type Exercise struct { Category, ExerciseName, DisplayName string }
-   func Valid(category, exerciseName string) bool
-   func Search(query, category string, limit int) []Exercise
-   ```
-   `scripts/generate_exercise_catalog.py` — one-off converter from the raw capture,
-   documented like `inspect_api.py`. New read-only MCP tool `search_exercises` in
-   `tools/exercises.go`, registered in `tools/register.go` — pure static-data lookup,
-   no InfluxDB client needed. Description tells the LLM to call this before setting
-   `category`/`exercise_name`.
-
-2. **`WorkoutStep` schema** (`tools/workouts.go`) — add optional `Reps`, `Sets`,
-   `RestS`, `Category`, `ExerciseName` (`*int`/`*string`). No new `validStepTypes`
-   entry — exercise steps stay `type: "interval"`; `rest` is never user-facing.
-   Validation: end condition becomes three-way exclusive (`duration_s`/`distance_m`/
-   `reps`); `category`/`exercise_name` set together or not at all, validated against
-   `exercises.Valid(...)` when set (this is the actual fix for "LLM guesses a wrong
-   enum string," same failure class as the sportTypeId bugs fixed earlier); `sets`
-   (if present) must be ≥2 and requires `rest_s` (>0, no silent default); `rest_s`
-   without `sets` is an error.
-
-3. **`sync.py`** — keep the existing division of labor: Go validates and queues a
-   flat list of `WorkoutStep`s (sets/rest_s as modifiers on one step, not a nested
-   construct); Python's `_build_garmin_workout` does all `RepeatGroupDTO` translation.
-   `_STEP_TYPES` gets a `"rest"` entry (internal only). `_build_garmin_step` always
-   emits `category`/`exerciseName` keys (default `None` — the real fixture shows
-   Garmin serializes explicit nulls, not omitted keys) and a `reps` end-condition
-   branch. New `_build_garmin_repeat_group(order, step)` builds the `RepeatGroupDTO`
-   wrapper. **Before finalizing stepOrder/stepId placement, check the saved fixture
-   rather than guess** — need to confirm whether inner steps restart numbering per
-   group or use a global counter.
-
-   Fixture: the already-fetched full JSON for workout `1646566436` served as the
-   golden reference for the builder and its tests during development. Later removed
-   from the repo (contained real account PII — owner name/profile URLs) once its
-   structural findings were captured in code comments and CLAUDE.md instead.
-
-4. **Testing** — `internal/garmin/exercises/catalog_test.go` (loads, realistic size,
-   `Valid`/`Search` behavior), `tools/exercises_test.go` (search tool shape/clamping),
-   `tools/workouts_test.go` (reps end condition, category/exercise_name pairing rules,
-   sets/rest_s validation, queue round-trip), `sync/tests/test_sync.py` (golden-
-   fixture-based: sets→RepeatGroupDTO shape, reps-only flat step, `rest`(5) stays
-   distinct from `recovery`(4) — same regression-test style as the sportTypeId fix).
-
-5. **Rollout verification** — same empirical loop used for the sportTypeId fixes:
-   queue a real small strength workout via the finished tool, let sync upload it,
-   pull it back with `inspect_api.py get_workout_by_id <id>`, confirm the expected
-   `category`/`exerciseName`/`numberOfIterations`/reps condition/rest stepType, delete
-   the probe. Manual step, no new MCP tool needed for readback.
-
-### Explicitly deferred
-
-- **Weight target** (`weight_kg`/`weightValue`/`weightUnit`) — not needed for
-  exercise-linking + sets/reps. CLAUDE.md already has a `WEIGHT_UNIT_KILOGRAM`
-  precedent for whoever picks this up later, but the fixture showed `weightUnit`
-  populated even when `weightValue` was null — verify that before writing conversion
-  code, don't assume.
-- A step-level workout-detail MCP tool (e.g. `get_workout_detail`) — rollout
-  verification uses `inspect_api.py`/direct API calls manually instead.
+Deferred, not yet built: weight target (`weight_kg`) on strength steps, and a
+step-level `get_workout_detail` MCP tool (rollout verification currently uses
+`inspect_api.py get_workout_by_id` manually instead).
 
 ---
 

@@ -32,16 +32,18 @@ Not currently consumed by any sync field — re-verify before relying on this no
 **How to verify:**
 1. Check `sync/schemas/*.schema.json` first — one schema per `garminconnect` method
    currently used by `sync.py`, with field names/types/nesting/units/known quirks already
-   documented (see `sync/schemas/README.md`). This covers the methods already in use;
-   validation against live output isn't wired up yet (#55), so still confirm live for
-   anything new or if drift is suspected.
-2. Run the live capture helper:
+   documented (see `sync/schemas/README.md`). This covers the methods already in use.
+2. Run the live capture helper — it also validates the response against that method's
+   schema automatically (exits 1 on mismatch), so drift on a covered method surfaces
+   immediately instead of needing a manual eyeball diff (#55):
    ```bash
    docker exec waypoint-sync-1 python3 /app/inspect_api.py <method> <date>
    # Examples:
    docker exec waypoint-sync-1 python3 /app/inspect_api.py get_training_readiness 2026-07-24
    docker exec waypoint-sync-1 python3 /app/inspect_api.py get_sleep_data 2026-07-24
    ```
+   For a method with no schema yet (new field, nothing to validate against), it just
+   prints the raw JSON — still eyeball it by hand before writing code.
 3. Identify exact field names, nesting, and types from the real response
 4. Include the actual response shape as a comment in the sync function (see `sync_training_status` for the pattern)
 5. Do not commit the raw captured response as a fixture — it contains real account PII
