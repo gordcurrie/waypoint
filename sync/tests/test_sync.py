@@ -723,7 +723,9 @@ def test_lactate_threshold_speed_is_scaled_by_ten():
     with patch.object(sync, "_save_state"):
         sync.sync_lactate_threshold(garmin, client, {})
     points = _written_points(client)
-    assert "lt_pace_s_per_km=295.08" in str(points[0])  # 100.0 / 0.33888794, ~= 4:55/km
+    # Read the field value directly rather than parsing Point's string repr —
+    # sidesteps any dependence on its float formatting (Copilot #65/#66).
+    assert points[0]._fields["lt_pace_s_per_km"] == pytest.approx(100.0 / 0.33888794)  # ~= 4:55/km
 
 
 @freeze_time("2026-07-06")
