@@ -78,7 +78,7 @@
             "description": "observed null in captured sample"
           },
           "sportTypeKey": {
-            "description": "Consumed as sport tag (code also checks item.sport as an object with typeKey, not observed as a real key in this account's items \u2014 sportTypeKey is the flat string that actually appears)."
+            "description": "Consumed as sport tag. Bug #62 (fixed): code previously read item.get(\"sport\") or item.get(\"activityType\"), neither of which exist \u2014 sportTypeKey is the real, flat-string field."
           },
           "url": {
             "description": "observed null in captured sample"
