@@ -19,7 +19,7 @@
         },
         "speed": {
           "type": "number",
-          "description": "Unit: m/s. Consumed as lt_pace_s_per_km via 1000.0 / speed. Bug #56 (fixed): code previously read a nonexistent top-level paceThreshold and multiplied by 1000 instead of dividing."
+          "description": "Unit: dam/s (m/s * 10), not plain m/s. Consumed as lt_pace_s_per_km via 100.0 / speed. Bug #56 first fix wrongly assumed plain m/s (1000.0 / speed), which was still 10x off; verified 2026-07-30 against connect.garmin.com's Lactate Threshold report (165bpm/4:55/km/369W) — raw speed 0.33888794 only matches 4:55/km (295 s/km) via 100.0 / speed."
         },
         "heartRate": {
           "type": "integer",

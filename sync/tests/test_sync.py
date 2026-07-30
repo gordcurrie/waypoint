@@ -706,18 +706,24 @@ def test_lactate_threshold_reads_nested_speed_and_heart_rate():
     points = _written_points(client)
     assert len(points) == 1
     assert "lt_hr_bpm=165" in str(points[0])
-    assert "lt_pace_s_per_km=2000" in str(points[0])  # 1000.0 / 0.5
+    assert "lt_pace_s_per_km=200" in str(points[0])  # 100.0 / 0.5
 
 
 @freeze_time("2026-07-06")
-def test_lactate_threshold_speed_is_inverted_not_scaled():
-    """speed is m/s, not s/m — pace must be 1000/speed, not speed*1000 (bug #56)."""
-    garmin = _make_lt_garmin({"speed_and_heart_rate": {"speed": 4.0, "heartRate": 150}})
+def test_lactate_threshold_speed_is_scaled_by_ten():
+    """speed is dam/s (m/s * 10) — pace is 100/speed, not 1000/speed or speed*1000 (bug #56).
+
+    Regression value verified 2026-07-30 against connect.garmin.com's Lactate
+    Threshold report: raw speed 0.33888794 corresponds to a displayed 165bpm /
+    4:55/km (295 s/km) / 369W threshold. 1000.0/speed (this bug's first,
+    still-wrong fix) gives 2950.8 — 10x too slow.
+    """
+    garmin = _make_lt_garmin({"speed_and_heart_rate": {"speed": 0.33888794, "heartRate": 165}})
     client = MagicMock()
     with patch.object(sync, "_save_state"):
         sync.sync_lactate_threshold(garmin, client, {})
     points = _written_points(client)
-    assert "lt_pace_s_per_km=250" in str(points[0])  # 1000.0 / 4.0, not 4.0 * 1000.0
+    assert "lt_pace_s_per_km=295.08" in str(points[0])  # 100.0 / 0.33888794, ~= 4:55/km
 
 
 @freeze_time("2026-07-06")

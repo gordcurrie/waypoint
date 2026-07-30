@@ -170,13 +170,20 @@ old wrong-unit points must be deleted and re-synced:
 | `stride_length_mm` | `activity` | centimeters | millimeters | ×10 |
 | `recovery_time_h` | `training_readiness` | minutes | hours | ÷60 |
 | `hrv_status` | `training_readiness` | string enum | float | `BALANCED`→2.0, `UNBALANCED`→1.0, `POOR`→0.0 |
+| `lt_pace_s_per_km` | `lactate_threshold` | dam/s (m/s × 10) | s/km | `100.0 / speed` |
 
 **To backfill**: delete the affected measurements, reset the watermark keys
-(`activities`, `training_readiness`) in `/data/sync_state.json`, and restart the
-container. The backfill window is controlled by `BACKFILL_DAYS` (default 90).
+(`activities`, `training_readiness`, `lactate_threshold`) in `/data/sync_state.json`,
+and restart the container. The backfill window is controlled by `BACKFILL_DAYS`
+(default 90).
 
-`lt_pace_s_per_km` in `lactate_threshold` may also need ×1000 (s/m → s/km) if
-a lactate threshold test exists in the DB — unverifiable until LT data is present.
+`lt_pace_s_per_km`'s unit was resolved 2026-07-30 by comparing raw API `speed`
+(0.33888794) against connect.garmin.com's Lactate Threshold report (165bpm/4:55/km/369W):
+only `100.0 / speed` reproduces 4:55/km (295 s/km). Bug #56's original fix assumed plain
+m/s (`1000.0 / speed`) and was still 10x too slow (2950.8 s/km) — caught only because the
+value was implausible on inspection, not by any automated check. This is the second wrong
+guess at this field's unit in the same bug; don't guess a third — verify against the UI
+report if this ever needs re-deriving.
 
 ## Garmin workout-service sport/step type IDs (verified — don't re-guess)
 
