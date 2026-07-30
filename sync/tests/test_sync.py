@@ -828,7 +828,8 @@ def test_activity_details_lap_uses_real_power_and_elevation_keys():
     lap_point = next(p for p in written if "activity_lap" in str(p))
     assert "avg_power_w=250" in str(lap_point)
     assert "elevation_gain_m=12" in str(lap_point)
-    assert "999" not in str(lap_point)
+    assert "avg_power_w=999" not in str(lap_point)
+    assert "elevation_gain_m=999" not in str(lap_point)
 
 
 @freeze_time("2026-07-06")
