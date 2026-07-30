@@ -578,12 +578,16 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
 def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """Most-recent lactate threshold result — separate measurement avoids timestamp collision with performance.
 
-    API shape (verified 2026-07-28, see sync/schemas/lactate_threshold.schema.json):
-    {"speed_and_heart_rate": {"calendarDate": ..., "speed": <m/s>, "heartRate": <bpm>, ...},
+    API shape (verified 2026-07-30 against Garmin Connect UI, see
+    sync/schemas/lactate_threshold.schema.json):
+    {"speed_and_heart_rate": {"calendarDate": ..., "speed": <dam/s, i.e. m/s * 10>, "heartRate": <bpm>, ...},
      "power": {...}}
     HR/pace/date all live under speed_and_heart_rate — there is no top-level
-    heartRateThreshold/paceThreshold/testDate. speed is m/s, not s/m — pace is
-    1000.0 / speed, not speed * 1000.0.
+    heartRateThreshold/paceThreshold/testDate. speed is scaled by 10 (not plain
+    m/s, and not s/m) — confirmed against connect.garmin.com's Lactate Threshold
+    report (165bpm/4:55/km/369W): raw speed 0.33888794 only matches 4:55/km
+    (295 s/km) via 100.0 / speed. Bug #56's first fix (1000.0 / speed) assumed
+    plain m/s and was still off by 10x (2950.8 s/km).
     """
     log.info("lactate_threshold: fetching most recent")
     try:
@@ -607,10 +611,10 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[
             return
 
         p = Point("lactate_threshold").time(_day_ts(test_date))
-        speed_m_s = _fval(shr, "speed")
+        speed_raw = _fval(shr, "speed")
         fields = {
             "lt_hr_bpm": _fval(shr, "heartRate"),
-            "lt_pace_s_per_km": (1000.0 / speed_m_s) if speed_m_s else None,
+            "lt_pace_s_per_km": (100.0 / speed_raw) if speed_raw else None,
         }
         p, n = _add_fields(p, fields)
         if n:
