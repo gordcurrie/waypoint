@@ -1,5 +1,6 @@
 """Tests for sync.py — Garmin → InfluxDB sync sidecar."""
 
+import re
 from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
@@ -723,7 +724,9 @@ def test_lactate_threshold_speed_is_scaled_by_ten():
     with patch.object(sync, "_save_state"):
         sync.sync_lactate_threshold(garmin, client, {})
     points = _written_points(client)
-    assert "lt_pace_s_per_km=295.08" in str(points[0])  # 100.0 / 0.33888794, ~= 4:55/km
+    match = re.search(r"lt_pace_s_per_km=([\d.]+)", str(points[0]))
+    assert match
+    assert float(match.group(1)) == pytest.approx(100.0 / 0.33888794)  # ~= 4:55/km
 
 
 @freeze_time("2026-07-06")
