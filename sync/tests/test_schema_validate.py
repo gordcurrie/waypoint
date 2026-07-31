@@ -31,12 +31,12 @@ def test_invalid_lactate_threshold_response_fails():
 
 def test_cross_file_ref_resolves():
     """performance.schema.json $refs into vo2max.schema.json — must resolve, not error."""
-    instance = [{"generic": {"calDate": "2026-01-01", "vo2MaxValue": 50}}]
+    instance = [{"generic": {"calendarDate": "2026-01-01", "vo2MaxValue": 50}}]
     errors = schema_validate.validate("get_max_metrics", instance)
     assert errors == []
 
 
 def test_cross_file_ref_catches_real_violation():
-    instance = [{"generic": {"calDate": "2026-01-01", "vo2MaxValue": "fifty"}}]
+    instance = [{"generic": {"calendarDate": "2026-01-01", "vo2MaxValue": "fifty"}}]
     errors = schema_validate.validate("get_max_metrics", instance)
     assert errors

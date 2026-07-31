@@ -7,6 +7,7 @@ validator — only methods listed in METHOD_SCHEMA have a schema to check agains
 
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 from typing import Any
@@ -35,16 +36,20 @@ METHOD_SCHEMA = {
 }
 
 
+@functools.lru_cache(maxsize=1)
 def _load_registry() -> Registry:
     """Build a referencing.Registry from every schema file, keyed by its own $id.
 
     Needed so cross-file $ref (e.g. performance.schema.json -> vo2max.schema.json)
     resolves — each schema's $id doubles as the base URI relative $refs resolve
-    against.
+    against. Cached: schema files don't change within a process's lifetime, and
+    every validate() call would otherwise re-read and re-parse all of them.
     """
     resources = {}
     for path in SCHEMA_DIR.glob("*.schema.json"):
         contents = json.loads(path.read_text())
+        if "$id" not in contents:
+            raise ValueError(f"{path} is missing required $id")
         resources[contents["$id"]] = Resource.from_contents(contents)
     return Registry().with_resources(resources.items())
 
@@ -54,7 +59,7 @@ def validate(method_name: str, instance: Any) -> list[str] | None:
 
     Returns None if no schema exists for this method (nothing to check against
     yet — not a failure). Otherwise returns a list of human-readable error
-    messages; empty list means valid.
+    messages, sorted for stable output; empty list means valid.
     """
     schema_file = METHOD_SCHEMA.get(method_name)
     if schema_file is None:
@@ -67,4 +72,4 @@ def validate(method_name: str, instance: Any) -> list[str] | None:
     for err in validator.iter_errors(instance):
         path = "/".join(str(p) for p in err.absolute_path) or "<root>"
         errors.append(f"{path}: {err.message}")
-    return errors
+    return sorted(errors)
