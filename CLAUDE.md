@@ -172,20 +172,30 @@ old wrong-unit points must be deleted and re-synced:
 | `stride_length_mm` | `activity` | centimeters | millimeters | ×10 |
 | `recovery_time_h` | `training_readiness` | minutes | hours | ÷60 |
 | `hrv_status` | `training_readiness` | string enum | float | `BALANCED`→2.0, `UNBALANCED`→1.0, `POOR`→0.0 |
-| `lt_pace_s_per_km` | `lactate_threshold` | dam/s (m/s × 10) | s/km | `100.0 / speed` |
+| `lt_pace_s_per_km` | `lactate_threshold` | m/s ÷ 10 (raw value is 1/10th of true m/s) | s/km | `100.0 / speed` |
 
 **To backfill**: delete the affected measurements, reset the watermark keys
 (`activities`, `training_readiness`, `lactate_threshold`) in `/data/sync_state.json`,
 and restart the container. The backfill window is controlled by `BACKFILL_DAYS`
 (default 90).
 
-`lt_pace_s_per_km`'s unit was resolved 2026-07-30 by comparing raw API `speed`
-(0.33888794) against connect.garmin.com's Lactate Threshold report (165bpm/4:55/km/369W):
-only `100.0 / speed` reproduces 4:55/km (295 s/km). Bug #56's original fix assumed plain
-m/s (`1000.0 / speed`) and was still 10x too slow (2950.8 s/km) — caught only because the
-value was implausible on inspection, not by any automated check. This is the second wrong
-guess at this field's unit in the same bug; don't guess a third — verify against the UI
-report if this ever needs re-deriving.
+`lt_pace_s_per_km`'s scale factor was resolved 2026-07-30 against connect.garmin.com's
+Lactate Threshold report, confirmed at 4 separate dates via the report's own chart
+tooltips (exact digit values, not a chart-pixel estimate): raw `speed` only reproduces
+the displayed pace via `100.0 / speed` in every case —
+
+| Date | raw `speed` | UI pace | `100.0 / speed` |
+|---|---|---|---|
+| 2026-01-22 | 0.26944369 | 6:11/km | 371.1s = 6:11.1 |
+| 2026-02-04 | 0.29722139 | 5:36/km | 336.5s = 5:36.5 |
+| 2026-04-26 | 0.32777686 | 5:05/km | 305.1s = 5:05.1 |
+| 2026-07-06 | 0.33888794 | 4:55/km | 295.1s = 4:55.1 |
+
+Bug #56's original fix assumed plain m/s (`1000.0 / speed`) and was still 10x too slow
+(2950.8 s/km on the last row) — caught only because the value was implausible on
+inspection, not by any automated check. This is the second wrong guess at this field's
+unit in the same bug; don't guess a third — verify against the UI report's tooltips
+(not just the "Most Recent" tile) if this ever needs re-deriving.
 
 ## Garmin workout-service sport/step type IDs (verified — don't re-guess)
 

@@ -67,10 +67,10 @@ All four are now fixed:
 
 - **#56** (fixed, twice) — `sync_lactate_threshold` read `heartRateThreshold`/`paceThreshold`/`testDate`,
   none of which exist. Real data is nested under `speed_and_heart_rate`. The first fix
-  assumed `speed` was plain m/s (`1000.0 / speed`) — still wrong, 10x off. `speed` is
-  actually scaled by 10 (dam/s); verified against connect.garmin.com's own Lactate
-  Threshold report across 6 independent monthly data points. Correct conversion is
-  `100.0 / speed`. See CLAUDE.md's unit conversion table.
+  assumed `speed` was plain m/s (`1000.0 / speed`) — still wrong, 10x off. The raw value
+  is actually 1/10th of true m/s; verified against connect.garmin.com's own Lactate
+  Threshold report's chart tooltips at 4 separate dates (exact digit values). Correct
+  conversion is `100.0 / speed`. See CLAUDE.md's unit conversion table.
 - **#58** (fixed) — `sync_training_readiness` read a nonexistent `hrvStatus` key. The real
   HRV-related fields here (`hrvFactorPercent`/`hrvFactorFeedback`) are a different
   signal than the `BALANCED`/`UNBALANCED`/`POOR` enum, which actually lives in
