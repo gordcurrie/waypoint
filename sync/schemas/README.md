@@ -65,9 +65,12 @@ repeat group + cooldown) with zero schema violations.
 Comparing `sync.py`'s field reads against the real shapes surfaced four live bugs.
 All four are now fixed:
 
-- **#56** (fixed) — `sync_lactate_threshold` read `heartRateThreshold`/`paceThreshold`/`testDate`,
-  none of which exist. Real data is nested under `speed_and_heart_rate`, and the pace
-  field is m/s, not s/m as the old code comment assumed.
+- **#56** (fixed, twice) — `sync_lactate_threshold` read `heartRateThreshold`/`paceThreshold`/`testDate`,
+  none of which exist. Real data is nested under `speed_and_heart_rate`. The first fix
+  assumed `speed` was plain m/s (`1000.0 / speed`) — still wrong, 10x off. The raw value
+  is actually 1/10th of true m/s; verified against connect.garmin.com's own Lactate
+  Threshold report's chart tooltips at 4 separate dates (exact digit values). Correct
+  conversion is `100.0 / speed`. See CLAUDE.md's unit conversion table.
 - **#58** (fixed) — `sync_training_readiness` read a nonexistent `hrvStatus` key. The real
   HRV-related fields here (`hrvFactorPercent`/`hrvFactorFeedback`) are a different
   signal than the `BALANCED`/`UNBALANCED`/`POOR` enum, which actually lives in
@@ -79,7 +82,15 @@ All four are now fixed:
 - **#62** (fixed) — `sync_scheduled_workouts` read `item.get("sport") or item.get("activityType")`,
   neither of which exist. Real key is the flat string `sportTypeKey`.
 
-## Validation not yet wired up
+## Validation wired up (#55)
 
-These schemas are documentation today. Wiring `inspect_api.py` (or a sibling script)
-to validate live output against them is #55, not yet done.
+`inspect_api.py` validates its live output against the matching schema (see
+`schema_validate.METHOD_SCHEMA` for the method → schema-file mapping) and exits
+1 on a mismatch, printing each violation's path and message. A method with no
+entry in that mapping just prints a note that nothing was checked — not a
+failure; it means no schema has been derived for that method yet.
+
+This only covers the interactive dev workflow (someone running `inspect_api.py`
+while deriving a new field). A periodic automated drift check against a live
+account is a separate, larger follow-on (see #49) — not built, and needs its
+own design for how a failure gets surfaced to a human before it's worth building.

@@ -19,7 +19,7 @@
         },
         "speed": {
           "type": "number",
-          "description": "Unit: dam/s (m/s * 10), not plain m/s. Consumed as lt_pace_s_per_km via 100.0 / speed. Bug #56 first fix wrongly assumed plain m/s (1000.0 / speed), which was still 10x off; verified 2026-07-30 against connect.garmin.com's Lactate Threshold report (165bpm/4:55/km/369W) — raw speed 0.33888794 only matches 4:55/km (295 s/km) via 100.0 / speed."
+          "description": "Value is 1/10th of true m/s (not plain m/s). Consumed as lt_pace_s_per_km via 100.0 / speed. Bug #56 first fix wrongly assumed plain m/s (1000.0 / speed), which was still 10x off; verified 2026-07-30 against connect.garmin.com's Lactate Threshold report's chart tooltips at 4 separate dates (exact digit values, see CLAUDE.md's unit table) — raw speed only matches the displayed pace via 100.0 / speed in every case, e.g. 0.33888794 -> 4:55/km (295 s/km)."
         },
         "heartRate": {
           "type": "integer",

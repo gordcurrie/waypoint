@@ -1,3 +1,4 @@
 garminconnect==0.3.6
 influxdb3-python==0.9.0
 curl_cffi==0.7.4
+jsonschema==4.25.1

@@ -580,14 +580,16 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[
 
     API shape (verified 2026-07-30 against Garmin Connect UI, see
     sync/schemas/lactate_threshold.schema.json):
-    {"speed_and_heart_rate": {"calendarDate": ..., "speed": <dam/s, i.e. m/s * 10>, "heartRate": <bpm>, ...},
+    {"speed_and_heart_rate": {"calendarDate": ..., "speed": <1/10th of true m/s>, "heartRate": <bpm>, ...},
      "power": {...}}
     HR/pace/date all live under speed_and_heart_rate — there is no top-level
-    heartRateThreshold/paceThreshold/testDate. speed is scaled by 10 (not plain
-    m/s, and not s/m) — confirmed against connect.garmin.com's Lactate Threshold
-    report (165bpm/4:55/km/369W): raw speed 0.33888794 only matches 4:55/km
-    (295 s/km) via 100.0 / speed. Bug #56's first fix (1000.0 / speed) assumed
-    plain m/s and was still off by 10x (2950.8 s/km).
+    heartRateThreshold/paceThreshold/testDate. speed is 1/10th of true m/s (not
+    plain m/s, and not s/m) — confirmed against connect.garmin.com's Lactate
+    Threshold report's chart tooltips at 4 separate dates (exact digit values,
+    see CLAUDE.md's unit table): raw speed only matches the displayed pace via
+    100.0 / speed in every case, e.g. 0.33888794 -> 4:55/km (295 s/km). Bug #56's
+    first fix (1000.0 / speed) assumed plain m/s and was still off by 10x
+    (2950.8 s/km).
     """
     log.info("lactate_threshold: fetching most recent")
     try:

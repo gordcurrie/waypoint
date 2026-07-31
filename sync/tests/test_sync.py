@@ -711,12 +711,12 @@ def test_lactate_threshold_reads_nested_speed_and_heart_rate():
 
 @freeze_time("2026-07-06")
 def test_lactate_threshold_speed_is_scaled_by_ten():
-    """speed is dam/s (m/s * 10) — pace is 100/speed, not 1000/speed or speed*1000 (bug #56).
+    """speed is 1/10th of true m/s — pace is 100/speed, not 1000/speed or speed*1000 (bug #56).
 
     Regression value verified 2026-07-30 against connect.garmin.com's Lactate
-    Threshold report: raw speed 0.33888794 corresponds to a displayed 165bpm /
-    4:55/km (295 s/km) / 369W threshold. 1000.0/speed (this bug's first,
-    still-wrong fix) gives 2950.8 — 10x too slow.
+    Threshold report's chart tooltips at 4 separate dates: raw speed 0.33888794
+    corresponds to a displayed 165bpm / 4:55/km (295 s/km) / 369W threshold.
+    1000.0/speed (this bug's first, still-wrong fix) gives 2950.8 — 10x too slow.
     """
     garmin = _make_lt_garmin({"speed_and_heart_rate": {"speed": 0.33888794, "heartRate": 165}})
     client = MagicMock()
