@@ -555,7 +555,22 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
     while d <= end:
         try:
             raw = garmin.get_max_metrics(d.isoformat())
-            fitness_age_raw = garmin.connectapi(f"fitnessage-service/fitnessage/{d.isoformat()}")
+            try:
+                fitness_age_raw = garmin.connectapi(
+                    f"fitnessage-service/fitnessage/{d.isoformat()}"
+                )
+            except (
+                GarminConnectAuthenticationError,
+                GarminConnectTooManyRequestsError,
+                GarminConnectConnectionError,
+            ):
+                raise
+            except Exception as exc:
+                # Isolated from the outer try: a fitness-age-specific failure must not
+                # also drop that day's vo2max (already fetched above) or stall the
+                # watermark on a metric that isn't even the one that failed.
+                fitness_age_raw = None
+                log.warning("performance %s: fitness_age fetch failed: %s", d, exc)
             if raw or fitness_age_raw:
                 item = (raw[0] if isinstance(raw, list) else raw) if raw else {}
                 generic = item.get("generic") or item

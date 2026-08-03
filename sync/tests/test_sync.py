@@ -762,6 +762,20 @@ def test_performance_writes_point_from_fitness_age_alone():
     assert client.write.called
 
 
+@freeze_time("2026-07-06")
+def test_performance_fitness_age_failure_does_not_drop_vo2max():
+    """A fitness_age-specific fetch failure must not also drop that day's vo2max
+    (bug flagged in code review on #70) — the two are fetched independently."""
+    garmin = _make_performance_garmin(
+        max_metrics_payload=[{"generic": {"vo2MaxPreciseValue": 46.6}}],
+        fitness_age_payload=None,
+    )
+    garmin.connectapi.side_effect = RuntimeError("fitness age endpoint down")
+    fields = _captured_performance_fields(garmin)
+    assert fields.get("vo2max") == pytest.approx(46.6)
+    assert "fitness_age" not in fields
+
+
 # ── sync_lactate_threshold ──────────────────────────────────────────────────────
 
 
