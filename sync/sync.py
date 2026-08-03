@@ -784,11 +784,22 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
             raw = garmin.get_scheduled_workouts(year, month) or {}
             items: list[Any] = raw.get("calendarItems") or []
             for item in items:
-                # Calendar items include more than workouts (e.g. races, notes).
-                # Only sync items that have a workoutId — those are scheduled workouts.
+                # Calendar items include more than workouts (e.g. completed activities,
+                # weight/bloodpressure entries, naps). Two distinct kinds of item count as
+                # a real scheduled workout:
+                #   - a non-null workoutId: a workout created via create_workout/the Garmin
+                #     workout builder.
+                #   - itemType == "fbtAdaptiveWorkout" with a trainingPlanId: a coach/training-plan-assigned workout.
+                #     Verified live 2026-08-02 (bug found via a real coach plan): these always have workoutId=null —
+                #     the real identifiers are trainingPlanId + workoutUuid instead. An earlier version of this filter
+                #     only checked workoutId and silently dropped every coach-plan workout.
                 try:
                     workout_id = item.get("workoutId")
-                    if workout_id is None:
+                    is_coach_plan_item = (
+                        item.get("itemType") == "fbtAdaptiveWorkout"
+                        and item.get("trainingPlanId") is not None
+                    )
+                    if workout_id is None and not is_coach_plan_item:
                         continue
                     scheduled_id = item.get("id")
                     if scheduled_id is None:
@@ -812,7 +823,7 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                     )
                     dur = _fval(item, "duration")
                     fields: dict[str, Any] = {
-                        "workout_id": float(workout_id),
+                        "workout_id": float(workout_id) if workout_id is not None else None,
                         "name": str(item.get("title") or item.get("workoutName") or ""),
                         "duration_s": dur
                         if dur is not None

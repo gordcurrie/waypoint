@@ -33,7 +33,7 @@
           },
           "itemType": {
             "type": "string",
-            "description": "Observed values in this account: activity, fbtAdaptiveWorkout, nap, bloodpressure, weight, trainingPlan. fbtAdaptiveWorkout is Garmin's auto-generated adaptive daily suggestion \u2014 has a trainingPlanId but workoutId is still null, so it's correctly skipped by the current filter, not a real user-schedulable workout."
+            "description": "Observed values in this account: activity, fbtAdaptiveWorkout, nap, bloodpressure, weight, trainingPlan. Correction 2026-08-02: fbtAdaptiveWorkout is NOT just an auto-generated suggestion to skip \u2014 verified live against a real active coach training plan (trainingPlanId 46457367) that these are the actual coach-assigned future workouts (title e.g. \"Base\"/\"Tempo\", sportTypeKey populated, tpType: \"FBT_ADAPTIVE\"). workoutId is genuinely always null on these; sync_scheduled_workouts now also includes any item with itemType==fbtAdaptiveWorkout and a non-null trainingPlanId. Previous filter (workoutId-only) silently dropped every coach-plan workout \u2014 caught because the calendar showed nothing 6-7 days out despite the coach having added items."
           },
           "activityTypeId": {
             "description": "observed null in captured sample"
@@ -150,7 +150,7 @@
             "description": "observed null in captured sample"
           },
           "workoutId": {
-            "description": "Filter key: sync_scheduled_workouts skips any item where this is null. Always null in both captured months for this account \u2014 no positive example captured yet."
+            "description": "One of two filter keys (see itemType) sync_scheduled_workouts uses to decide whether an item is a real scheduled workout. Always null for coach/training-plan items (itemType==fbtAdaptiveWorkout) \u2014 populated only for workouts created via create_workout/the Garmin workout builder. No positive (non-null) example captured yet in this account; fbtAdaptiveWorkout items are matched via trainingPlanId instead."
           },
           "protectedWorkoutSchedule": {
             "type": "boolean"
@@ -251,5 +251,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/scheduled_workouts.schema.json",
   "title": "Scheduled workouts calendar (get_scheduled_workouts)",
-  "description": "Returned by garminconnect's get_scheduled_workouts(year, month). Consumed by sync_scheduled_workouts, which filters calendarItems to only those with a non-null workoutId \u2014 this account's captured months had zero such items (all items were itemType activity/fbtAdaptiveWorkout/nap/bloodpressure/weight/trainingPlan, all with workoutId: null). No positive fixture yet for a real scheduled/uploaded workout item (see README gaps).\n\nVerified against: 2026-07 (30 items, 0 with workoutId), 2026-08 (9 items, 0 with workoutId). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+  "description": "Returned by garminconnect's get_scheduled_workouts(year, month). Consumed by sync_scheduled_workouts, which includes a calendarItem as a real scheduled workout if either (a) workoutId is non-null (workout created via create_workout/the Garmin workout builder), or (b) itemType==fbtAdaptiveWorkout with a non-null trainingPlanId (coach/training-plan-assigned workout \u2014 confirmed live 2026-08-02 against an active coach plan, trainingPlanId 46457367). Still no positive fixture for case (a); case (b) is real and verified. No positive fixture yet for a real scheduled/uploaded (case a) workout item (see README gaps).\n\nVerified against: 2026-07 (30 items, 0 with workoutId), 2026-08 (9 items, 0 with workoutId, 6 with itemType==fbtAdaptiveWorkout \u2014 the coach-plan items case (b) exists to catch). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
 }

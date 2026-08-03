@@ -1136,6 +1136,55 @@ def test_scheduled_workouts_skips_item_with_no_id(no_sleep):
     assert not client.write.called
 
 
+def _coach_plan_item(
+    scheduled_id: int = 300,
+    training_plan_id: int = 46457367,
+    date_str: str = "2026-08-05",
+    title: str = "Tempo",
+    sport: str = "running",
+) -> dict:
+    """A coach/training-plan-assigned item as returned live 2026-08-02 — itemType
+    fbtAdaptiveWorkout, workoutId always null, real identifier is trainingPlanId."""
+    return {
+        "id": scheduled_id,
+        "workoutId": None,
+        "trainingPlanId": training_plan_id,
+        "itemType": "fbtAdaptiveWorkout",
+        "date": date_str,
+        "title": title,
+        "sportTypeKey": sport,
+        "duration": None,
+    }
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_includes_coach_plan_items(no_sleep):
+    """fbtAdaptiveWorkout items with a trainingPlanId are real coach-assigned workouts,
+    not the auto-generated suggestions they were previously assumed to be — must be
+    synced even though workoutId is null (bug found 2026-08-02: calendar showed nothing
+    despite the coach having added a week of workouts)."""
+    garmin = _sched_garmin([_coach_plan_item()])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    client.write.assert_called_once()
+    points = client.write.call_args[1]["record"]
+    assert len(points) == 1
+    assert 'name="Tempo"' in str(points[0])
+    assert "workout_id=" not in str(points[0])
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_fbt_adaptive_without_training_plan_id_skipped(no_sleep):
+    """fbtAdaptiveWorkout with no trainingPlanId is not a confirmed real workout — stay
+    conservative and skip rather than guess."""
+    item = _coach_plan_item()
+    item["trainingPlanId"] = None
+    garmin = _sched_garmin([item])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    assert not client.write.called
+
+
 @freeze_time("2026-07-06")
 def test_scheduled_workouts_connection_error_propagates(no_sleep):
     garmin = MagicMock()
