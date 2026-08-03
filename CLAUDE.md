@@ -19,9 +19,15 @@ integer enums, percent values named "Ratio", missing fields that seem like they 
 Bugs burned from skipping this step: `acwRatio` (doesn't exist; real field is
 `acwrFactorPercent`), the entire `training_status` response structure (wrong path, wrong
 type, wrong field names), `sync_lactate_threshold` reading fields that don't exist at all
-(#56), `sync_training_readiness` reading a nonexistent `hrvStatus` key (#58), and
+(#56), `sync_training_readiness` reading a nonexistent `hrvStatus` key (#58),
 `sync_activity_details`'s lap builder reading `avgPower`/`totalAscent` instead of the real
-`averagePower`/`elevationGain` (#59).
+`averagePower`/`elevationGain` (#59), and `sync_performance`/`sync_training_status` both
+reading `fitnessAge` from `mostRecentVO2Max.generic` — a field that exists in the response
+shape but has always read `null` on this account. Real fitness age lives on a completely
+separate, unwrapped endpoint (`fitnessage-service/fitnessage/<date>`, no `garminconnect`
+method for it — call `garmin.connectapi()` directly), found 2026-08-02 only because the
+Garmin Connect app's own "improved to X" notification didn't match what sync had stored
+(nothing, in this case — the field had never once been populated).
 
 Note: an earlier version of this doc claimed "sleep API returns no HRV data at all"
 (`avg_hrv_ms` bug). That's now out of date — deriving the schemas below found

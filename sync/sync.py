@@ -500,7 +500,6 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                         "vo2max_cycling": _fval(
                             raw, "mostRecentVO2Max", "cycling", "vo2MaxPreciseValue"
                         ),
-                        "fitness_age": _fval(raw, "mostRecentVO2Max", "generic", "fitnessAge"),
                     }
                     p, n = _add_fields(p, fields)
                     if n:
@@ -527,13 +526,24 @@ def sync_training_status(garmin: Garmin, client: InfluxDBClient3, state: dict[st
 def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """VO2 max / fitness age per day. Lactate threshold written to its own measurement.
 
-    API shape (verified 2026-07-26 via get_max_metrics):
+    VO2 max API shape (verified 2026-07-26 via get_max_metrics):
     [{"userId": ..., "generic": {"calendarDate": "2025-01-08",
       "vo2MaxPreciseValue": 39.4, "vo2MaxValue": 39.0, "fitnessAge": 47,
       "fitnessAgeDescription": 0, "maxMetCategory": 0},
       "cycling": null, "heatAltitudeAcclimation": null}]
     A list, despite the garminconnect type hint claiming dict. Empty list
     on days with no VO2max update (not an error).
+
+    Bug (found 2026-08-02): generic.fitnessAge above always reads null on this
+    account — confirmed live, not a formatting quirk. Real fitness age comes
+    from a completely separate, unwrapped endpoint (no garminconnect method
+    exists for it): GET fitnessage-service/fitnessage/<date>, e.g.
+    {"chronologicalAge": 50, "fitnessAge": 44.74, "achievableFitnessAge": 43.4,
+     "previousFitnessAge": 44.01, "components": {...}, "lastUpdated": ...}.
+    On days with insufficient rolling data ("stale" components), the
+    top-level "fitnessAge" key is absent entirely, not null — use .get().
+    Verified against the Garmin Connect UI's own Fitness Age page (matched
+    within rounding of the in-app "improved to X" notification).
     """
     start = _last_synced(state, "performance")
     end = date.today()
@@ -545,13 +555,29 @@ def sync_performance(garmin: Garmin, client: InfluxDBClient3, state: dict[str, A
     while d <= end:
         try:
             raw = garmin.get_max_metrics(d.isoformat())
-            if raw:
-                item = raw[0] if isinstance(raw, list) else raw
+            try:
+                fitness_age_raw = garmin.connectapi(
+                    f"fitnessage-service/fitnessage/{d.isoformat()}"
+                )
+            except (
+                GarminConnectAuthenticationError,
+                GarminConnectTooManyRequestsError,
+                GarminConnectConnectionError,
+            ):
+                raise
+            except Exception as exc:
+                # Isolated from the outer try: a fitness-age-specific failure must not
+                # also drop that day's vo2max (already fetched above) or stall the
+                # watermark on a metric that isn't even the one that failed.
+                fitness_age_raw = None
+                log.warning("performance %s: fitness_age fetch failed: %s", d, exc)
+            if raw or fitness_age_raw:
+                item = (raw[0] if isinstance(raw, list) else raw) if raw else {}
                 generic = item.get("generic") or item
                 p = Point("performance").time(_day_ts(d))
                 fields = {
                     "vo2max": _fval(generic, "vo2MaxPreciseValue"),
-                    "fitness_age": _fval(generic, "fitnessAge"),
+                    "fitness_age": _fval(fitness_age_raw or {}, "fitnessAge"),
                 }
                 p, n = _add_fields(p, fields)
                 if n:

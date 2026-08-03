@@ -947,6 +947,397 @@
       ],
       "title": "Overnight HRV (Sleep)",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
+      "id": 103,
+      "title": "Fitness Trends",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "atl_7day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ATL (7d)"
+              },
+              {
+                "id": "color",
+                "fixedColor": "orange",
+                "mode": "fixed"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ctl_42day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CTL (42d)"
+              },
+              {
+                "id": "color",
+                "fixedColor": "blue",
+                "mode": "fixed"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 25
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tsb"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TSB (form)"
+              },
+              {
+                "id": "color",
+                "fixedColor": "purple",
+                "mode": "fixed"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
+          "rawQuery": true,
+          "query": "SELECT atl_7day, ctl_42day, tsb FROM training_load WHERE $timeFilter ORDER BY time ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "Training Load (ATL / CTL / TSB)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vo2max"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VO2 Max"
+              },
+              {
+                "id": "color",
+                "fixedColor": "green",
+                "mode": "fixed"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fitness_age"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Fitness Age"
+              },
+              {
+                "id": "color",
+                "fixedColor": "dark-orange",
+                "mode": "fixed"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 59
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
+          "rawQuery": true,
+          "query": "SELECT vo2max, fitness_age FROM performance WHERE $timeFilter ORDER BY time ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "VO2 Max & Fitness Age",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "dark-yellow",
+            "mode": "fixed"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 8,
+            "showPoints": "always",
+            "spanNulls": false
+          },
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lt_pace_s_per_km"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LT Pace (s/km)"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 59
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
+          "rawQuery": true,
+          "query": "SELECT lt_pace_s_per_km FROM lactate_threshold WHERE $timeFilter ORDER BY time ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "Lactate Threshold Pace",
+      "description": "Sparse by nature — Garmin only computes a new LT test occasionally, not daily.",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_waking_brpm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Avg Waking"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_sleep_brpm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Avg Sleep"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "highest_brpm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Highest"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lowest_brpm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Lowest"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 67
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin-influxdb"
+          },
+          "rawQuery": true,
+          "query": "SELECT avg_waking_brpm, avg_sleep_brpm, highest_brpm, lowest_brpm FROM respiration WHERE $timeFilter ORDER BY time ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "Respiration Rate",
+      "type": "timeseries"
     }
   ],
   "refresh": "5m",
