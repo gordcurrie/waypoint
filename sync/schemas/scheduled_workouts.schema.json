@@ -22,7 +22,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer"
+            "type": ["integer", "null"],
+            "description": "Observed null live 2026-08-02 on non-workout itemTypes (e.g. weight/bloodpressure entries). sync.py already handles this — sync_scheduled_workouts skips and logs any item with a null id."
           },
           "groupId": {
             "description": "observed null in captured sample"
@@ -66,10 +67,12 @@
             "description": "observed null in captured sample"
           },
           "weight": {
-            "type": "number"
+            "type": ["number", "null"],
+            "description": "Observed null live 2026-08-02 on non-weight itemTypes; only populated for itemType=weight entries. Not consumed by sync.py."
           },
           "difference": {
-            "type": "number"
+            "type": ["number", "null"],
+            "description": "Observed null live 2026-08-02; paired with weight, not consumed by sync.py."
           },
           "courseId": {
             "description": "observed null in captured sample"
