@@ -281,7 +281,7 @@
         },
         "feedbackShortType": {
           "type": ["string", "null"],
-          "description": "Observed null live 2026-08-02 — no feedback event isn't always present."
+          "description": "Observed null live 2026-08-02 — not every reading has an associated feedback event."
         },
         "feedbackLongType": {
           "type": "string"
