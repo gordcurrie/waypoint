@@ -70,7 +70,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "score"
+              "options": "training_readiness.score"
             },
             "properties": [
               {
@@ -79,15 +79,17 @@
               },
               {
                 "id": "color",
-                "fixedColor": "blue",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "sleep_score"
+              "options": "training_readiness.sleep_score"
             },
             "properties": [
               {
@@ -96,8 +98,10 @@
               },
               {
                 "id": "color",
-                "fixedColor": "purple",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -162,7 +166,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "body_battery_max"
+              "options": "daily_stats.body_battery_max"
             },
             "properties": [
               {
@@ -171,15 +175,17 @@
               },
               {
                 "id": "color",
-                "fixedColor": "green",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "body_battery_min"
+              "options": "daily_stats.body_battery_min"
             },
             "properties": [
               {
@@ -188,8 +194,10 @@
               },
               {
                 "id": "color",
-                "fixedColor": "orange",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -254,7 +262,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "weekly_avg_ms"
+              "options": "hrv.weekly_avg_ms"
             },
             "properties": [
               {
@@ -324,7 +332,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "resting_hr_bpm"
+              "options": "daily_stats.resting_hr_bpm"
             },
             "properties": [
               {
@@ -406,7 +414,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "training_load"
+              "options": "activity.training_load"
             },
             "properties": [
               {
@@ -476,7 +484,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "distance_km"
+              "options": "activity.distance_km"
             },
             "properties": [
               {
@@ -651,7 +659,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "deep_h"
+              "options": "sleep.deep_h"
             },
             "properties": [
               {
@@ -660,15 +668,17 @@
               },
               {
                 "id": "color",
-                "fixedColor": "dark-blue",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "dark-blue",
+                  "mode": "fixed"
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "rem_h"
+              "options": "sleep.rem_h"
             },
             "properties": [
               {
@@ -677,15 +687,17 @@
               },
               {
                 "id": "color",
-                "fixedColor": "purple",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "light_h"
+              "options": "sleep.light_h"
             },
             "properties": [
               {
@@ -694,15 +706,17 @@
               },
               {
                 "id": "color",
-                "fixedColor": "light-blue",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "light-blue",
+                  "mode": "fixed"
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "awake_h"
+              "options": "sleep.awake_h"
             },
             "properties": [
               {
@@ -711,8 +725,10 @@
               },
               {
                 "id": "color",
-                "fixedColor": "yellow",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -835,7 +851,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "sleep_score"
+              "options": "sleep.sleep_score"
             },
             "properties": [
               {
@@ -905,7 +921,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "last_night_ms"
+              "options": "hrv.last_night_ms"
             },
             "properties": [
               {
@@ -985,7 +1001,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "atl_7day"
+              "options": "training_load.atl_7day"
             },
             "properties": [
               {
@@ -994,15 +1010,17 @@
               },
               {
                 "id": "color",
-                "fixedColor": "orange",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "ctl_42day"
+              "options": "training_load.ctl_42day"
             },
             "properties": [
               {
@@ -1011,8 +1029,10 @@
               },
               {
                 "id": "color",
-                "fixedColor": "blue",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
               },
               {
                 "id": "custom.fillOpacity",
@@ -1023,7 +1043,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "tsb"
+              "options": "training_load.tsb"
             },
             "properties": [
               {
@@ -1032,8 +1052,10 @@
               },
               {
                 "id": "color",
-                "fixedColor": "purple",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -1098,7 +1120,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "vo2max"
+              "options": "performance.vo2max"
             },
             "properties": [
               {
@@ -1107,15 +1129,17 @@
               },
               {
                 "id": "color",
-                "fixedColor": "green",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "fitness_age"
+              "options": "performance.fitness_age"
             },
             "properties": [
               {
@@ -1124,8 +1148,10 @@
               },
               {
                 "id": "color",
-                "fixedColor": "dark-orange",
-                "mode": "fixed"
+                "value": {
+                  "fixedColor": "dark-orange",
+                  "mode": "fixed"
+                }
               }
             ]
           }
@@ -1190,7 +1216,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "lt_pace_s_per_km"
+              "options": "lactate_threshold.lt_pace_s_per_km"
             },
             "properties": [
               {
@@ -1231,7 +1257,7 @@
         }
       ],
       "title": "Lactate Threshold Pace",
-      "description": "Sparse by nature — Garmin only computes a new LT test occasionally, not daily.",
+      "description": "Sparse by nature \u2014 Garmin only computes a new LT test occasionally, not daily.",
       "type": "timeseries"
     },
     {
@@ -1260,7 +1286,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "avg_waking_brpm"
+              "options": "respiration.avg_waking_brpm"
             },
             "properties": [
               {
@@ -1272,7 +1298,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "avg_sleep_brpm"
+              "options": "respiration.avg_sleep_brpm"
             },
             "properties": [
               {
@@ -1284,7 +1310,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "highest_brpm"
+              "options": "respiration.highest_brpm"
             },
             "properties": [
               {
@@ -1296,7 +1322,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "lowest_brpm"
+              "options": "respiration.lowest_brpm"
             },
             "properties": [
               {
