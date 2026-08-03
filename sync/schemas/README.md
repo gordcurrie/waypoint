@@ -43,6 +43,13 @@ edge cases used are noted in each schema's top-level `description`. In summary:
 object returned by two different endpoints; `performance.schema.json` and
 `training_status.schema.json` both `$ref` into it so the two can't drift independently.
 
+`fitness_age.schema.json` documents `GET fitnessage-service/fitnessage/<date>` —
+not a `garminconnect`-wrapped method, called directly via `garmin.connectapi(...)`
+(found 2026-08-02; see CLAUDE.md's Garmin API field verification bug list). Not
+in `schema_validate.METHOD_SCHEMA` — the path includes a date, so it doesn't fit
+the exact-method-name mapping `inspect_api.py` uses; validate it by hand against
+a raw `connectapi()` capture if this endpoint needs re-deriving.
+
 `workout_upload.schema.json` documents the outbound `upload_workout` request body
 built by `sync.py`'s `_build_garmin_workout`/`_build_garmin_step`/`_build_garmin_repeat_group`
 — not derived from a live capture like the others (`upload_workout` is a write endpoint,

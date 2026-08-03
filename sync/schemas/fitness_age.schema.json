@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/fitness_age.schema.json",
+  "title": "Fitness age (GET fitnessage-service/fitnessage/<date>)",
+  "description": "Not wrapped by garminconnect — called directly via garmin.connectapi(f\"fitnessage-service/fitnessage/{date}\"). Found 2026-08-02 while investigating why sync_performance's fitness_age field always read null: the field it was reading (mostRecentVO2Max.generic.fitnessAge, shared with get_max_metrics/get_training_status) is dead on this account — this is the real, separate source, discovered via the Fitness Age page's network requests in Garmin Connect and confirmed against the UI's own displayed value (44.74 here vs. the in-app \"improved to 44.5\" notification, within rounding).\n\nVerified against: 2026-08-02 (populated), 2026-01-01 and 2020-01-01 (stale/no data, to confirm the shape degrades gracefully on backfill rather than erroring).",
+  "type": "object",
+  "properties": {
+    "chronologicalAge": {
+      "type": "integer",
+      "description": "Not consumed by sync.py — actual age, not a fitness metric."
+    },
+    "fitnessAge": {
+      "type": "number",
+      "description": "Consumed as performance.fitness_age. Absent entirely (not null) when the underlying rolling-average components are stale — use .get(), and expect no point written for this field on those days."
+    },
+    "achievableFitnessAge": {
+      "type": "number",
+      "description": "Not currently consumed by sync.py. Projected fitness age if target component values were met."
+    },
+    "previousFitnessAge": {
+      "type": "number",
+      "description": "Not currently consumed by sync.py."
+    },
+    "components": {
+      "type": "object",
+      "description": "Not currently consumed by sync.py. Breakdown driving the fitnessAge computation — each component either has a value/potentialAge/priority (populated) or stale:true with staleInputs (insufficient data).",
+      "properties": {
+        "vigorousDaysAvg": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "rhr": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "vigorousMinutesAvg": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bmi": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "lastUpdated": {
+      "type": "string"
+    }
+  },
+  "required": ["chronologicalAge", "components"],
+  "additionalProperties": true
+}

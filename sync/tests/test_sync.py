@@ -643,6 +643,16 @@ def test_training_status_prefers_primary_device():
 
 
 @freeze_time("2026-07-06")
+def test_training_status_does_not_write_fitness_age():
+    """fitness_age was removed from training_status (bug found 2026-08-02) — real data
+    comes from a separate endpoint, consumed by sync_performance instead. The
+    mostRecentVO2Max.generic.fitnessAge path here always reads null on this account."""
+    garmin = _make_status_garmin(_TRAINING_STATUS_API_RESPONSE)
+    fields = _captured_status_fields(garmin)
+    assert "fitness_age" not in fields
+
+
+@freeze_time("2026-07-06")
 def test_training_status_no_device_data_writes_nothing():
     """Empty latestTrainingStatusData must not write any point."""
     payload = {
@@ -676,6 +686,80 @@ def test_training_status_unknown_phrase_status_num_not_written():
     garmin = _make_status_garmin(payload)
     fields = _captured_status_fields(garmin)
     assert "status_num" not in fields
+
+
+# ── sync_performance ───────────────────────────────────────────────────────────
+
+
+def _make_performance_garmin(max_metrics_payload: object, fitness_age_payload: object) -> MagicMock:
+    g = MagicMock()
+    g.get_max_metrics.return_value = max_metrics_payload
+    g.connectapi.return_value = fitness_age_payload
+    return g
+
+
+def _captured_performance_fields(garmin: MagicMock, state: dict | None = None) -> dict:
+    client = MagicMock()
+    captured: dict = {}
+    original = sync._add_fields
+
+    def capturing(p, fields):
+        captured.update(fields)
+        return original(p, fields)
+
+    with (
+        patch.object(sync, "_add_fields", side_effect=capturing),
+        patch.object(sync, "_save_state"),
+        patch.object(sync.time, "sleep"),
+    ):
+        sync.sync_performance(garmin, client, state or {"performance": "2026-07-05"})
+
+    return {k: v for k, v in captured.items() if v is not None}
+
+
+@freeze_time("2026-07-06")
+def test_performance_fitness_age_from_dedicated_endpoint_not_generic_vo2max():
+    """fitness_age must come from fitnessage-service/fitnessage/<date> (bug found
+    2026-08-02) — the old mostRecentVO2Max.generic.fitnessAge path always reads
+    null on this account, confirmed live against the Garmin Connect UI's Fitness
+    Age page."""
+    garmin = _make_performance_garmin(
+        max_metrics_payload=[{"generic": {"vo2MaxPreciseValue": 46.6, "fitnessAge": None}}],
+        fitness_age_payload={"chronologicalAge": 50, "fitnessAge": 44.74},
+    )
+    fields = _captured_performance_fields(garmin)
+    assert fields.get("vo2max") == pytest.approx(46.6)
+    assert fields.get("fitness_age") == pytest.approx(44.74)
+
+
+@freeze_time("2026-07-06")
+def test_performance_fitness_age_key_absent_on_stale_data():
+    """On stale rolling-average data, the fitnessAge key is absent entirely
+    (not null) — must not crash, must write no fitness_age field."""
+    garmin = _make_performance_garmin(
+        max_metrics_payload=[{"generic": {"vo2MaxPreciseValue": 46.6}}],
+        fitness_age_payload={"chronologicalAge": 50, "components": {}},
+    )
+    fields = _captured_performance_fields(garmin)
+    assert fields.get("vo2max") == pytest.approx(46.6)
+    assert "fitness_age" not in fields
+
+
+@freeze_time("2026-07-06")
+def test_performance_writes_point_from_fitness_age_alone():
+    """A day with no VO2max update but a fitness_age value must still write a point —
+    the two metrics update independently."""
+    garmin = _make_performance_garmin(
+        max_metrics_payload=[],
+        fitness_age_payload={"chronologicalAge": 50, "fitnessAge": 44.74},
+    )
+    client = MagicMock()
+    with (
+        patch.object(sync, "_save_state"),
+        patch.object(sync.time, "sleep"),
+    ):
+        sync.sync_performance(garmin, client, {"performance": "2026-07-05"})
+    assert client.write.called
 
 
 # ── sync_lactate_threshold ──────────────────────────────────────────────────────
