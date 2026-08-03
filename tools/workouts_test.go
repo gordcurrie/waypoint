@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/gordcurrie/waypoint/internal/garmin"
+	"github.com/gordcurrie/waypoint/internal/influx"
 )
 
 // callCreateWorkout registers the workout tools against a fresh in-memory session
@@ -189,6 +193,159 @@ func TestQueryScheduledWorkouts_PropagatesError(t *testing.T) {
 	_, err := queryScheduledWorkouts(context.Background(), client, 14)
 	if err == nil {
 		t.Fatal("want error, got nil")
+	}
+}
+
+// routedMockClient returns scheduledRows for a scheduled_workout query and planRows
+// for a training_plan_task query, based on which measurement name appears in the SQL.
+func routedMockClient(scheduledRows, planRows []map[string]any) *mockClient {
+	return &mockClient{
+		queryFn: func(_ context.Context, sql string) ([]map[string]any, error) {
+			if strings.Contains(sql, influx.MeasurementTrainingPlanTask) {
+				return planRows, nil
+			}
+			return scheduledRows, nil
+		},
+	}
+}
+
+func TestQueryScheduledWorkouts_EnrichesCoachPlanItem(t *testing.T) {
+	tomorrow := time.Now().UTC().Add(24 * time.Hour)
+	dateStr := tomorrow.Format(time.RFC3339)
+	client := routedMockClient(
+		[]map[string]any{
+			{
+				"scheduled_id": "1785909600000",
+				// no workout_id — coach-plan item, per sync_scheduled_workouts's filter
+				"time":  dateStr,
+				"name":  "Tempo",
+				"sport": "running",
+			},
+		},
+		[]map[string]any{
+			{
+				"time":        dateStr,
+				"name":        "Tempo",
+				"description": "21:00@5:10/km",
+				"duration_s":  float64(2460),
+				"distance_m":  float64(7462),
+				"rest_day":    float64(0),
+				"phase":       "BUILD",
+			},
+		},
+	)
+	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workouts) != 1 {
+		t.Fatalf("want 1 workout, got %d", len(workouts))
+	}
+	w := workouts[0]
+	if w.Description != "21:00@5:10/km" {
+		t.Errorf("Description: got %q, want 21:00@5:10/km", w.Description)
+	}
+	if w.DurationS != 2460 {
+		t.Errorf("DurationS: got %v, want 2460", w.DurationS)
+	}
+	if w.DistanceM != 7462 {
+		t.Errorf("DistanceM: got %v, want 7462", w.DistanceM)
+	}
+	if w.Phase != "BUILD" {
+		t.Errorf("Phase: got %q, want BUILD", w.Phase)
+	}
+}
+
+func TestQueryScheduledWorkouts_DoesNotEnrichSelfCreatedWorkout(t *testing.T) {
+	tomorrow := time.Now().UTC().Add(24 * time.Hour)
+	dateStr := tomorrow.Format(time.RFC3339)
+	client := routedMockClient(
+		[]map[string]any{
+			{
+				"scheduled_id": "111222333",
+				"workout_id":   float64(444555666), // self-created via create_workout
+				"time":         dateStr,
+				"name":         "My Own Tempo",
+				"sport":        "running",
+				"duration_s":   float64(1800),
+			},
+		},
+		[]map[string]any{
+			{
+				"time":        dateStr,
+				"name":        "Tempo",
+				"description": "21:00@5:10/km",
+				"phase":       "BUILD",
+			},
+		},
+	)
+	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workouts) != 1 {
+		t.Fatalf("want 1 workout (no synthesized duplicate), got %d", len(workouts))
+	}
+	w := workouts[0]
+	if w.Description != "" {
+		t.Errorf("Description: got %q, want empty — a self-created workout must not inherit the coach plan's detail", w.Description)
+	}
+	if w.DurationS != 1800 {
+		t.Errorf("DurationS: got %v, want unchanged 1800", w.DurationS)
+	}
+}
+
+func TestQueryScheduledWorkouts_SynthesizesRestDay(t *testing.T) {
+	today := time.Now().UTC()
+	dateStr := today.Format(time.RFC3339)
+	client := routedMockClient(
+		nil, // no calendar item at all for today — rest days never appear there
+		[]map[string]any{
+			{
+				"time":           dateStr,
+				"name":           "Rest",
+				"rest_day":       float64(1),
+				"workout_phrase": "TRAINING_READINESS_REST",
+				"phase":          "BASE",
+			},
+		},
+	)
+	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workouts) != 1 {
+		t.Fatalf("want 1 synthesized rest-day entry, got %d", len(workouts))
+	}
+	w := workouts[0]
+	if !w.RestDay {
+		t.Error("RestDay: want true")
+	}
+	if w.ScheduledID != 0 {
+		t.Errorf("ScheduledID: got %d, want 0 (no real calendar item behind a synthesized rest day)", w.ScheduledID)
+	}
+	if w.Name != "Rest" {
+		t.Errorf("Name: got %q, want Rest", w.Name)
+	}
+}
+
+func TestMergeTrainingPlanDetail_SortedByDate(t *testing.T) {
+	workouts := []garmin.ScheduledWorkout{
+		{Date: "2026-08-05", Name: "Tempo"},
+	}
+	tasks := []garmin.TrainingPlanTask{
+		{Date: "2026-08-03", RestDay: true},
+		{Date: "2026-08-04", Name: "Base"},
+	}
+	merged := mergeTrainingPlanDetail(workouts, tasks)
+	if len(merged) != 3 {
+		t.Fatalf("want 3 entries, got %d", len(merged))
+	}
+	wantDates := []string{"2026-08-03", "2026-08-04", "2026-08-05"}
+	for i, want := range wantDates {
+		if merged[i].Date != want {
+			t.Errorf("merged[%d].Date: got %q, want %q", i, merged[i].Date, want)
+		}
 	}
 }
 

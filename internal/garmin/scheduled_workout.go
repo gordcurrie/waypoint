@@ -1,6 +1,10 @@
 package garmin
 
-// ScheduledWorkout represents one row from the "scheduled_workout" measurement.
+// ScheduledWorkout represents one row from the "scheduled_workout" measurement,
+// optionally enriched with per-day detail from the active adaptive coach training
+// plan (see mergeTrainingPlanDetail in tools/workouts.go). ScheduledID is 0 for a
+// rest day synthesized purely from the training plan — there's no real calendar
+// item behind it, only a plan entry.
 type ScheduledWorkout struct {
 	ScheduledID int64   `json:"scheduled_id"`
 	WorkoutID   int64   `json:"workout_id,omitempty"`
@@ -8,6 +12,10 @@ type ScheduledWorkout struct {
 	Name        string  `json:"name,omitempty"`
 	Sport       string  `json:"sport,omitempty"`
 	DurationS   float64 `json:"duration_s,omitempty"`
+	DistanceM   float64 `json:"distance_m,omitempty"`
+	Description string  `json:"description,omitempty"`
+	RestDay     bool    `json:"rest_day,omitempty"`
+	Phase       string  `json:"phase,omitempty"`
 }
 
 // ScheduledWorkoutFrom converts a query row from the "scheduled_workout" measurement.

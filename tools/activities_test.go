@@ -13,9 +13,17 @@ import (
 type mockClient struct {
 	rows []map[string]any
 	err  error
+	// queryFn, when set, overrides rows/err and lets a test route different
+	// responses per measurement (e.g. distinguishing scheduled_workout from
+	// training_plan_task queries). Existing tests that only set rows/err are
+	// unaffected.
+	queryFn func(ctx context.Context, sql string) ([]map[string]any, error)
 }
 
-func (m *mockClient) Query(_ context.Context, _ string) ([]map[string]any, error) {
+func (m *mockClient) Query(ctx context.Context, sql string) ([]map[string]any, error) {
+	if m.queryFn != nil {
+		return m.queryFn(ctx, sql)
+	}
 	return m.rows, m.err
 }
 
