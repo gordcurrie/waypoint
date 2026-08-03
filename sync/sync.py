@@ -789,10 +789,9 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                 # a real scheduled workout:
                 #   - a non-null workoutId: a workout created via create_workout/the Garmin
                 #     workout builder.
-                #   - itemType == "fbtAdaptiveWorkout" with a trainingPlanId: a coach/training
-                #     -plan-assigned workout. Verified live 2026-08-02 (bug found via a real
-                #     coach plan): these always have workoutId=null — the real identifiers are
-                #     trainingPlanId + workoutUuid instead. An earlier version of this filter
+                #   - itemType == "fbtAdaptiveWorkout" with a trainingPlanId: a coach/training-plan-assigned workout.
+                #     Verified live 2026-08-02 (bug found via a real coach plan): these always have workoutId=null —
+                #     the real identifiers are trainingPlanId + workoutUuid instead. An earlier version of this filter
                 #     only checked workoutId and silently dropped every coach-plan workout.
                 try:
                     workout_id = item.get("workoutId")
