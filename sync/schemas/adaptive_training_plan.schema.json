@@ -1,0 +1,159 @@
+{
+  "type": "object",
+  "properties": {
+    "trainingPlanId": {
+      "type": "integer"
+    },
+    "trainingPlanCategory": {
+      "type": "string",
+      "description": "Observed: FBT_ADAPTIVE (Garmin Run Coach adaptive plan)."
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "durationInWeeks": {
+      "type": "integer"
+    },
+    "avgWeeklyWorkouts": {
+      "type": "integer"
+    },
+    "startDate": {
+      "type": "string",
+      "description": "Date-only, e.g. \"2026-06-27T00:00:00.0\"."
+    },
+    "endDate": {
+      "type": "string",
+      "description": "Consumed by sync_training_plan to skip already-ended plans. Matches the account's target race date on this plan."
+    },
+    "trainingStatus": {
+      "type": ["object", "null"],
+      "properties": {
+        "statusId": { "type": "integer" },
+        "statusKey": {
+          "type": "string",
+          "description": "Observed: Scheduled (for the currently-active plan, despite the name)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "taskList": {
+      "type": "array",
+      "description": "Consumed by sync_training_plan, filtered to today..+TRAINING_PLAN_LOOKAHEAD_DAYS by calendarDate.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "trainingPlanId": { "type": "integer" },
+          "weekId": { "type": "integer" },
+          "dayOfWeekId": { "type": "integer" },
+          "calendarDate": {
+            "type": "string",
+            "description": "Consumed as the point's date/time. Plain YYYY-MM-DD, unlike taskWorkout.scheduledDate."
+          },
+          "taskWorkout": {
+            "type": "object",
+            "description": "Present (non-null) even on rest days — restDay:true with workoutName/estimatedDurationInSecs/etc. all null in that case.",
+            "properties": {
+              "workoutId": {
+                "description": "Observed always null here — same as get_scheduled_workouts's calendarItems for fbtAdaptiveWorkout items."
+              },
+              "sportType": {
+                "type": ["object", "null"],
+                "description": "Null on rest days.",
+                "properties": {
+                  "sportTypeId": { "type": "integer" },
+                  "sportTypeKey": { "type": "string" }
+                },
+                "additionalProperties": true
+              },
+              "workoutName": {
+                "type": ["string", "null"],
+                "description": "Consumed as name. Observed: \"Base\", \"Tempo\", \"Long Run\". Null on rest days."
+              },
+              "workoutDescription": {
+                "type": ["string", "null"],
+                "description": "Consumed as description. The actual pace/HR target, e.g. \"137bpm\" (HR-capped base run) or \"21:00@5:10/km\" (tempo segment length + pace). Null on rest days."
+              },
+              "scheduledDate": {
+                "type": ["string", "null"],
+                "description": "Not consumed — calendarDate (one level up) is used instead; this is a datetime not a date."
+              },
+              "estimatedDurationInSecs": {
+                "type": ["number", "null"],
+                "description": "Consumed as duration_s. This is the real duration get_scheduled_workouts's calendarItems.duration always has null."
+              },
+              "estimatedDistanceInMeters": {
+                "type": ["number", "null"],
+                "description": "Consumed as distance_m."
+              },
+              "workoutUuid": {
+                "type": ["string", "null"],
+                "description": "Not consumed. Does NOT match the workoutUuid on the same calendarDate's get_scheduled_workouts calendarItem — the plan regenerates day to day, so these aren't stable join keys across syncs."
+              },
+              "trainingEffectLabel": {
+                "type": ["string", "null"],
+                "description": "Not consumed. Observed: AEROBIC_BASE, TEMPO, INVALID (on rest days)."
+              },
+              "workoutPhrase": {
+                "type": ["string", "null"],
+                "description": "Consumed as workout_phrase. Observed: HIGH_RECOVERY_TIME_BASE, BASE, TEMPO, LONG_WORKOUT, TRAINING_READINESS_REST (adaptive rest day inserted in response to a low Garmin readiness score)."
+              },
+              "restDay": {
+                "type": "boolean",
+                "description": "Consumed as rest_day (stored as 1.0/0.0 — InfluxDB line protocol field, not a tag)."
+              },
+              "benchmarkWorkout": {
+                "type": "boolean"
+              },
+              "adaptiveCoachingWorkoutStatus": {
+                "type": "string",
+                "description": "Observed: NOT_COMPLETE."
+              }
+            },
+            "additionalProperties": true
+          },
+          "longWkt": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "grouped": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "adaptivePlanPhases": {
+      "type": ["array", "null"],
+      "description": "Consumed by sync_training_plan to derive each task's phase field (date-range lookup, not per-task on the API side). Observed phases in order: BASE, BUILD, PEAK, TAPER, TARGET_EVENT_DAY. Each entry's startDate/endDate are plain YYYY-MM-DD.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startDate": { "type": "string" },
+          "endDate": { "type": "string" },
+          "trainingPhase": { "type": "string" },
+          "currentPhase": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "planPhases": {
+      "description": "Observed identical in content to adaptivePlanPhases in this account's captured sample. Not consumed — adaptivePlanPhases is used instead."
+    },
+    "ownerId": {
+      "description": "Account identifier — do not log or commit raw captures containing this."
+    },
+    "parentPlanId": {
+      "description": "observed non-null in captured sample"
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/adaptive_training_plan.schema.json",
+  "title": "Adaptive training plan detail (get_adaptive_training_plan_by_id)",
+  "description": "Returned by garminconnect's get_adaptive_training_plan_by_id(plan_id), where plan_id comes from get_training_plans()'s trainingPlanList. Consumed by sync_training_plan, which writes one training_plan_task point per taskList entry within today..+14 days, including rest days (which have no corresponding entry at all in get_scheduled_workouts's calendarItems).\n\nVerified against: one active FBT_ADAPTIVE (Garmin Run Coach) plan, 2026-08-03, trainingPlanId 46457367 — a mix of rest, base, tempo, and long-run task entries across the current week. No fixture yet for a non-adaptive (manually-built) training plan, or a plan with taskNote/grouped entries populated."
+}

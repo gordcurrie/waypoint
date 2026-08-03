@@ -848,6 +848,114 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     log.info("scheduled_workouts: wrote %d points", len(points))
 
 
+TRAINING_PLAN_LOOKAHEAD_DAYS = 14
+
+
+def sync_training_plan(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
+    """Sync per-day target detail from the active adaptive coach training plan.
+
+    get_scheduled_workouts's calendarItems only carry a title/date for coach-plan
+    items — no duration, pace/HR target, or rest-day flag, and rest days don't appear
+    as calendar items at all. get_adaptive_training_plan_by_id(trainingPlanId) has the
+    real per-day detail (estimatedDurationInSecs, estimatedDistanceInMeters,
+    workoutDescription e.g. "21:00@5:10/km" or "137bpm", restDay, adaptivePlanPhases).
+    Verified live 2026-08-03 against an active plan (trainingPlanId 46457367, endDate
+    matching the account's race date) — found while checking whether a coach-assigned
+    week was too light/heavy and realizing get_scheduled_workouts had no duration data
+    to judge that with at all.
+
+    The plan regenerates day to day (workoutUuid on the same calendarDate differs
+    between captures a day apart) so this always re-syncs the near-term window fresh
+    rather than tracking a watermark, same pattern as sync_scheduled_workouts.
+    """
+    today = date.today()
+    horizon = today + timedelta(days=TRAINING_PLAN_LOOKAHEAD_DAYS)
+
+    try:
+        plans_raw = garmin.get_training_plans() or {}
+    except (
+        GarminConnectAuthenticationError,
+        GarminConnectTooManyRequestsError,
+        GarminConnectConnectionError,
+    ):
+        raise
+    except Exception as exc:
+        log.warning("training_plan: get_training_plans: %s", exc)
+        return
+    plans: list[Any] = plans_raw.get("trainingPlanList") or []
+
+    points: list[Any] = []
+    for plan in plans:
+        plan_id = plan.get("trainingPlanId")
+        if plan_id is None:
+            continue
+        end_date_str = plan.get("endDate")
+        if end_date_str:
+            try:
+                if date.fromisoformat(str(end_date_str)[:10]) < today:
+                    continue  # plan already ended
+            except ValueError:
+                pass
+
+        try:
+            detail = garmin.get_adaptive_training_plan_by_id(plan_id) or {}
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
+            raise
+        except Exception as exc:
+            log.warning("training_plan: get_adaptive_training_plan_by_id(%s): %s", plan_id, exc)
+            continue
+
+        phases: list[Any] = detail.get("adaptivePlanPhases") or []
+
+        for task in detail.get("taskList") or []:
+            try:
+                date_str = task.get("calendarDate")
+                if not date_str:
+                    continue
+                task_date = date.fromisoformat(str(date_str)[:10])
+                if not (today <= task_date <= horizon):
+                    continue
+
+                w = task.get("taskWorkout") or {}
+                rest_day = bool(w.get("restDay"))
+
+                phase = ""
+                for ph in phases:
+                    ph_start, ph_end = ph.get("startDate"), ph.get("endDate")
+                    if ph_start and ph_end and str(ph_start)[:10] <= date_str <= str(ph_end)[:10]:
+                        phase = str(ph.get("trainingPhase") or "")
+                        break
+
+                p = (
+                    Point("training_plan_task")
+                    .tag("training_plan_id", str(plan_id))
+                    .time(_day_ts(task_date))
+                )
+                fields: dict[str, Any] = {
+                    "name": str(w.get("workoutName") or ("Rest" if rest_day else "")),
+                    "description": str(w.get("workoutDescription") or ""),
+                    "duration_s": _fval(w, "estimatedDurationInSecs"),
+                    "distance_m": _fval(w, "estimatedDistanceInMeters"),
+                    "rest_day": 1.0 if rest_day else 0.0,
+                    "workout_phrase": str(w.get("workoutPhrase") or ""),
+                    "phase": phase,
+                }
+                p, n = _add_fields(p, fields)
+                if n:
+                    points.append(p)
+            except Exception as exc:
+                log.warning("training_plan: task %s: %s", task.get("calendarDate"), exc)
+
+        time.sleep(0.3)
+
+    _write(client, points)
+    log.info("training_plan: wrote %d points", len(points))
+
+
 # Verified 2026-07-28 against /workout-service/workout/types (live, this account) plus
 # empirical round-trip tests (upload a probe workout, read back the sportType Garmin
 # actually assigned). The original values here were guessed and wrong: strength_training
@@ -1132,6 +1240,7 @@ SYNC_FUNCS = [
     sync_respiration,
     sync_pending_workouts,  # upload queued workouts before reading the calendar back
     sync_scheduled_workouts,
+    sync_training_plan,
 ]
 
 

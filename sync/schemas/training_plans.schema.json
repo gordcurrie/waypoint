@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "properties": {
+    "trainingPlanList": {
+      "type": "array",
+      "description": "Consumed by sync_training_plan to discover trainingPlanId(s) to pass to get_adaptive_training_plan_by_id. taskList/adaptivePlanPhases/planPhases are always null here — only populated by that per-plan detail call.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "trainingPlanId": {
+            "type": "integer",
+            "description": "Consumed — passed to get_adaptive_training_plan_by_id."
+          },
+          "trainingPlanCategory": {
+            "type": "string",
+            "description": "Observed: FBT_ADAPTIVE."
+          },
+          "trainingStatus": {
+            "type": ["object", "null"],
+            "properties": {
+              "statusId": { "type": "integer" },
+              "statusKey": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "endDate": {
+            "type": "string",
+            "description": "Consumed to skip plans that have already ended (date-only, e.g. \"2026-10-18T00:00:00.0\")."
+          },
+          "taskList": {
+            "description": "Always null here in this account's captured sample — populated only via get_adaptive_training_plan_by_id."
+          },
+          "adaptivePlanPhases": {
+            "description": "Always null here — see taskList note."
+          },
+          "planPhases": {
+            "description": "Always null here — see taskList note."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "searchFilter": {
+      "type": "object",
+      "description": "Not consumed. Echoes the (implicit, account-scoped) query — ownerId, pagination (start/limit), and empty/null filter criteria.",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/training_plans.schema.json",
+  "title": "Training plan list (get_training_plans)",
+  "description": "Returned by garminconnect's get_training_plans() — no arguments, implicitly scoped to the logged-in account. Consumed by sync_training_plan as the entry point to discover active trainingPlanId(s).\n\nVerified against: 2026-08-03, one active FBT_ADAPTIVE plan (trainingPlanId 46457367)."
+}
