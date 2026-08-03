@@ -36,6 +36,8 @@ edge cases used are noted in each schema's top-level `description`. In summary:
 | `get_activity_hr_in_timezones` | `activity_hr_zones.schema.json` | one real running activity |
 | `get_scheduled_workouts` | `scheduled_workouts.schema.json` | two months, zero real scheduled workouts in either |
 | `get_respiration_data` | `respiration.schema.json` | two days |
+| `get_adaptive_training_plan_by_id` | `adaptive_training_plan.schema.json` | one active FBT_ADAPTIVE plan; rest/base/tempo/long-run task mix |
+| `get_training_plans` | `training_plans.schema.json` | one active plan |
 
 `vo2max.schema.json` is a shared `$defs` file, not tied to one method — `get_max_metrics`'s
 `generic`/`heatAltitudeAcclimation` objects and `get_training_status`'s

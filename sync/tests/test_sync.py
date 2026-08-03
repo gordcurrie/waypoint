@@ -1194,6 +1194,145 @@ def test_scheduled_workouts_connection_error_propagates(no_sleep):
         sync.sync_scheduled_workouts(garmin, client, {})
 
 
+# ── sync_training_plan ──────────────────────────────────────────────────────────
+
+
+def _plan_task(
+    calendar_date: str,
+    workout_name: str | None = "Base",
+    description: str | None = "137bpm",
+    duration: float | None = 1800,
+    distance: float | None = 5000,
+    rest_day: bool = False,
+    workout_phrase: str | None = "BASE",
+) -> dict:
+    return {
+        "calendarDate": calendar_date,
+        "taskWorkout": {
+            "workoutId": None,
+            "workoutName": workout_name,
+            "workoutDescription": description,
+            "estimatedDurationInSecs": duration,
+            "estimatedDistanceInMeters": distance,
+            "restDay": rest_day,
+            "workoutPhrase": workout_phrase,
+        },
+    }
+
+
+def _training_plan_garmin(
+    tasks: list,
+    plan_id: int = 46457367,
+    end_date: str = "2026-10-18T00:00:00.0",
+    phases: list | None = None,
+) -> MagicMock:
+    garmin = MagicMock()
+    garmin.get_training_plans.return_value = {
+        "trainingPlanList": [{"trainingPlanId": plan_id, "endDate": end_date}]
+    }
+    garmin.get_adaptive_training_plan_by_id.return_value = {
+        "taskList": tasks,
+        "adaptivePlanPhases": phases or [],
+    }
+    return garmin
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_writes_points_within_lookahead(no_sleep):
+    """Only tasks within today..+TRAINING_PLAN_LOOKAHEAD_DAYS are synced — the plan
+    regenerates day to day, so far-future entries aren't trustworthy yet."""
+    garmin = _training_plan_garmin(
+        [
+            _plan_task("2026-08-03"),
+            _plan_task("2026-08-08"),
+            _plan_task("2026-09-01"),  # beyond the 14-day lookahead
+        ]
+    )
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    points = client.write.call_args[1]["record"]
+    assert len(points) == 2
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_includes_rest_day(no_sleep):
+    """Rest days have no corresponding get_scheduled_workouts calendarItem at all —
+    this is the only place they're visible. workoutName is null on a rest day, so
+    name falls back to 'Rest'."""
+    garmin = _training_plan_garmin(
+        [
+            _plan_task(
+                "2026-08-03",
+                workout_name=None,
+                description=None,
+                duration=None,
+                distance=None,
+                rest_day=True,
+                workout_phrase="TRAINING_READINESS_REST",
+            )
+        ]
+    )
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    points = client.write.call_args[1]["record"]
+    assert len(points) == 1
+    s = str(points[0])
+    assert 'name="Rest"' in s
+    assert "rest_day=1" in s
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_sets_phase_from_date_range(no_sleep):
+    garmin = _training_plan_garmin(
+        [_plan_task("2026-08-03")],
+        phases=[
+            {"startDate": "2026-06-27", "endDate": "2026-08-05", "trainingPhase": "BASE"},
+            {"startDate": "2026-08-06", "endDate": "2026-09-13", "trainingPhase": "BUILD"},
+        ],
+    )
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    points = client.write.call_args[1]["record"]
+    assert 'phase="BASE"' in str(points[0])
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_skips_ended_plan(no_sleep):
+    garmin = _training_plan_garmin([_plan_task("2026-08-03")], end_date="2026-07-01T00:00:00.0")
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    assert not garmin.get_adaptive_training_plan_by_id.called
+    assert not client.write.called
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_skips_plan_with_no_id(no_sleep):
+    garmin = MagicMock()
+    garmin.get_training_plans.return_value = {"trainingPlanList": [{"endDate": "2026-10-18"}]}
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    assert not garmin.get_adaptive_training_plan_by_id.called
+    assert not client.write.called
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_get_training_plans_connection_error_propagates(no_sleep):
+    garmin = MagicMock()
+    garmin.get_training_plans.side_effect = GarminConnectConnectionError("timeout")
+    client = MagicMock()
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_training_plan(garmin, client, {})
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_get_adaptive_plan_connection_error_propagates(no_sleep):
+    garmin = _training_plan_garmin([_plan_task("2026-08-03")])
+    garmin.get_adaptive_training_plan_by_id.side_effect = GarminConnectConnectionError("timeout")
+    client = MagicMock()
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_training_plan(garmin, client, {})
+
+
 # ── sync_pending_workouts ──────────────────────────────────────────────────────
 
 

@@ -33,6 +33,8 @@ METHOD_SCHEMA = {
     "get_activity_hr_in_timezones": "activity_hr_zones.schema.json",
     "get_scheduled_workouts": "scheduled_workouts.schema.json",
     "get_respiration_data": "respiration.schema.json",
+    "get_adaptive_training_plan_by_id": "adaptive_training_plan.schema.json",
+    "get_training_plans": "training_plans.schema.json",
 }
 
 
