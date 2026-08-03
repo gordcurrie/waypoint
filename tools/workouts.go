@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -64,9 +65,11 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "get_scheduled_workouts",
-		Title:       "Scheduled Workouts",
-		Description: "Return workouts scheduled on the Garmin calendar for the next N days (default 14). Use before create_workout to avoid scheduling conflicts.",
+		Name:  "get_scheduled_workouts",
+		Title: "Scheduled Workouts",
+		Description: "Return workouts scheduled on the Garmin calendar for the next N days (default 14). Use before create_workout to avoid scheduling conflicts. " +
+			"Coach/training-plan-assigned days are enriched with real target detail from the active adaptive plan: duration_s, distance_m, description (the actual pace/HR target, e.g. \"21:00@5:10/km\" or \"137bpm\"), phase (BASE/BUILD/PEAK/TAPER/TARGET_EVENT_DAY), and rest_day. " +
+			"Rest days appear here even though they have no real Garmin calendar entry — scheduled_id is 0 for those, since it's a plan entry, not a real calendar item.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input scheduledWorkoutsInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 14, 60)
@@ -207,13 +210,8 @@ func appendToQueue(dataDir string, item WorkoutQueueItem) error {
 func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) ([]garmin.ScheduledWorkout, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour)
 	end := start.Add(time.Duration(days) * 24 * time.Hour)
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE time >= '%s' AND time < '%s' ORDER BY time ASC",
-		influx.MeasurementScheduledWorkout,
-		start.Format(time.RFC3339),
-		end.Format(time.RFC3339),
-	)
-	rows, err := client.Query(ctx, sql)
+
+	rows, err := queryMeasurementRange(ctx, client, influx.MeasurementScheduledWorkout, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("get_scheduled_workouts: %w", err)
 	}
@@ -221,5 +219,78 @@ func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) 
 	for _, row := range rows {
 		workouts = append(workouts, garmin.ScheduledWorkoutFrom(row))
 	}
-	return workouts, nil
+
+	planRows, err := queryMeasurementRange(ctx, client, influx.MeasurementTrainingPlanTask, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("get_scheduled_workouts: training plan detail: %w", err)
+	}
+	tasks := make([]garmin.TrainingPlanTask, 0, len(planRows))
+	for _, row := range planRows {
+		tasks = append(tasks, garmin.TrainingPlanTaskFrom(row))
+	}
+
+	return mergeTrainingPlanDetail(workouts, tasks), nil
+}
+
+func queryMeasurementRange(ctx context.Context, client influxClient, measurement string, start, end time.Time) ([]map[string]any, error) {
+	sql := fmt.Sprintf(
+		"SELECT * FROM %s WHERE time >= '%s' AND time < '%s' ORDER BY time ASC",
+		measurement,
+		start.Format(time.RFC3339),
+		end.Format(time.RFC3339),
+	)
+	rows, err := client.Query(ctx, sql)
+	if err != nil {
+		return nil, fmt.Errorf("query %s: %w", measurement, err)
+	}
+	return rows, nil
+}
+
+// mergeTrainingPlanDetail enriches calendar-list workouts with real per-day detail from
+// the active adaptive training plan, and adds a synthesized entry for any plan day with
+// no calendar item at all — which is how rest days show up, since Garmin's calendar list
+// never includes them (see sync_training_plan's doc comment in sync.py).
+//
+// Only enriches workouts with WorkoutID == 0 (i.e. items sync_scheduled_workouts already
+// identified as coach-plan-sourced, not self-created via create_workout) — a self-created
+// workout that happens to land on the same date as a coach-plan task must not inherit the
+// coach's target detail.
+func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.TrainingPlanTask) []garmin.ScheduledWorkout {
+	byDate := make(map[string]garmin.TrainingPlanTask, len(tasks))
+	for _, t := range tasks {
+		byDate[t.Date] = t
+	}
+
+	merged := make([]garmin.ScheduledWorkout, 0, len(workouts)+len(tasks))
+	seen := make(map[string]bool, len(workouts))
+	for _, w := range workouts {
+		if t, ok := byDate[w.Date]; ok && w.WorkoutID == 0 {
+			w.DistanceM = t.DistanceM
+			w.Description = t.Description
+			w.RestDay = t.RestDay
+			w.Phase = t.Phase
+			if w.DurationS == 0 {
+				w.DurationS = t.DurationS
+			}
+		}
+		merged = append(merged, w)
+		seen[w.Date] = true
+	}
+	for _, t := range tasks {
+		if seen[t.Date] {
+			continue
+		}
+		merged = append(merged, garmin.ScheduledWorkout{
+			Date:        t.Date,
+			Name:        t.Name,
+			DurationS:   t.DurationS,
+			DistanceM:   t.DistanceM,
+			Description: t.Description,
+			RestDay:     t.RestDay,
+			Phase:       t.Phase,
+		})
+	}
+
+	sort.Slice(merged, func(i, j int) bool { return merged[i].Date < merged[j].Date })
+	return merged
 }
