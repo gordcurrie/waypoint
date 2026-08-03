@@ -179,7 +179,8 @@
       "type": "integer"
     },
     "highStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null live 2026-08-02 — not every day has high-stress readings."
     },
     "stressPercentage": {
       "type": "number"
@@ -266,7 +267,8 @@
       "type": "number"
     },
     "restingCaloriesFromActivity": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null live 2026-08-02 — not populated on days with no qualifying activity."
     },
     "bodyBatteryDynamicFeedbackEvent": {
       "type": "object",
@@ -278,7 +280,8 @@
           "type": "string"
         },
         "feedbackShortType": {
-          "type": "string"
+          "type": ["string", "null"],
+          "description": "Observed null live 2026-08-02 — no feedback event isn't always present."
         },
         "feedbackLongType": {
           "type": "string"
