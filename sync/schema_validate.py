@@ -56,6 +56,14 @@ def _load_registry() -> Registry:
     return Registry().with_resources(resources.items())
 
 
+@functools.cache
+def _load_schema(schema_file: str) -> dict[str, Any]:
+    """Read+parse one schema file. Cached: schema files don't change within a
+    process's lifetime, and validate() may now be called many times per run
+    (e.g. once per day in a 90-day backfill) — see drift_check.py."""
+    return json.loads((SCHEMA_DIR / schema_file).read_text())  # type: ignore[no-any-return]
+
+
 def validate(method_name: str, instance: Any) -> list[str] | None:
     """Validate instance against method_name's schema.
 
@@ -67,7 +75,7 @@ def validate(method_name: str, instance: Any) -> list[str] | None:
     if schema_file is None:
         return None
 
-    schema = json.loads((SCHEMA_DIR / schema_file).read_text())
+    schema = _load_schema(schema_file)
     validator = Draft202012Validator(schema, registry=_load_registry())
 
     errors = []

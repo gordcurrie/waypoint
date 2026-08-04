@@ -30,6 +30,8 @@ from garminconnect import (
 )
 from influxdb_client_3 import InfluxDBClient3, Point
 
+import drift_check
+
 # ── Config ─────────────────────────────────────────────────────────────────────
 
 GARMIN_EMAIL = os.environ["GARMIN_EMAIL"]
@@ -1278,7 +1280,7 @@ if __name__ == "__main__":
     _login_backoff = 60
     while garmin is None:
         try:
-            garmin = _garmin_login()
+            garmin = drift_check.wrap(_garmin_login())
         except Exception as exc:
             log.error(
                 "Initial login failed: %s. "
@@ -1297,7 +1299,7 @@ if __name__ == "__main__":
         except GarminConnectAuthenticationError:
             log.warning("Auth expired — re-authenticating")
             try:
-                garmin = _garmin_login()
+                garmin = drift_check.wrap(_garmin_login())
             except Exception as exc:
                 log.error("Re-auth failed: %s — will retry next interval", exc)
         except (GarminConnectConnectionError, GarminConnectTooManyRequestsError) as exc:

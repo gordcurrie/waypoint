@@ -99,7 +99,14 @@ All four are now fixed:
 entry in that mapping just prints a note that nothing was checked — not a
 failure; it means no schema has been derived for that method yet.
 
-This only covers the interactive dev workflow (someone running `inspect_api.py`
-while deriving a new field). A periodic automated drift check against a live
-account is a separate, larger follow-on (see #49) — not built, and needs its
-own design for how a failure gets surfaced to a human before it's worth building.
+## Automatic drift detection (#68)
+
+The above only covers the interactive dev workflow (someone running `inspect_api.py`
+while deriving a new field). `drift_check.py` closes the other gap — it wraps the
+`Garmin` client the live sync loop uses so every schema-covered call in `SYNC_FUNCS`
+is validated automatically, on the responses already being fetched for real syncing
+(no separate polling job, no extra Garmin API traffic or rate-limit/auth risk). A
+mismatch logs `ERROR` and alerts once/method/day via `DRIFT_ALERT_WEBHOOK_URL` if set
+(unset = log-only); it never raises, so a stale schema can't break real syncing.
+Falsy responses (`None`/`{}`/`[]`) are skipped — every `sync_*` call site already
+treats those as "no data today," not a schema violation.
