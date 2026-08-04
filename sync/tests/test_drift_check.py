@@ -1,5 +1,5 @@
-"""Tests for drift_check.py — see PLAN.md's "Next: automatic Garmin API drift
-detection (#68)" section for the design this implements."""
+"""Tests for drift_check.py — see PLAN.md's "Automatic Garmin API drift detection
+(#68)" section for the design this implements."""
 
 import json
 
@@ -67,9 +67,17 @@ def test_wrap_passes_through_methods_without_a_schema():
     assert wrapped.get_full_name() == "unwrapped passthrough"
 
 
+def _recording_send_alert(alerts, succeed=True):
+    def _send(method, errors):
+        alerts.append(method)
+        return succeed
+
+    return _send
+
+
 def test_schema_mismatch_logs_and_alerts(monkeypatch, caplog):
-    alerts = []
-    monkeypatch.setattr(drift_check, "_send_alert", lambda method, errors: alerts.append(method))
+    alerts: list[str] = []
+    monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts))
 
     fake = _FakeGarmin(INVALID_RESPONSE)
     wrapped = drift_check.wrap(fake)
@@ -83,8 +91,8 @@ def test_schema_mismatch_logs_and_alerts(monkeypatch, caplog):
 
 
 def test_alert_deduped_within_same_day(monkeypatch):
-    alerts = []
-    monkeypatch.setattr(drift_check, "_send_alert", lambda method, errors: alerts.append(method))
+    alerts: list[str] = []
+    monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts))
 
     fake = _FakeGarmin(INVALID_RESPONSE)
     wrapped = drift_check.wrap(fake)
@@ -93,6 +101,40 @@ def test_alert_deduped_within_same_day(monkeypatch):
     wrapped.get_respiration_data("2026-08-04")
 
     assert alerts == [METHOD]  # second call same day, no second alert
+
+
+def test_failed_send_is_not_deduped_and_retries_next_call(monkeypatch):
+    """A failed send must not mark today as alerted — otherwise a transient
+    webhook outage silently swallows the alert until tomorrow."""
+    alerts: list[str] = []
+    monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts, succeed=False))
+
+    fake = _FakeGarmin(INVALID_RESPONSE)
+    wrapped = drift_check.wrap(fake)
+
+    wrapped.get_respiration_data("2026-08-04")
+    wrapped.get_respiration_data("2026-08-04")
+
+    assert alerts == [METHOD, METHOD]  # retried both times, never deduped
+
+
+def test_validation_exception_is_contained(monkeypatch, caplog):
+    """A bug in drift-checking itself (corrupt schema, disk full, whatever) must
+    never cost the caller its real Garmin data for this cycle."""
+    monkeypatch.setattr(
+        drift_check.schema_validate,
+        "validate",
+        lambda method, instance: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    fake = _FakeGarmin(VALID_RESPONSE)
+    wrapped = drift_check.wrap(fake)
+
+    with caplog.at_level("ERROR"):
+        result = wrapped.get_respiration_data("2026-08-04")
+
+    assert result == VALID_RESPONSE
+    assert any("failed unexpectedly" in r.message for r in caplog.records)
 
 
 def test_alert_state_persisted_across_wrap_instances(tmp_path):
@@ -107,12 +149,11 @@ def test_send_alert_noop_without_webhook_url(monkeypatch):
     calls = []
     monkeypatch.setattr(drift_check.urllib.request, "urlopen", lambda *a, **k: calls.append(1))
 
-    drift_check._send_alert(METHOD, ["some error"])
-
+    assert drift_check._send_alert(METHOD, ["some error"]) is True
     assert calls == []
 
 
-def test_send_alert_failure_does_not_raise(monkeypatch):
+def test_send_alert_failure_does_not_raise_and_returns_false(monkeypatch):
     monkeypatch.setattr(drift_check, "ALERT_WEBHOOK_URL", "http://example.invalid/webhook")
 
     def _boom(*a, **k):
@@ -120,4 +161,4 @@ def test_send_alert_failure_does_not_raise(monkeypatch):
 
     monkeypatch.setattr(drift_check.urllib.request, "urlopen", _boom)
 
-    drift_check._send_alert(METHOD, ["some error"])  # must not raise
+    assert drift_check._send_alert(METHOD, ["some error"]) is False  # must not raise

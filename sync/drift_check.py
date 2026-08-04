@@ -45,9 +45,12 @@ def _save_drift_state(state: dict[str, str]) -> None:
     tmp.replace(DRIFT_STATE_FILE)
 
 
-def _send_alert(method_name: str, errors: list[str]) -> None:
+def _send_alert(method_name: str, errors: list[str]) -> bool:
+    """POST the alert. Returns True if it's safe to mark today as alerted —
+    i.e. nothing was configured to send, or the send actually succeeded.
+    False means the send failed and should be retried on the next call."""
     if not ALERT_WEBHOOK_URL:
-        return
+        return True
     payload = json.dumps(
         {"method": method_name, "date": date.today().isoformat(), "errors": errors}
     ).encode()
@@ -58,9 +61,12 @@ def _send_alert(method_name: str, errors: list[str]) -> None:
         method="POST",
     )
     try:
-        urllib.request.urlopen(req, timeout=5)
+        with urllib.request.urlopen(req, timeout=5):
+            pass
+        return True
     except (urllib.error.URLError, OSError) as exc:
         log.error("drift_check: failed to send alert for %s: %s", method_name, exc)
+        return False
 
 
 def _maybe_alert(method_name: str, errors: list[str]) -> None:
@@ -68,9 +74,10 @@ def _maybe_alert(method_name: str, errors: list[str]) -> None:
     state = _load_drift_state()
     if state.get(method_name) == today:
         return  # already alerted for this method today
-    _send_alert(method_name, errors)
-    state[method_name] = today
-    _save_drift_state(state)
+    if _send_alert(method_name, errors):
+        state[method_name] = today
+        _save_drift_state(state)
+    # else: leave state alone so a transient send failure gets retried next cycle
 
 
 class _DriftCheckingGarmin:
@@ -93,15 +100,21 @@ class _DriftCheckingGarmin:
                 # schemas model that as valid, so skip validation rather than
                 # false-alarm on routine empty days.
                 return result
-            errors = schema_validate.validate(name, result)
-            if errors:
-                log.error(
-                    "drift_check: %s response no longer matches its schema (%d error(s)): %s",
-                    name,
-                    len(errors),
-                    "; ".join(errors),
-                )
-                _maybe_alert(name, errors)
+            try:
+                errors = schema_validate.validate(name, result)
+                if errors:
+                    log.error(
+                        "drift_check: %s response no longer matches its schema (%d error(s)): %s",
+                        name,
+                        len(errors),
+                        "; ".join(errors),
+                    )
+                    _maybe_alert(name, errors)
+            except Exception as exc:
+                # Drift-checking itself must never take down real syncing — a
+                # corrupt schema file or a full disk here must not cost the
+                # caller its actual Garmin data for this cycle.
+                log.error("drift_check: checking %s failed unexpectedly: %s", name, exc)
             return result
 
         return _checked
