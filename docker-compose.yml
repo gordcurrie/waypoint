@@ -82,6 +82,7 @@ services:
       INFLUXDB_DATABASE: ${INFLUXDB_BUCKET:-garmin}
       SYNC_SCHEDULE: ${SYNC_SCHEDULE:-*/30 * * * *}
       BACKFILL_DAYS: ${BACKFILL_DAYS:-90}
+      DRIFT_ALERT_WEBHOOK_URL: ${DRIFT_ALERT_WEBHOOK_URL:-}
     volumes:
       - sync_data:/data
     depends_on:
