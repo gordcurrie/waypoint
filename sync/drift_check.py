@@ -6,6 +6,11 @@ sync/schemas/*.schema.json as a side effect of normal syncing, instead of relyin
 someone remembering to run inspect_api.py by hand. A validation failure is never
 raised into the caller: it's logged and (optionally) alerted, but the real response
 is still returned unmodified so sync keeps working even if a schema itself is stale.
+
+Off by default (DRIFT_CHECK_ENABLED) — this hits a personal Garmin account and a
+personal alert webhook, not something every clone of this repo should do silently.
+See sync.py's _login_and_wrap() for the gate; nothing in this module reads that flag
+itself, wrap() just doesn't get called when it's off.
 """
 
 from __future__ import annotations

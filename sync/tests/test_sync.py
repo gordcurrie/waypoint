@@ -261,6 +261,25 @@ def test_garmin_login_token_path_sets_skip_strategies():
     }
 
 
+# ── _login_and_wrap (DRIFT_CHECK_ENABLED gate) ───────────────────────────────────
+
+
+def test_login_and_wrap_skips_drift_check_by_default(monkeypatch):
+    monkeypatch.setattr(sync, "DRIFT_CHECK_ENABLED", False)
+    mock_garmin = MagicMock()
+    with patch.object(sync, "_garmin_login", return_value=mock_garmin):
+        result = sync._login_and_wrap()
+    assert result is mock_garmin  # unwrapped — not a drift_check proxy
+
+
+def test_login_and_wrap_wraps_when_enabled(monkeypatch):
+    monkeypatch.setattr(sync, "DRIFT_CHECK_ENABLED", True)
+    mock_garmin = MagicMock()
+    with patch.object(sync, "_garmin_login", return_value=mock_garmin):
+        result = sync._login_and_wrap()
+    assert isinstance(result, sync.drift_check._DriftCheckingGarmin)
+
+
 # ── activity_id precision ──────────────────────────────────────────────────────
 
 
