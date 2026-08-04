@@ -115,6 +115,32 @@ See `.env.example` for all variables. Key ones:
 | `ANTHROPIC_API_KEY` | — | Required if `LLM_PROVIDER=claude` |
 | `DRIFT_ALERT_WEBHOOK_URL` | — | Optional. POSTed `{method, date, errors}` when a live Garmin API response no longer matches its schema; unset = log-only |
 
+### Drift alert webhook setup (optional)
+
+`sync/drift_check.py` sends a plain `POST` with a JSON body — `{"method": "...", "date":
+"YYYY-MM-DD", "errors": ["..."]}`, `Content-Type: application/json`, no auth headers, no
+retries. That's generic enough for **any** endpoint that accepts a raw JSON POST (n8n, a
+serverless function, Home Assistant's webhook trigger, your own tiny HTTP server, etc.) —
+it is *not* pre-shaped for Slack's or Discord's incoming-webhook formats, which expect
+their own specific JSON (`{"text": ...}`, embeds, etc.); routing to either of those needs
+a translation step in between, same as the n8n path below.
+
+To wire it to n8n → Telegram (or adapt to whatever's on the other end):
+
+1. New workflow in n8n, add a **Webhook** node as the trigger: HTTP Method `POST`, pick a
+   path (e.g. `/waypoint-drift`), response mode "Immediately."
+2. Add a **Set** (or **Function**) node to turn the payload into a message, e.g.
+   `Drift on {{$json.method}} ({{$json.date}}): {{$json.errors.join(", ")}}`.
+3. Add a **Telegram** node ("Send a text message") using your existing bot credentials
+   and chat ID, wired to that message.
+4. **Activate** the workflow — a saved-but-inactive workflow only listens on the *test*
+   webhook URL when you click "Listen," not the production one the sync container needs.
+5. Copy the **Production** webhook URL (not the test one) into `.env` as
+   `DRIFT_ALERT_WEBHOOK_URL`, restart the `sync` container.
+6. Test end-to-end without waiting for a real drift: `curl -X POST -H 'Content-Type:
+   application/json' -d '{"method":"test","date":"2026-01-01","errors":["smoke test"]}'
+   "$DRIFT_ALERT_WEBHOOK_URL"` — confirm the Telegram message arrives.
+
 ## Project Structure
 
 ```
