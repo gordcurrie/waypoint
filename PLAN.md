@@ -4,7 +4,9 @@
 
 Personal fitness training tool for Garmin Forerunner 970. Pulls activity, sleep, HRV, and health data from Garmin Connect; stores it in InfluxDB for Grafana visualization; exposes it to Claude (and other LLMs) for AI coaching and training planning. Built in Go (primary), Python (Garmin auth sidecar only — required due to Cloudflare TLS fingerprinting that blocks Go's net/http on Garmin's SSO endpoints as of March 2026, see CLAUDE.md).
 
-**Status: Phase 1 (MCP server) and Phase 2 (CLI) done.** Phase 3 (web UI) is an open decision gate, not started. See "Next" below for current work.
+**Status: Phase 1 (MCP server), Phase 2 (CLI), and automatic Garmin API drift detection
+(#68) done.** Phase 3 (web UI) is an open decision gate, not started. See "Deferred / open
+investigations" below for what's next.
 
 ---
 
@@ -317,45 +319,42 @@ System prompt defines a fitness coach persona with access to user's training his
 
 ---
 
-## Next: automatic Garmin API drift detection (#68)
+## Automatic Garmin API drift detection (#68) ✓ done
 
 **Problem**: CLAUDE.md documents 5+ separate bugs from Garmin silently changing/misdocumenting
 API field names or shapes (`acwRatio`, `training_status` structure, `sync_lactate_threshold`,
 `hrvStatus`, lap fields, `fitnessAge`). `sync/schemas/` + `inspect_api.py` (#57/#63) made
-verification fast, but it's still a **manual** step someone has to remember to run — nothing
-catches drift on a method already in production use between now and the next time a human
-happens to check it.
+verification fast, but it was still a **manual** step someone had to remember to run — nothing
+caught drift on a method already in production use between checks.
 
-**Design**: the sync container already calls every schema-covered `garminconnect` method every
-30 min as part of normal syncing — wire validation into that existing path instead of building
-a separate polling job or schedule.
+**Design**: `sync/drift_check.py` wraps the logged-in `Garmin` client (`wrap(garmin) -> Garmin`,
+a thin proxy whose `__getattr__` intercepts calls to any method in
+`schema_validate.METHOD_SCHEMA`) so every schema-covered call the sync loop already makes every
+cycle is validated against its schema as a side effect — no separate polling job or schedule.
 
-- New `sync/drift_check.py`: `wrap(garmin) -> Garmin`, a thin proxy whose `__getattr__`
-  intercepts calls to any method name in `schema_validate.METHOD_SCHEMA`, calls the real
-  method, runs `schema_validate.validate(name, result)` against the return value, then
-  returns the result **unmodified**. All other attributes pass through untouched.
-- Validation failure never raises — logs `ERROR` and calls `_maybe_alert(method, errors)`.
-  A schema bug must never break real syncing.
-- `_maybe_alert` dedupes so a persistent drift doesn't page every 30 min: persists
-  `{method: last_alerted_date}` in a new `/data/drift_alert_state.json` (same
-  load/save-tmp-then-replace pattern as `sync.py`'s `_load_state`/`_save_state`, kept
-  separate from `sync_state.json` so a bug here can't corrupt sync watermarks). Alerts
-  once per method per calendar day; re-alerts daily until fixed.
+- Validation failure never raises — logs `ERROR` and calls `_maybe_alert(method, errors)`. A
+  schema bug never breaks real syncing.
+- Falsy responses (`None`/`{}`/`[]`) skip validation entirely — every `sync_*` call site already
+  treats those as "no data today" via its own `or {}`/`if raw:` guard, not an error; validating
+  the raw response before that guard runs was a false positive found in review, fixed before merge.
+- `_maybe_alert` dedupes so a persistent drift doesn't alert every cycle: persists
+  `{method: last_alerted_date}` in `/data/drift_alert_state.json` (separate from `sync_state.json`
+  so a bug here can't corrupt sync watermarks). Alerts once per method per calendar day.
 - Alert transport: POST JSON `{method, date, errors}` to `DRIFT_ALERT_WEBHOOK_URL` (an n8n
-  webhook that routes to Telegram, matching how other personal notifications are already
-  wired) via stdlib `urllib.request`, 5s timeout, wrapped in try/except — a webhook outage
-  must never break sync either. Env var optional; unset = log-only, no alert sent.
+  webhook that routes to Telegram, matching how other personal notifications are already wired)
+  via stdlib `urllib.request`, 5s timeout, wrapped in try/except. Env var optional; unset =
+  log-only, no alert sent.
 - Wiring into `sync.py`: one line after each `_garmin_login()` call (initial login and
-  post-auth-expiry re-login) — `garmin = drift_check.wrap(garmin)`. No changes to any
-  `sync_*` function; they keep calling `garmin.get_x(...)` exactly as now.
-- New env var: `DRIFT_ALERT_WEBHOOK_URL` (optional, blank = log-only) in `.env.example`
-  and `docker-compose.yml`.
-- Tests in `sync/tests/test_drift_check.py`: fake `Garmin`-like object with one method in
-  `METHOD_SCHEMA` — assert `wrap()` calls through and returns the result unchanged; assert
-  a malformed response logs and calls the alert path; assert same-day dedup skips a second
-  alert; assert a missing webhook URL no-ops without raising.
+  post-auth-expiry re-login) — `garmin = drift_check.wrap(garmin)`. No changes to any `sync_*`
+  function.
+- `schema_validate.validate()`'s schema-file load is `functools.cache`d — it's now called many
+  times per sync run (once per method per day across a backfill) instead of once per manual
+  `inspect_api.py` invocation, so the earlier uncached disk read/parse became a real hot path.
+- Tests in `sync/tests/test_drift_check.py` (7 cases): passthrough, unwrapped methods, falsy-
+  response skip, mismatch logs+alerts, same-day dedup, state persistence, webhook no-op/failure-safety.
 
-Not yet built — this is the spec, next thing to implement.
+`inspect_api.py` remains the tool for deriving a *new* field before it has a schema at all —
+`drift_check.py` only covers methods already in `METHOD_SCHEMA`.
 
 ---
 

@@ -50,6 +50,13 @@ Not currently consumed by any sync field — re-verify before relying on this no
    ```
    For a method with no schema yet (new field, nothing to validate against), it just
    prints the raw JSON — still eyeball it by hand before writing code.
+
+   This manual check is no longer the only line of defense: `sync/drift_check.py` wraps
+   the Garmin client the live sync loop uses, so every schema-covered method is validated
+   automatically on every real sync cycle (#68) — a mismatch logs `ERROR` and alerts via
+   `DRIFT_ALERT_WEBHOOK_URL` if set. That catches drift on data already flowing through
+   production; `inspect_api.py` is still what you reach for while deriving a *new* field
+   before it has a schema at all.
 3. Identify exact field names, nesting, and types from the real response
 4. Include the actual response shape as a comment in the sync function (see `sync_training_status` for the pattern)
 5. Do not commit the raw captured response as a fixture — it contains real account PII

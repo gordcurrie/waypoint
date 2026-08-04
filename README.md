@@ -113,6 +113,7 @@ See `.env.example` for all variables. Key ones:
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API URL |
 | `OLLAMA_MODEL` | — | Model name (e.g. `gemma4:latest`) |
 | `ANTHROPIC_API_KEY` | — | Required if `LLM_PROVIDER=claude` |
+| `DRIFT_ALERT_WEBHOOK_URL` | — | Optional. POSTed `{method, date, errors}` when a live Garmin API response no longer matches its schema; unset = log-only |
 
 ## Project Structure
 
@@ -123,6 +124,7 @@ internal/         Shared Go packages (influx, garmin, analysis, llm)
 tools/            MCP tool registration
 sync/             Python Garmin → InfluxDB sync service
 sync/schemas/     JSON Schema for each Garmin API response sync.py reads
+sync/drift_check.py  Validates live responses against sync/schemas/ every sync cycle
 grafana/          Provisioning config + dashboard JSON
 ```
 
