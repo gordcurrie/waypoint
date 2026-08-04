@@ -329,32 +329,47 @@ caught drift on a method already in production use between checks.
 
 **Design**: `sync/drift_check.py` wraps the logged-in `Garmin` client (`wrap(garmin) -> Garmin`,
 a thin proxy whose `__getattr__` intercepts calls to any method in
-`schema_validate.METHOD_SCHEMA`) so every schema-covered call the sync loop already makes every
-cycle is validated against its schema as a side effect — no separate polling job or schedule.
+`schema_validate.METHOD_SCHEMA`) so schema-covered calls the sync loop already makes get
+validated against their schema as a side effect — no separate polling job or schedule.
 
-- Validation failure never raises — logs `ERROR` and calls `_maybe_alert(method, errors)`. A
-  schema bug never breaks real syncing.
-- Falsy responses (`None`/`{}`/`[]`) skip validation entirely — every `sync_*` call site already
-  treats those as "no data today" via its own `or {}`/`if raw:` guard, not an error; validating
-  the raw response before that guard runs was a false positive found in review, fixed before merge.
-- `_maybe_alert` dedupes so a persistent drift doesn't alert every cycle: persists
-  `{method: last_alerted_date}` in `/data/drift_alert_state.json` (separate from `sync_state.json`
-  so a bug here can't corrupt sync watermarks). Alerts once per method per calendar day.
+- **Off by default.** `DRIFT_CHECK_ENABLED` (default `false`) gates whether `sync.py` even
+  calls `drift_check.wrap()` (`_login_and_wrap()`, called after initial login and after
+  auth-expiry re-login). This validates one specific account's data and can alert to one
+  specific webhook — not behavior every clone of this repo should get unasked. No separate
+  frequency knob — once enabled, every schema-covered call is checked, same cadence as
+  `SYNC_SCHEDULE`. That's deliberate: validation makes no extra Garmin API calls (it checks a
+  response `sync.py` already fetched for real syncing), so there's no rate-limit/cost reason
+  to throttle it independently — the only cost of not throttling is a repeated `ERROR` log
+  line on a persistent drift, which is arguably useful signal, not noise. Add a throttle later
+  if that log volume actually becomes a real problem, not preemptively.
+- Validation failure never raises — logs `ERROR` and attempts an alert. A schema bug never
+  breaks real syncing: the whole validate+alert block is wrapped in `try/except Exception`,
+  so even an unexpected failure inside drift-checking itself (corrupt schema file, disk full)
+  can't propagate out of the wrapped Garmin call and cost the caller its real data for that
+  cycle (`run_sync`'s per-function `except Exception` would otherwise silently eat the whole
+  `sync_*` function's work, not just the drift check — caught in review before merge).
+- Falsy responses (`None`/`{}`/`[]`) skip validation entirely — every `sync_*` call site
+  already treats those as "no data today" via its own `or {}`/`if raw:` guard, not an error;
+  validating the raw response before that guard runs was a false positive found in review.
+- Per-method alert state (`{method: last_alerted_date}`) persists in
+  `/data/drift_alert_state.json` (separate from `sync_state.json` so a bug here can't corrupt
+  sync watermarks). Alerts dedupe to once per method per calendar day; a failed send does
+  *not* mark the day as alerted, so a transient webhook outage retries on the next check
+  rather than silently going quiet until tomorrow.
 - Alert transport: POST JSON `{method, date, errors}` to `DRIFT_ALERT_WEBHOOK_URL` (an n8n
-  webhook that routes to Telegram, matching how other personal notifications are already wired)
-  via stdlib `urllib.request`, 5s timeout, wrapped in try/except. Env var optional; unset =
-  log-only, no alert sent.
-- Wiring into `sync.py`: one line after each `_garmin_login()` call (initial login and
-  post-auth-expiry re-login) — `garmin = drift_check.wrap(garmin)`. No changes to any `sync_*`
-  function.
-- `schema_validate.validate()`'s schema-file load is `functools.cache`d — it's now called many
-  times per sync run (once per method per day across a backfill) instead of once per manual
-  `inspect_api.py` invocation, so the earlier uncached disk read/parse became a real hot path.
-- Tests in `sync/tests/test_drift_check.py` (7 cases): passthrough, unwrapped methods, falsy-
-  response skip, mismatch logs+alerts, same-day dedup, state persistence, webhook no-op/failure-safety.
+  webhook that routes to Telegram, matching how other personal notifications are already
+  wired) via stdlib `urllib.request` with a context-managed response, 5s timeout, wrapped in
+  try/except, returns success/failure. Env var optional; unset = log-only, no alert sent.
+- `schema_validate.validate()`'s schema-file load is `functools.cache`d — once enabled it's
+  called many times per sync run instead of once per manual `inspect_api.py` invocation, so
+  the earlier uncached disk read/parse would otherwise be a real hot path.
+- Tests in `sync/tests/test_drift_check.py`: passthrough, unwrapped methods, falsy-response
+  skip, mismatch logs+alerts, same-day dedup, failed-send retry, validation-exception
+  containment, state persistence, webhook no-op/failure-safety. Enable-flag gating is tested
+  in `sync/tests/test_sync.py` (`_login_and_wrap`), since the flag lives in `sync.py`.
 
 `inspect_api.py` remains the tool for deriving a *new* field before it has a schema at all —
-`drift_check.py` only covers methods already in `METHOD_SCHEMA`.
+`drift_check.py` only covers methods already in `METHOD_SCHEMA`, and only once enabled.
 
 ---
 

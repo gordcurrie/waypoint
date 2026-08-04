@@ -113,9 +113,13 @@ See `.env.example` for all variables. Key ones:
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API URL |
 | `OLLAMA_MODEL` | — | Model name (e.g. `gemma4:latest`) |
 | `ANTHROPIC_API_KEY` | — | Required if `LLM_PROVIDER=claude` |
+| `DRIFT_CHECK_ENABLED` | `false` | Validate live Garmin API responses against `sync/schemas/` during normal syncing (#68). Off by default — personal-account/personal-webhook behavior, opt in explicitly |
 | `DRIFT_ALERT_WEBHOOK_URL` | — | Optional. POSTed `{method, date, errors}` when a live Garmin API response no longer matches its schema; unset = log-only |
 
 ### Drift alert webhook setup (optional)
+
+Requires `DRIFT_CHECK_ENABLED=true` first — the webhook only ever fires if drift-checking
+itself is turned on.
 
 `sync/drift_check.py` sends a plain `POST` with a JSON body — `{"method": "...", "date":
 "YYYY-MM-DD", "errors": ["..."]}`, `Content-Type: application/json`, no auth headers, no

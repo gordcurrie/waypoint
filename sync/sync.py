@@ -41,6 +41,13 @@ INFLUXDB_URL = os.environ["INFLUXDB_URL"]
 INFLUXDB_DB = os.environ.get("INFLUXDB_DATABASE", "garmin")
 INFLUXDB_TOKEN = os.environ.get("INFLUXDB_TOKEN", "")
 BACKFILL_DAYS = int(os.environ.get("BACKFILL_DAYS", "90"))
+# Off by default — hits a personal Garmin account + personal alert webhook, not
+# something every clone of this repo should do without opting in (#68).
+DRIFT_CHECK_ENABLED = os.environ.get("DRIFT_CHECK_ENABLED", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 TOKEN_STORE = str(DATA_DIR / "garmin_auth")
 STATE_FILE = DATA_DIR / "sync_state.json"
@@ -91,6 +98,11 @@ def _last_synced(state: dict[str, Any], key: str) -> date:
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
+
+
+def _login_and_wrap() -> Any:
+    garmin = _garmin_login()
+    return drift_check.wrap(garmin) if DRIFT_CHECK_ENABLED else garmin
 
 
 def _garmin_login() -> Garmin:
@@ -1280,7 +1292,7 @@ if __name__ == "__main__":
     _login_backoff = 60
     while garmin is None:
         try:
-            garmin = drift_check.wrap(_garmin_login())
+            garmin = _login_and_wrap()
         except Exception as exc:
             log.error(
                 "Initial login failed: %s. "
@@ -1299,7 +1311,7 @@ if __name__ == "__main__":
         except GarminConnectAuthenticationError:
             log.warning("Auth expired — re-authenticating")
             try:
-                garmin = drift_check.wrap(_garmin_login())
+                garmin = _login_and_wrap()
             except Exception as exc:
                 log.error("Re-auth failed: %s — will retry next interval", exc)
         except (GarminConnectConnectionError, GarminConnectTooManyRequestsError) as exc:

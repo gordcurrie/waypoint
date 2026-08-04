@@ -104,9 +104,13 @@ failure; it means no schema has been derived for that method yet.
 The above only covers the interactive dev workflow (someone running `inspect_api.py`
 while deriving a new field). `drift_check.py` closes the other gap — it wraps the
 `Garmin` client the live sync loop uses so every schema-covered call in `SYNC_FUNCS`
-is validated automatically, on the responses already being fetched for real syncing
-(no separate polling job, no extra Garmin API traffic or rate-limit/auth risk). A
-mismatch logs `ERROR` and alerts once/method/day via `DRIFT_ALERT_WEBHOOK_URL` if set
-(unset = log-only); it never raises, so a stale schema can't break real syncing.
-Falsy responses (`None`/`{}`/`[]`) are skipped — every `sync_*` call site already
-treats those as "no data today," not a schema violation.
+is validated, on the responses already being fetched for real syncing (no separate
+polling job, no extra Garmin API traffic or rate-limit/auth risk). A mismatch logs
+`ERROR` and alerts via `DRIFT_ALERT_WEBHOOK_URL` if set (unset = log-only); it never
+raises, so a stale schema can't break real syncing. Falsy responses (`None`/`{}`/`[]`)
+are skipped — every `sync_*` call site already treats those as "no data today," not
+a schema violation.
+
+Off by default (`DRIFT_CHECK_ENABLED=false`) — this validates one specific Garmin
+account's data and posts to one specific webhook, not behavior every clone of this
+repo should get unasked.
