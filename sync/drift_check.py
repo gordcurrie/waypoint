@@ -44,10 +44,17 @@ ALERT_WEBHOOK_URL = os.environ.get("DRIFT_ALERT_WEBHOOK_URL", "")
 def _load_drift_state() -> dict[str, dict[str, str]]:
     if DRIFT_STATE_FILE.exists():
         try:
-            return json.loads(DRIFT_STATE_FILE.read_text())  # type: ignore[no-any-return]
+            raw: dict[str, Any] = json.loads(DRIFT_STATE_FILE.read_text())
         except (json.JSONDecodeError, OSError):
             log.warning("Drift alert state file corrupt — resetting to empty state")
             return {}
+        # Migrate the pre-#82 flat {method: date} shape (mismatch-only, no "kind")
+        # to {method: {kind: date}} so every caller can assume the new shape —
+        # deployed installs already have real state files in the old format.
+        return {
+            method: ({"mismatch": value} if isinstance(value, str) else value)
+            for method, value in raw.items()
+        }
     return {}
 
 

@@ -176,6 +176,27 @@ def test_alert_state_persisted_across_wrap_instances(tmp_path):
     assert state[METHOD]["mismatch"]
 
 
+def test_legacy_flat_state_migrates_without_crashing(tmp_path, monkeypatch):
+    """Deployed installs already have a real state file in the pre-#82 flat
+    {method: date} shape (no "kind") — must not crash on load, and a fresh
+    alert must still work rather than being silently swallowed."""
+    (tmp_path / "drift_alert_state.json").write_text(
+        json.dumps({METHOD: "2020-01-01"})  # old format, deliberately stale date
+    )
+    alerts: list[tuple[str, str]] = []
+    monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts))
+
+    fake = _FakeGarmin(INVALID_RESPONSE)
+    wrapped = drift_check.wrap(fake)
+    result = wrapped.get_respiration_data("2026-08-04")  # must not raise
+
+    assert result == INVALID_RESPONSE
+    assert alerts == [(METHOD, "mismatch")]  # stale date != today, so it still fires
+
+    state = json.loads((tmp_path / "drift_alert_state.json").read_text())
+    assert state[METHOD] == {"mismatch": drift_check.date.today().isoformat()}
+
+
 def test_send_alert_noop_without_webhook_url(monkeypatch):
     monkeypatch.setattr(drift_check, "ALERT_WEBHOOK_URL", "")
     calls = []
