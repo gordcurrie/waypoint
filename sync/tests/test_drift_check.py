@@ -68,15 +68,15 @@ def test_wrap_passes_through_methods_without_a_schema():
 
 
 def _recording_send_alert(alerts, succeed=True):
-    def _send(method, errors):
-        alerts.append(method)
+    def _send(method, kind, errors):
+        alerts.append((method, kind))
         return succeed
 
     return _send
 
 
 def test_schema_mismatch_logs_and_alerts(monkeypatch, caplog):
-    alerts: list[str] = []
+    alerts: list[tuple[str, str]] = []
     monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts))
 
     fake = _FakeGarmin(INVALID_RESPONSE)
@@ -87,11 +87,42 @@ def test_schema_mismatch_logs_and_alerts(monkeypatch, caplog):
 
     assert result == INVALID_RESPONSE  # still returned despite mismatch
     assert any("no longer matches its schema" in r.message for r in caplog.records)
-    assert alerts == [METHOD]
+    assert alerts == [(METHOD, "mismatch")]
+
+
+def test_new_fields_logs_warning_and_alerts(monkeypatch, caplog):
+    alerts: list[tuple[str, str]] = []
+    monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts))
+    response_with_new_field = {**VALID_RESPONSE, "brandNewField": "x"}
+
+    fake = _FakeGarmin(response_with_new_field)
+    wrapped = drift_check.wrap(fake)
+
+    with caplog.at_level("WARNING"):
+        result = wrapped.get_respiration_data("2026-08-04")
+
+    assert result == response_with_new_field  # still returned unchanged
+    assert any("new field(s) not in its schema" in r.message for r in caplog.records)
+    assert alerts == [(METHOD, "new_fields")]
+
+
+def test_mismatch_and_new_fields_alert_independently_same_day(monkeypatch):
+    """A response that's both broken AND has a new field must alert for both —
+    one kind's dedup must not suppress the other on the same method/day."""
+    alerts: list[tuple[str, str]] = []
+    monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts))
+    response = {**INVALID_RESPONSE, "brandNewField": "x"}
+
+    fake = _FakeGarmin(response)
+    wrapped = drift_check.wrap(fake)
+
+    wrapped.get_respiration_data("2026-08-04")
+
+    assert sorted(alerts) == [(METHOD, "mismatch"), (METHOD, "new_fields")]
 
 
 def test_alert_deduped_within_same_day(monkeypatch):
-    alerts: list[str] = []
+    alerts: list[tuple[str, str]] = []
     monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts))
 
     fake = _FakeGarmin(INVALID_RESPONSE)
@@ -100,13 +131,13 @@ def test_alert_deduped_within_same_day(monkeypatch):
     wrapped.get_respiration_data("2026-08-04")
     wrapped.get_respiration_data("2026-08-04")
 
-    assert alerts == [METHOD]  # second call same day, no second alert
+    assert alerts == [(METHOD, "mismatch")]  # second call same day, no second alert
 
 
 def test_failed_send_is_not_deduped_and_retries_next_call(monkeypatch):
     """A failed send must not mark today as alerted — otherwise a transient
     webhook outage silently swallows the alert until tomorrow."""
-    alerts: list[str] = []
+    alerts: list[tuple[str, str]] = []
     monkeypatch.setattr(drift_check, "_send_alert", _recording_send_alert(alerts, succeed=False))
 
     fake = _FakeGarmin(INVALID_RESPONSE)
@@ -115,7 +146,8 @@ def test_failed_send_is_not_deduped_and_retries_next_call(monkeypatch):
     wrapped.get_respiration_data("2026-08-04")
     wrapped.get_respiration_data("2026-08-04")
 
-    assert alerts == [METHOD, METHOD]  # retried both times, never deduped
+    # retried both times, never deduped
+    assert alerts == [(METHOD, "mismatch"), (METHOD, "mismatch")]
 
 
 def test_validation_exception_is_contained(monkeypatch, caplog):
@@ -138,10 +170,10 @@ def test_validation_exception_is_contained(monkeypatch, caplog):
 
 
 def test_alert_state_persisted_across_wrap_instances(tmp_path):
-    drift_check._maybe_alert(METHOD, ["some error"])
+    drift_check._maybe_alert(METHOD, "mismatch", ["some error"])
 
     state = json.loads((tmp_path / "drift_alert_state.json").read_text())
-    assert METHOD in state
+    assert state[METHOD]["mismatch"]
 
 
 def test_send_alert_noop_without_webhook_url(monkeypatch):
@@ -149,7 +181,7 @@ def test_send_alert_noop_without_webhook_url(monkeypatch):
     calls = []
     monkeypatch.setattr(drift_check.urllib.request, "urlopen", lambda *a, **k: calls.append(1))
 
-    assert drift_check._send_alert(METHOD, ["some error"]) is True
+    assert drift_check._send_alert(METHOD, "mismatch", ["some error"]) is True
     assert calls == []
 
 
@@ -161,4 +193,5 @@ def test_send_alert_failure_does_not_raise_and_returns_false(monkeypatch):
 
     monkeypatch.setattr(drift_check.urllib.request, "urlopen", _boom)
 
-    assert drift_check._send_alert(METHOD, ["some error"]) is False  # must not raise
+    # must not raise
+    assert drift_check._send_alert(METHOD, "mismatch", ["some error"]) is False
