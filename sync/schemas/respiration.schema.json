@@ -32,16 +32,16 @@
       "type": "string"
     },
     "tomorrowSleepStartTimestampGMT": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "tomorrowSleepEndTimestampGMT": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "tomorrowSleepStartTimestampLocal": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "tomorrowSleepEndTimestampLocal": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "lowestRespirationValue": {
       "type": "number",
@@ -60,7 +60,7 @@
       "description": "Consumed as avg_sleep_brpm."
     },
     "avgTomorrowSleepRespirationValue": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "respirationValueDescriptorsDTOList": {
       "type": "array",
@@ -106,7 +106,7 @@
       "items": {
         "type": "array",
         "items": {
-          "type": "integer"
+          "type": ["integer", "number", "null"]
         }
       }
     },
@@ -118,5 +118,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/respiration.schema.json",
   "title": "Respiration (get_respiration_data)",
-  "description": "Returned by garminconnect's get_respiration_data(date). Consumed by sync_respiration.\n\nVerified against: 2026-07-28, 2026-07-15. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+  "description": "Returned by garminconnect's get_respiration_data(date). Consumed by sync_respiration.\n\nVerified against: 2026-07-28, 2026-07-15, 2026-08-05. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is.\n\n2026-08-05 (via automatic drift-check on live data, #68): avgTomorrowSleepRespirationValue and the four tomorrowSleep*Timestamp* fields observed null (no next-day sleep prediction yet available) \u2014 now nullable rather than required-present. respirationAveragesValuesArray's inner values observed as floats (e.g. 14.11), not integers, and null-padded in the day's last row \u2014 widened to integer|number|null. None of these fields are consumed by sync_respiration (only lowest/highest/avgWaking/avgSleepRespirationValue are), so this was schema over-strictness, not a real API change."
 }
