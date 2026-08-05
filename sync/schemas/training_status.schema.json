@@ -91,13 +91,15 @@
                 "type": "integer"
               },
               "imageURL": {
-                "type": "string"
+                "type": ["string", "null"],
+                "description": "Observed null on 2026-08-05 (via automatic drift-check, #68), non-null (a real image URL) later the same day — same null-until-device-data-syncs pattern already noted on the mostRecentTrainingStatus.recordedDevices occurrence of this shape below, just missed here originally."
               },
               "deviceName": {
                 "type": "string"
               },
               "category": {
-                "type": "integer"
+                "type": ["integer", "null"],
+                "description": "Observed null on 2026-08-05, non-null (0) later the same day — see imageURL note."
               }
             },
             "additionalProperties": true
@@ -242,5 +244,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/training_status.schema.json",
   "title": "Training status (get_training_status)",
-  "description": "Returned by garminconnect's get_training_status(date). Consumed by sync_training_status. Device-keyed nesting confirmed live: mostRecentTrainingStatus.latestTrainingStatusData is keyed by deviceId (string), not a flat dict \u2014 code must iterate .values() and pick the entry with primaryTrainingDevice=true.\n\nVerified against: 2026-07-24. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+  "description": "Returned by garminconnect's get_training_status(date). Consumed by sync_training_status. Device-keyed nesting confirmed live: mostRecentTrainingStatus.latestTrainingStatusData is keyed by deviceId (string), not a flat dict \u2014 code must iterate .values() and pick the entry with primaryTrainingDevice=true.\n\nVerified against: 2026-07-24, 2026-08-05 (via automatic drift-check on live data, #68 \u2014 see mostRecentTrainingLoadBalance.recordedDevices.category/imageURL). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
 }
