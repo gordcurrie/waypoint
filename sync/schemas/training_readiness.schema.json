@@ -94,7 +94,8 @@
         "type": "boolean"
       },
       "recoveryTimeChangePhrase": {
-        "type": "string"
+        "type": ["string", "null"],
+        "description": "Observed null earlier on 2026-08-05 (right after wakeup, before Garmin had computed a day-over-day recovery-time comparison yet), non-null (\"NO_CHANGE_SLEEP\") later the same day once that computation existed. Not currently consumed by sync_training_readiness."
       }
     },
     "additionalProperties": true
@@ -102,5 +103,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/training_readiness.schema.json",
   "title": "Training readiness (get_training_readiness)",
-  "description": "Returned by garminconnect's get_training_readiness(date) as a list (single-element in samples observed). Consumed by sync_training_readiness.\n\nVerified against: 2026-07-24 (activity day), 2026-07-25 (rest day). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+  "description": "Returned by garminconnect's get_training_readiness(date) as a list (single-element in samples observed). Consumed by sync_training_readiness.\n\nVerified against: 2026-07-24 (activity day), 2026-07-25 (rest day), 2026-08-05 (via automatic drift-check on live data, #68 \u2014 see recoveryTimeChangePhrase). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
 }
