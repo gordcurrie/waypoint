@@ -86,6 +86,13 @@ def validate(method_name: str, instance: Any) -> list[str] | None:
     return sorted(errors)
 
 
+def _type_includes(schema: dict[str, Any], type_name: str) -> bool:
+    """ "type" is either a bare string or a list (e.g. ["object", "null"] on a
+    field marked nullable) — check membership either way."""
+    t = schema.get("type")
+    return t == type_name or (isinstance(t, list) and type_name in t)
+
+
 def _walk_new_fields(
     schema: dict[str, Any], instance: Any, path: str, resolver: Any, found: list[str]
 ) -> None:
@@ -94,7 +101,7 @@ def _walk_new_fields(
         _walk_new_fields(resolved.contents, instance, path, resolved.resolver, found)
         return
 
-    if isinstance(instance, dict) and schema.get("type") == "object":
+    if isinstance(instance, dict) and _type_includes(schema, "object"):
         props: dict[str, Any] | None = schema.get("properties")
         pattern_props: dict[str, Any] | None = schema.get("patternProperties")
         for key, value in instance.items():
@@ -113,7 +120,7 @@ def _walk_new_fields(
                 found.append(sub_path)
             # else: this object node declares neither properties nor
             # patternProperties (fully untyped) — nothing to compare against.
-    elif isinstance(instance, list) and schema.get("type") == "array":
+    elif isinstance(instance, list) and _type_includes(schema, "array"):
         items_schema = schema.get("items")
         if items_schema is not None:
             for i, item in enumerate(instance):

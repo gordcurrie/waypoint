@@ -103,3 +103,29 @@ def test_find_new_fields_ignores_new_pattern_property_keys():
     assert schema_validate.find_new_fields("get_training_status", ts_instance) == [
         "mostRecentTrainingLoadBalance/metricsTrainingLoadBalanceDTOMap/3620139022/brandNewFieldInsideEntry"
     ]
+
+
+def test_find_new_fields_still_recurses_into_nullable_object():
+    """Regression: the walker's type check used to be `schema.get("type") ==
+    "object"`, an exact string match — a field marked `["object", "null"]`
+    (nullable) no longer matched, so the walker silently stopped recursing
+    into it and any new field inside went undetected. Caught by this suite
+    when mostRecentTrainingLoadBalance was marked nullable (#68)."""
+    instance = {
+        "mostRecentTrainingLoadBalance": {
+            "userId": 1,
+            "recordedDevices": [],
+            "brandNewFieldInsideNullableObject": "x",
+        }
+    }
+    assert schema_validate.find_new_fields("get_training_status", instance) == [
+        "mostRecentTrainingLoadBalance/brandNewFieldInsideNullableObject"
+    ]
+
+
+def test_find_new_fields_still_recurses_into_nullable_array():
+    """Same regression, array side: sleepLevels is `["array", "null"]`."""
+    instance = {"sleepLevels": [{"startGMT": "x", "brandNewFieldInsideNullableArray": "y"}]}
+    assert schema_validate.find_new_fields("get_sleep_data", instance) == [
+        "sleepLevels/0/brandNewFieldInsideNullableArray"
+    ]

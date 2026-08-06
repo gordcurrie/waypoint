@@ -5,16 +5,20 @@
       "type": "integer"
     },
     "totalKilocalories": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "activeKilocalories": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bmrKilocalories": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "wellnessKilocalories": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "burnedKilocalories": {
       "description": "observed null in captured sample"
@@ -26,32 +30,36 @@
       "description": "observed null in captured sample"
     },
     "totalSteps": {
-      "type": "integer",
-      "description": "Consumed as steps."
+      "type": ["integer", "null"],
+      "description": "Consumed as steps. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "netCalorieGoal": {
       "description": "observed null in captured sample"
     },
     "totalDistanceMeters": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "wellnessDistanceMeters": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "wellnessActiveKilocalories": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "netRemainingKilocalories": {
       "type": "number"
     },
     "userDailySummaryId": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "calendarDate": {
       "type": "string"
     },
     "rule": {
-      "type": "object",
+      "type": ["object", "null"],
       "properties": {
         "typeId": {
           "type": "integer"
@@ -60,43 +68,55 @@
           "type": "string"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": true,
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "uuid": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "dailyStepGoal": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "wellnessStartTimeGmt": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "wellnessStartTimeLocal": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "wellnessEndTimeGmt": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "wellnessEndTimeLocal": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "durationInMilliseconds": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "wellnessDescription": {
       "description": "observed null in captured sample"
     },
     "highlyActiveSeconds": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "activeSeconds": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "sedentarySeconds": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "sleepingSeconds": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "includesWellnessData": {
       "type": "boolean"
@@ -111,164 +131,209 @@
       "type": "boolean"
     },
     "moderateIntensityMinutes": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "vigorousIntensityMinutes": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "floorsAscendedInMeters": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "floorsDescendedInMeters": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "floorsAscended": {
-      "type": "number",
-      "description": "Consumed as floors_ascended."
+      "type": ["number", "null"],
+      "description": "Consumed as floors_ascended. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "floorsDescended": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "intensityMinutesGoal": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "userFloorsAscendedGoal": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "minHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "maxHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "restingHeartRate": {
-      "type": "integer",
-      "description": "Consumed as resting_hr_bpm."
+      "type": ["integer", "null"],
+      "description": "Consumed as resting_hr_bpm. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "lastSevenDaysAvgRestingHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "source": {
       "type": "string"
     },
     "averageStressLevel": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "maxStressLevel": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "stressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "restStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "activityStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "uncategorizedStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "totalStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "lowStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "mediumStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "highStressDuration": {
       "type": ["integer", "null"],
-      "description": "Observed null live 2026-08-02 — not every day has high-stress readings."
+      "description": "Observed null live 2026-08-02 \u2014 not every day has high-stress readings."
     },
     "stressPercentage": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "restStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "activityStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "uncategorizedStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "lowStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "mediumStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "highStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "stressQualifier": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "measurableAwakeDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "measurableAsleepDuration": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "lastSyncTimestampGMT": {
       "description": "observed null in captured sample"
     },
     "minAvgHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "maxAvgHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bodyBatteryChargedValue": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bodyBatteryDrainedValue": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bodyBatteryHighestValue": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bodyBatteryLowestValue": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bodyBatteryMostRecentValue": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bodyBatteryDuringSleep": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bodyBatteryAtWakeTime": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "bodyBatteryVersion": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "abnormalHeartRateAlertsCount": {
       "description": "observed null in captured sample"
     },
     "averageSpo2": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "lowestSpo2": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "latestSpo2": {
-      "type": "integer"
+      "type": ["integer", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "latestSpo2ReadingTimeGmt": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "latestSpo2ReadingTimeLocal": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "averageMonitoringEnvironmentAltitude": {
-      "type": "number"
+      "type": ["number", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "restingCaloriesFromActivity": {
       "type": ["number", "null"],
-      "description": "Observed null live 2026-08-02 — not populated on days with no qualifying activity."
+      "description": "Observed null live 2026-08-02 \u2014 not populated on days with no qualifying activity."
     },
     "bodyBatteryDynamicFeedbackEvent": {
       "type": "object",
@@ -281,7 +346,7 @@
         },
         "feedbackShortType": {
           "type": ["string", "null"],
-          "description": "Observed null live 2026-08-02 — not every reading has an associated feedback event."
+          "description": "Observed null live 2026-08-02 \u2014 not every reading has an associated feedback event."
         },
         "feedbackLongType": {
           "type": "string"
@@ -375,5 +440,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/daily_stats.schema.json",
   "title": "Daily stats (get_stats)",
-  "description": "Returned by garminconnect's get_stats(date). 24/7 wellness metrics \u2014 present even on rest days with no logged activity. Consumed by sync_daily_stats.\n\nVerified against: 2026-07-28 (activity day), 2026-07-25 (rest day) \u2014 both full responses, confirming these are day-level not activity-level stats. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+  "description": "Returned by garminconnect's get_stats(date). 24/7 wellness metrics \u2014 present even on rest days with no logged activity. Consumed by sync_daily_stats.\n\nVerified against: 2026-07-28 (activity day), 2026-07-25 (rest day) \u2014 both full responses, confirming these are day-level not activity-level stats. 2026-08-06 (via automatic drift-check on live data, #68): every field below observed null right after day rollover, before Garmin had computed anything for the new day yet \u2014 now nullable; see per-field notes. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
 }

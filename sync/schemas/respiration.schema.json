@@ -8,28 +8,36 @@
       "type": "string"
     },
     "startTimestampGMT": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "endTimestampGMT": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "startTimestampLocal": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "endTimestampLocal": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "sleepStartTimestampGMT": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "sleepEndTimestampGMT": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "sleepStartTimestampLocal": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "sleepEndTimestampLocal": {
-      "type": "string"
+      "type": ["string", "null"],
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "tomorrowSleepStartTimestampGMT": {
       "type": ["string", "null"]
@@ -44,26 +52,26 @@
       "type": ["string", "null"]
     },
     "lowestRespirationValue": {
-      "type": "number",
-      "description": "Consumed as lowest_brpm."
+      "type": ["number", "null"],
+      "description": "Consumed as lowest_brpm. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "highestRespirationValue": {
-      "type": "number",
-      "description": "Consumed as highest_brpm."
+      "type": ["number", "null"],
+      "description": "Consumed as highest_brpm. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "avgWakingRespirationValue": {
-      "type": "number",
-      "description": "Consumed as avg_waking_brpm."
+      "type": ["number", "null"],
+      "description": "Consumed as avg_waking_brpm. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "avgSleepRespirationValue": {
-      "type": "number",
-      "description": "Consumed as avg_sleep_brpm."
+      "type": ["number", "null"],
+      "description": "Consumed as avg_sleep_brpm. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "avgTomorrowSleepRespirationValue": {
       "type": ["number", "null"]
     },
     "respirationValueDescriptorsDTOList": {
-      "type": "array",
+      "type": ["array", "null"],
       "items": {
         "type": "object",
         "properties": {
@@ -75,19 +83,21 @@
           }
         },
         "additionalProperties": true
-      }
+      },
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "respirationValuesArray": {
-      "type": "array",
+      "type": ["array", "null"],
       "items": {
         "type": "array",
         "items": {
           "type": "integer"
         }
-      }
+      },
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "respirationAveragesValueDescriptorDTOList": {
-      "type": "array",
+      "type": ["array", "null"],
       "items": {
         "type": "object",
         "properties": {
@@ -99,16 +109,18 @@
           }
         },
         "additionalProperties": true
-      }
+      },
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "respirationAveragesValuesArray": {
-      "type": "array",
+      "type": ["array", "null"],
       "items": {
         "type": "array",
         "items": {
           "type": ["integer", "number", "null"]
         }
-      }
+      },
+      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
     },
     "respirationVersion": {
       "type": "integer"
@@ -118,5 +130,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/respiration.schema.json",
   "title": "Respiration (get_respiration_data)",
-  "description": "Returned by garminconnect's get_respiration_data(date). Consumed by sync_respiration.\n\nVerified against: 2026-07-28, 2026-07-15, 2026-08-05. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is.\n\n2026-08-05 (via automatic drift-check on live data, #68): avgTomorrowSleepRespirationValue and the four tomorrowSleep*Timestamp* fields observed null (no next-day sleep prediction yet available) \u2014 now nullable rather than required-present. respirationAveragesValuesArray's inner values observed as floats (e.g. 14.11), not integers, and null-padded in the day's last row \u2014 widened to integer|number|null. None of these fields are consumed by sync_respiration (only lowest/highest/avgWaking/avgSleepRespirationValue are), so this was schema over-strictness, not a real API change."
+  "description": "Returned by garminconnect's get_respiration_data(date). Consumed by sync_respiration.\n\nVerified against: 2026-07-28, 2026-07-15, 2026-08-05, 2026-08-06. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is.\n\n2026-08-05 (via automatic drift-check on live data, #68): avgTomorrowSleepRespirationValue and the four tomorrowSleep*Timestamp* fields observed null (no next-day sleep prediction yet available) \u2014 now nullable rather than required-present. respirationAveragesValuesArray's inner values observed as floats (e.g. 14.11), not integers, and null-padded in the day's last row \u2014 widened to integer|number|null. None of these fields are consumed by sync_respiration (only lowest/highest/avgWaking/avgSleepRespirationValue are), so this was schema over-strictness, not a real API change.\n\n2026-08-06: this time the *entire* response (avgSleepRespirationValue, avgWakingRespirationValue, all four start/endTimestamp fields, both value-descriptor lists, both values arrays) observed null right after day rollover, before Garmin had computed anything for the new day yet \u2014 the same not-computed-yet pattern as 2026-08-05, just earlier in the pipeline and covering every remaining field instead of just the tomorrow-prediction ones."
 }
