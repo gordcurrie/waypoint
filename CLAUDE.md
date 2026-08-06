@@ -108,15 +108,16 @@ Not `mark3labs/mcp-go`. Follow the skill conventions from
 (exponential moving averages: ATL=7d, CTL=42d, TSB=CTL-ATL), and optionally writes back to
 the `training_load` measurement for Grafana. No background worker or separate trigger needed.
 
-## Build order (current: Phase 1)
+## Build order (current: Phase 3, not started)
 
 1. ~~Docker Compose — InfluxDB 3 Core + Grafana + sync placeholder~~ ✓ done
 2. ~~Python sync sidecar (`sync/`)~~ ✓ done
-3. `internal/influx` — InfluxDB client wrapper ← **next**
-4. `internal/garmin` — data models
-5. `internal/analysis` — ATL/CTL/TSB computation
-6. `tools/` + `cmd/mcp-server/` — MCP server (Phase 1 complete)
-7. `internal/llm/` + `cmd/cli/` — CLI (Phase 2)
+3. ~~`internal/influx` — InfluxDB client wrapper~~ ✓ done
+4. ~~`internal/garmin` — data models~~ ✓ done
+5. ~~`internal/analysis` — ATL/CTL/TSB computation~~ ✓ done
+6. ~~`tools/` + `cmd/mcp-server/` — MCP server (Phase 1)~~ ✓ done
+7. ~~`internal/llm/` + `cmd/cli/` — CLI (Phase 2)~~ ✓ done
+8. Web UI (Phase 3) — not started, see PLAN.md ("if warranted")
 
 ## Garmin auth constraints (don't re-litigate these)
 
