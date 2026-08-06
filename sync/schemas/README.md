@@ -114,3 +114,12 @@ a schema violation.
 Off by default (`DRIFT_CHECK_ENABLED=false`) — this validates one specific Garmin
 account's data and posts to one specific webhook, not behavior every clone of this
 repo should get unasked.
+
+`drift_check.py` also calls `schema_validate.find_new_fields()` alongside `validate()`
+— `additionalProperties: true` means Garmin adding a field never fails validation, but
+it also meant new fields went unnoticed. This walks the response against the schema and
+reports any field present in the data but not declared in a `"properties"` the schema
+enumerates (recursing through nested objects and `$ref`s), logged as `WARNING` and
+alerted separately from schema mismatches (`kind: "new_fields"` vs `"mismatch"` in the
+webhook payload, deduped independently). `patternProperties`-keyed dicts (device-ID-keyed
+maps) are matched by pattern instead of flagged — a new device ID isn't a new field.

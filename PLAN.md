@@ -351,22 +351,41 @@ validated against their schema as a side effect — no separate polling job or s
 - Falsy responses (`None`/`{}`/`[]`) skip validation entirely — every `sync_*` call site
   already treats those as "no data today" via its own `or {}`/`if raw:` guard, not an error;
   validating the raw response before that guard runs was a false positive found in review.
-- Per-method alert state (`{method: last_alerted_date}`) persists in
+- **Two independent checks per call**, alerted/deduped separately by a `kind` tag
+  (`"mismatch"` vs `"new_fields"`) so one doesn't suppress the other on the same method/day:
+  - `schema_validate.validate()` — a field's type/nesting no longer matches the schema.
+    Something's actually broken, or the schema itself needs loosening (a field going
+    null in a state the original derivation never sampled has been the pattern for every
+    real alert so far — see `sync/schemas/README.md`'s per-schema bug notes).
+  - `schema_validate.find_new_fields()` — `additionalProperties: true` throughout
+    `sync/schemas/` means Garmin adding a field never fails `validate()` (not a breaking
+    change), but that also means new fields were previously invisible. This recursively
+    walks every object node the schema declares `"properties"` for (resolving `$ref`,
+    e.g. the shared `vo2max.schema.json` defs) and reports any instance key not declared
+    there. Object nodes keyed only by `patternProperties` (e.g.
+    `metricsTrainingLoadBalanceDTOMap`, keyed by device ID) are matched against the
+    pattern instead of flagged — a new device ID isn't "a new field," there's no fixed
+    field list to compare a dict key against in the first place.
+- Per-method alert state (`{method: {kind: last_alerted_date}}`) persists in
   `/data/drift_alert_state.json` (separate from `sync_state.json` so a bug here can't corrupt
-  sync watermarks). Alerts dedupe to once per method per calendar day; a failed send does
-  *not* mark the day as alerted, so a transient webhook outage retries on the next check
+  sync watermarks). Alerts dedupe to once per method+kind per calendar day; a failed send
+  does *not* mark the day as alerted, so a transient webhook outage retries on the next check
   rather than silently going quiet until tomorrow.
-- Alert transport: POST JSON `{method, date, errors}` to `DRIFT_ALERT_WEBHOOK_URL` (an n8n
-  webhook that routes to Telegram, matching how other personal notifications are already
+- Alert transport: POST JSON `{method, kind, date, errors}` to `DRIFT_ALERT_WEBHOOK_URL` (an
+  n8n webhook that routes to Telegram, matching how other personal notifications are already
   wired) via stdlib `urllib.request` with a context-managed response, 5s timeout, wrapped in
   try/except, returns success/failure. Env var optional; unset = log-only, no alert sent.
 - `schema_validate.validate()`'s schema-file load is `functools.cache`d — once enabled it's
   called many times per sync run instead of once per manual `inspect_api.py` invocation, so
   the earlier uncached disk read/parse would otherwise be a real hot path.
 - Tests in `sync/tests/test_drift_check.py`: passthrough, unwrapped methods, falsy-response
-  skip, mismatch logs+alerts, same-day dedup, failed-send retry, validation-exception
-  containment, state persistence, webhook no-op/failure-safety. Enable-flag gating is tested
-  in `sync/tests/test_sync.py` (`_login_and_wrap`), since the flag lives in `sync.py`.
+  skip, mismatch logs+alerts, new-fields logs+alerts, mismatch+new-fields alerting
+  independently on the same method/day, same-day dedup, failed-send retry,
+  validation-exception containment, state persistence, webhook no-op/failure-safety.
+  `find_new_fields` itself (top-level/nested detection, `$ref` resolution,
+  `patternProperties` key exclusion) is tested in `sync/tests/test_schema_validate.py`.
+  Enable-flag gating is tested in `sync/tests/test_sync.py` (`_login_and_wrap`), since the
+  flag lives in `sync.py`.
 
 `inspect_api.py` remains the tool for deriving a *new* field before it has a schema at all —
 `drift_check.py` only covers methods already in `METHOD_SCHEMA`, and only once enabled.
