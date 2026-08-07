@@ -1519,6 +1519,68 @@ def test_pending_workouts_keeps_failed_item_in_queue(tmp_path, monkeypatch):
     assert remaining[0]["id"] == "fail"
 
 
+def _upload_response(
+    workout_id: int = 1656732143, name: str = "Tempo Run", sport: str = "running"
+) -> dict:
+    """Shape confirmed live 2026-08-07 via a probe upload_workout call + delete_workout
+    cleanup (see internal/garmin/workout_detail.go's doc comment) — identical to
+    get_workout_by_id's response."""
+    return {
+        "workoutId": workout_id,
+        "ownerId": 62914808,
+        "workoutName": name,
+        "sportType": {"sportTypeId": 1, "sportTypeKey": sport},
+        "workoutSegments": [
+            {
+                "segmentOrder": 1,
+                "workoutSteps": [
+                    {"type": "ExecutableStepDTO", "stepId": 14222928952, "stepOrder": 1},
+                ],
+            }
+        ],
+    }
+
+
+def test_pending_workouts_writes_workout_detail_on_success(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item()])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response()
+    client = MagicMock()
+    sync.sync_pending_workouts(garmin, client, {})
+    points = _written_points(client)
+    assert len(points) == 1
+    line = str(points[0])
+    assert "workout_detail" in line
+    assert "workout_id=1656732143" in line
+    assert 'name="Tempo Run"' in line
+    assert "stepId" in line
+
+
+def test_pending_workouts_no_detail_write_when_workout_id_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item()])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = {"workoutId": None}
+    client = MagicMock()
+    sync.sync_pending_workouts(garmin, client, {})
+    assert not client.write.called
+
+
+def test_pending_workouts_detail_write_failure_does_not_requeue(tmp_path, monkeypatch):
+    """A malformed upload response must not cause the already-uploaded item to be
+    treated as failed (which would re-upload and duplicate it on the next run)."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item()])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = {"workoutId": 123, "workoutSegments": "not-a-list"}
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    import json as _json
+
+    remaining = _json.loads((tmp_path / "workout_queue.json").read_text())
+    assert remaining == []
+
+
 def test_pending_workouts_connection_error_propagates(tmp_path, monkeypatch):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     _write_queue(tmp_path, [_queue_item()])

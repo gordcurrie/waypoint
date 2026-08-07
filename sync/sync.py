@@ -1173,6 +1173,36 @@ def _save_queue(items: list[dict[str, Any]]) -> None:
     tmp.rename(queue_file)
 
 
+def _write_workout_detail(client: InfluxDBClient3, resp: dict[str, Any]) -> None:
+    """Persist the step tree Garmin assigned to a just-uploaded workout.
+
+    garmin.upload_workout's response is confirmed (live probe upload + delete,
+    2026-08-07) to have the identical shape as garmin.get_workout_by_id — including
+    the Garmin-assigned workoutId and the full workoutSegments[0].workoutSteps tree,
+    with server-side stepId values and any Garmin-side normalization already applied.
+    Written here instead of a separate get_workout_by_id round-trip so
+    get_workout_detail's rollout verification (confirming what Garmin actually stored,
+    not just what create_workout sent) needs no extra API call. Only workoutId /
+    workoutName / sportType.sportTypeKey / workoutSteps are kept — the rest of the
+    response carries real account PII (author displayName, profile image filenames)
+    with no reason to land in InfluxDB.
+    """
+    workout_id = resp.get("workoutId")
+    if workout_id is None:
+        return
+    segments = resp.get("workoutSegments") or []
+    steps = segments[0].get("workoutSteps", []) if segments else []
+    p = Point("workout_detail").tag("workout_id", str(workout_id)).time(datetime.now(UTC))
+    fields: dict[str, Any] = {
+        "name": str(resp.get("workoutName") or ""),
+        "sport": str((resp.get("sportType") or {}).get("sportTypeKey") or ""),
+        "steps_json": json.dumps(steps),
+    }
+    p, n = _add_fields(p, fields)
+    if n:
+        _write(client, [p])
+
+
 def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """Upload queued workouts to Garmin Connect. Items stay in queue on failure (retry next run)."""
     queue_file = DATA_DIR / "workout_queue.json"
@@ -1194,9 +1224,17 @@ def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[s
         for i, item in enumerate(items):
             try:
                 workout = _build_garmin_workout(item)
-                garmin.upload_workout(workout)
+                resp = garmin.upload_workout(workout)
                 uploaded += 1
                 log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item.get("id"))
+                try:
+                    _write_workout_detail(client, resp)
+                except Exception as exc:
+                    log.warning(
+                        "pending_workouts: failed to write workout_detail for %s: %s",
+                        item.get("id"),
+                        exc,
+                    )
             except (
                 GarminConnectAuthenticationError,
                 GarminConnectTooManyRequestsError,

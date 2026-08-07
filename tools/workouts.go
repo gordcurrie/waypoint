@@ -158,6 +158,31 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		}
 		return jsonResult(map[string]string{"id": item.ID, "name": item.Name, "status": "queued"})
 	})
+
+	type workoutDetailInput struct {
+		WorkoutID int64 `json:"workout_id" jsonschema:"Garmin-assigned workout id (see get_scheduled_workouts' workout_id field)"`
+	}
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:  "get_workout_detail",
+		Title: "Workout Detail",
+		Description: "Return the step-by-step detail Garmin actually stored for a workout, keyed by its Garmin-assigned workout_id (see get_scheduled_workouts). " +
+			"Only available for workouts uploaded via create_workout — the sync sidecar records what Garmin's response contained at upload time. Coach-plan workouts and anything built directly in the Garmin Connect app were never uploaded through this queue, so no detail is recorded for them. " +
+			"steps is Garmin's own raw step tree (ExecutableStepDTO/RepeatGroupDTO shape) — useful to confirm what actually landed after an upload, since Garmin can silently normalize or reject parts of what was sent.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input workoutDetailInput) (*mcp.CallToolResult, any, error) {
+		if input.WorkoutID <= 0 {
+			return errorResult(fmt.Errorf("get_workout_detail: workout_id is required"))
+		}
+		detail, err := queryWorkoutDetail(ctx, client, input.WorkoutID)
+		if err != nil {
+			return errorResult(err)
+		}
+		if detail == nil {
+			return errorResult(fmt.Errorf("get_workout_detail: no detail recorded for workout_id %d — only workouts uploaded via create_workout are recorded", input.WorkoutID))
+		}
+		return jsonResult(detail)
+	})
 }
 
 func queuePath(dataDir string) string {
@@ -230,6 +255,22 @@ func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) 
 	}
 
 	return mergeTrainingPlanDetail(workouts, tasks), nil
+}
+
+func queryWorkoutDetail(ctx context.Context, client influxClient, workoutID int64) (*garmin.WorkoutDetail, error) {
+	sql := fmt.Sprintf(
+		"SELECT * FROM %s WHERE workout_id = '%d' ORDER BY time DESC LIMIT 1",
+		influx.MeasurementWorkoutDetail, workoutID,
+	)
+	rows, err := client.Query(ctx, sql)
+	if err != nil {
+		return nil, fmt.Errorf("get_workout_detail: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	detail := garmin.WorkoutDetailFrom(rows[0])
+	return &detail, nil
 }
 
 func queryMeasurementRange(ctx context.Context, client influxClient, measurement string, start, end time.Time) ([]map[string]any, error) {

@@ -286,6 +286,16 @@ node and its children, sequential per group in order of appearance, `null` for u
 steps). `numberOfIterations` and `endConditionValue` on the group must both be set to the
 same set count — redundant-looking, but both required.
 
+**`upload_workout`'s response == `get_workout_by_id`'s response** (confirmed 2026-08-07 via
+a live probe: uploaded a disposable workout, diffed the `upload_workout` return value against
+`get_workout_by_id` on the same id, then `delete_workout`'d it) — same shape, including the
+Garmin-assigned `workoutId` and the full `workoutSegments[0].workoutSteps` tree with
+server-side `stepId`s. `sync_pending_workouts` uses this to write the `workout_detail`
+InfluxDB measurement (read by the `get_workout_detail` MCP tool) straight from the upload
+response — no separate `get_workout_by_id` round-trip needed. Each `ExecutableStepDTO` also
+carries `weightValue`/`weightUnit` fields — relevant to the still-open `weight_kg` step target
+(#86).
+
 ## Skill to invoke for MCP server work
 
 When building `tools/` or `cmd/mcp-server/`, invoke the `generate-mcp` skill:
