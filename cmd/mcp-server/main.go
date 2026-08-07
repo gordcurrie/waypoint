@@ -15,6 +15,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gordcurrie/waypoint/internal/analysis"
 	"github.com/gordcurrie/waypoint/internal/influx"
 	"github.com/gordcurrie/waypoint/tools"
 )
@@ -45,9 +46,12 @@ func main() {
 
 func run() error {
 	var transport, addr, dataDir string
+	var trainingLoadInterval time.Duration
 	flag.StringVar(&transport, "transport", "stdio", "transport: stdio or http")
 	flag.StringVar(&addr, "addr", "127.0.0.1:8080", "listen address for http transport")
 	flag.StringVar(&dataDir, "data-dir", "./data", "directory for the workout queue shared with the sync sidecar")
+	flag.DurationVar(&trainingLoadInterval, "training-load-interval", 30*time.Minute,
+		"how often to recompute and persist training_load in http transport mode (0 disables). No effect in stdio mode.")
 	flag.Parse()
 
 	client, err := influx.NewFromEnv()
@@ -88,6 +92,9 @@ func run() error {
 				slog.Error("shutdown", "err", err)
 			}
 		}()
+		if trainingLoadInterval > 0 {
+			go runTrainingLoadLoop(ctx, client, trainingLoadInterval)
+		}
 		slog.Warn("HTTP transport has no authentication — bind to localhost or protect with a reverse proxy")
 		slog.Info("listening", "addr", addr)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -97,4 +104,46 @@ func run() error {
 		return fmt.Errorf("unknown transport %q: use stdio or http", transport)
 	}
 	return nil
+}
+
+// trainingLoadClient is the subset of *influx.Client that analysis.Compute and
+// analysis.WriteResults need, kept local so runTrainingLoadLoop can be tested
+// against a fake without touching a real InfluxDB.
+type trainingLoadClient interface {
+	Query(ctx context.Context, sql string) ([]map[string]any, error)
+	WritePoints(ctx context.Context, points ...*influx.Point) error
+}
+
+// runTrainingLoadLoop periodically recomputes and persists ATL/CTL/TSB so the
+// training_load Grafana panel doesn't depend on an MCP client having called
+// get_training_load with write_back=true (#90) — a dashboard-first workflow has no
+// such caller, and the panel was found 4 days stale in practice. Runs once
+// immediately, then on the given interval, only in the long-lived http-transport
+// process: stdio mode is spawned fresh per Claude session and never lives long
+// enough for a background loop to matter.
+func runTrainingLoadLoop(ctx context.Context, client trainingLoadClient, interval time.Duration) {
+	const windowDays = 42
+
+	compute := func() {
+		results, err := analysis.Compute(ctx, client, windowDays)
+		if err != nil {
+			slog.Error("training_load: background compute failed", "err", err)
+			return
+		}
+		if err := analysis.WriteResults(ctx, client, results); err != nil {
+			slog.Error("training_load: background write failed", "err", err)
+		}
+	}
+
+	compute()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			compute()
+		}
+	}
 }
