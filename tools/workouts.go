@@ -69,7 +69,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		Title: "Scheduled Workouts",
 		Description: "Return workouts scheduled on the Garmin calendar for the next N days (default 14). Use before create_workout to avoid scheduling conflicts. " +
 			"Coach/training-plan-assigned days are enriched with real target detail from the active adaptive plan: duration_s, distance_m, description (the actual pace/HR target, e.g. \"21:00@5:10/km\" or \"137bpm\"), phase (BASE/BUILD/PEAK/TAPER/TARGET_EVENT_DAY), and rest_day. " +
-			"Rest days appear here even though they have no real Garmin calendar entry — scheduled_id is 0 for those, since it's a plan entry, not a real calendar item.",
+			"Rest days appear here even though they have no real Garmin calendar entry — scheduled_id is 0 for those, since it's a plan entry, not a real calendar item. scheduled_id is also 0 for coach/training-plan-assigned workouts generally (deduped by sport+name rather than Garmin's own id); only self-created workouts (via create_workout) carry a real nonzero scheduled_id.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input scheduledWorkoutsInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 14, 60)
@@ -298,7 +298,15 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 		})
 	}
 
-	sort.Slice(merged, func(i, j int) bool { return merged[i].Date < merged[j].Date })
+	sort.Slice(merged, func(i, j int) bool {
+		if merged[i].Date != merged[j].Date {
+			return merged[i].Date < merged[j].Date
+		}
+		if merged[i].Sport != merged[j].Sport {
+			return merged[i].Sport < merged[j].Sport
+		}
+		return merged[i].Name < merged[j].Name
+	})
 	return merged
 }
 
