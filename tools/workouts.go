@@ -255,16 +255,22 @@ func queryMeasurementRange(ctx context.Context, client influxClient, measurement
 // identified as coach-plan-sourced, not self-created via create_workout) — a self-created
 // workout that happens to land on the same date as a coach-plan task must not inherit the
 // coach's target detail.
+//
+// Joins on (date, sport), not date alone — verified live 2026-08-07 that the coach plan
+// can assign two tasks on the same calendarDate (running + strength_training, a real
+// two-a-day). A date-only join would match one task to both calendar entries and drop
+// the other's detail.
 func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.TrainingPlanTask) []garmin.ScheduledWorkout {
-	byDate := make(map[string]garmin.TrainingPlanTask, len(tasks))
+	byKey := make(map[string]garmin.TrainingPlanTask, len(tasks))
 	for _, t := range tasks {
-		byDate[t.Date] = t
+		byKey[planTaskKey(t.Date, t.Sport)] = t
 	}
 
 	merged := make([]garmin.ScheduledWorkout, 0, len(workouts)+len(tasks))
 	seen := make(map[string]bool, len(workouts))
 	for _, w := range workouts {
-		if t, ok := byDate[w.Date]; ok && w.WorkoutID == 0 {
+		key := planTaskKey(w.Date, w.Sport)
+		if t, ok := byKey[key]; ok && w.WorkoutID == 0 {
 			w.DistanceM = t.DistanceM
 			w.Description = t.Description
 			w.RestDay = t.RestDay
@@ -274,14 +280,15 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 			}
 		}
 		merged = append(merged, w)
-		seen[w.Date] = true
+		seen[key] = true
 	}
 	for _, t := range tasks {
-		if seen[t.Date] {
+		if seen[planTaskKey(t.Date, t.Sport)] {
 			continue
 		}
 		merged = append(merged, garmin.ScheduledWorkout{
 			Date:        t.Date,
+			Sport:       t.Sport,
 			Name:        t.Name,
 			DurationS:   t.DurationS,
 			DistanceM:   t.DistanceM,
@@ -293,4 +300,8 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 
 	sort.Slice(merged, func(i, j int) bool { return merged[i].Date < merged[j].Date })
 	return merged
+}
+
+func planTaskKey(date, sport string) string {
+	return date + "|" + sport
 }

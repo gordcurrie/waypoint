@@ -2,9 +2,12 @@ package garmin
 
 // ScheduledWorkout represents one row from the "scheduled_workout" measurement,
 // optionally enriched with per-day detail from the active adaptive coach training
-// plan (see mergeTrainingPlanDetail in tools/workouts.go). ScheduledID is 0 for a
-// rest day synthesized purely from the training plan — there's no real calendar
-// item behind it, only a plan entry.
+// plan (see mergeTrainingPlanDetail in tools/workouts.go). ScheduledID is 0 both for
+// a rest day synthesized purely from the training plan (no real calendar item behind
+// it) and for a real coach-plan calendar item — those are deduped by (sport, name)
+// instead of Garmin's own id, which churns every time the plan regenerates the day.
+// Self-created workouts (via create_workout) always carry their real, stable
+// ScheduledID.
 type ScheduledWorkout struct {
 	ScheduledID int64   `json:"scheduled_id"`
 	WorkoutID   int64   `json:"workout_id,omitempty"`

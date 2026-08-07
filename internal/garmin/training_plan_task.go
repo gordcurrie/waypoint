@@ -6,6 +6,7 @@ package garmin
 // mergeTrainingPlanDetail rather than exposed as its own tool result type.
 type TrainingPlanTask struct {
 	Date        string  `json:"date"`
+	Sport       string  `json:"sport,omitempty"`
 	Name        string  `json:"name,omitempty"`
 	Description string  `json:"description,omitempty"`
 	DurationS   float64 `json:"duration_s,omitempty"`
@@ -18,6 +19,7 @@ type TrainingPlanTask struct {
 func TrainingPlanTaskFrom(row map[string]any) TrainingPlanTask {
 	return TrainingPlanTask{
 		Date:        dateFrom(row, "time"),
+		Sport:       stringFrom(row, "sport"),
 		Name:        stringFrom(row, "name"),
 		Description: stringFrom(row, "description"),
 		DurationS:   roundF(floatFrom(row, "duration_s")),

@@ -828,17 +828,28 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                     scheduled_date = date.fromisoformat(str(date_str)[:10])
 
                     sport_val = str(item.get("sportTypeKey") or "")
+                    name_val = str(item.get("title") or item.get("workoutName") or "")
 
-                    p = (
-                        Point("scheduled_workout")
-                        .tag("scheduled_id", str(scheduled_id))
-                        .tag("sport", sport_val)
-                        .time(_day_ts(scheduled_date))
-                    )
+                    # Coach-plan items are tagged by (sport, workout_name) instead of
+                    # the calendar item's own id: that id churns every time the
+                    # adaptive plan regenerates the day (same real workout, brand-new
+                    # id), and since InfluxDB 3 Core has no DELETE, tagging on it piled
+                    # up ever-growing ghost duplicates of every past regeneration.
+                    # (sport, workout_name) collapses those correctly and, verified
+                    # live 2026-08-07 against a real run + strength_training coach day,
+                    # still keeps a genuine same-day multi-workout apart. Self-created
+                    # items (real workoutId) keep the id tag — Garmin's own id is
+                    # stable for those.
+                    p = Point("scheduled_workout").time(_day_ts(scheduled_date))
+                    if is_coach_plan_item:
+                        p = p.tag("sport", sport_val).tag("workout_name", name_val)
+                    else:
+                        p = p.tag("scheduled_id", str(scheduled_id)).tag("sport", sport_val)
+
                     dur = _fval(item, "duration")
                     fields: dict[str, Any] = {
                         "workout_id": float(workout_id) if workout_id is not None else None,
-                        "name": str(item.get("title") or item.get("workoutName") or ""),
+                        "name": name_val,
                         "duration_s": dur
                         if dur is not None
                         else _fval(item, "estimatedDurationInSecs"),
@@ -936,6 +947,7 @@ def sync_training_plan(garmin: Garmin, client: InfluxDBClient3, state: dict[str,
 
                 w = task.get("taskWorkout") or {}
                 rest_day = bool(w.get("restDay"))
+                sport_val = str((w.get("sportType") or {}).get("sportTypeKey") or "")
 
                 phase = ""
                 for ph in phases:
@@ -944,9 +956,15 @@ def sync_training_plan(garmin: Garmin, client: InfluxDBClient3, state: dict[str,
                         phase = str(ph.get("trainingPhase") or "")
                         break
 
+                # sport is part of the series key, not just a field: verified live
+                # 2026-08-07 that a coach day can carry two taskList entries for the
+                # same calendarDate (running + strength_training). Without sport here,
+                # the second write silently overwrote the first on the same
+                # (training_plan_id, date) series.
                 p = (
                     Point("training_plan_task")
                     .tag("training_plan_id", str(plan_id))
+                    .tag("sport", sport_val)
                     .time(_day_ts(task_date))
                 )
                 fields: dict[str, Any] = {
