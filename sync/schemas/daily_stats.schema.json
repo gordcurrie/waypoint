@@ -5,16 +5,16 @@
       "type": "integer"
     },
     "totalKilocalories": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "activeKilocalories": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "bmrKilocalories": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "wellnessKilocalories": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "burnedKilocalories": {
       "description": "observed null in captured sample"
@@ -26,32 +26,32 @@
       "description": "observed null in captured sample"
     },
     "totalSteps": {
-      "type": "integer",
+      "type": ["integer", "null"],
       "description": "Consumed as steps."
     },
     "netCalorieGoal": {
       "description": "observed null in captured sample"
     },
     "totalDistanceMeters": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "wellnessDistanceMeters": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "wellnessActiveKilocalories": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "netRemainingKilocalories": {
       "type": "number"
     },
     "userDailySummaryId": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "calendarDate": {
       "type": "string"
     },
     "rule": {
-      "type": "object",
+      "type": ["object", "null"],
       "properties": {
         "typeId": {
           "type": "integer"
@@ -63,40 +63,40 @@
       "additionalProperties": true
     },
     "uuid": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "dailyStepGoal": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "wellnessStartTimeGmt": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "wellnessStartTimeLocal": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "wellnessEndTimeGmt": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "wellnessEndTimeLocal": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "durationInMilliseconds": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "wellnessDescription": {
       "description": "observed null in captured sample"
     },
     "highlyActiveSeconds": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "activeSeconds": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "sedentarySeconds": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "sleepingSeconds": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "includesWellnessData": {
       "type": "boolean"
@@ -111,164 +111,164 @@
       "type": "boolean"
     },
     "moderateIntensityMinutes": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "vigorousIntensityMinutes": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "floorsAscendedInMeters": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "floorsDescendedInMeters": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "floorsAscended": {
-      "type": "number",
+      "type": ["number", "null"],
       "description": "Consumed as floors_ascended."
     },
     "floorsDescended": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "intensityMinutesGoal": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "userFloorsAscendedGoal": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "minHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "maxHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "restingHeartRate": {
-      "type": "integer",
+      "type": ["integer", "null"],
       "description": "Consumed as resting_hr_bpm."
     },
     "lastSevenDaysAvgRestingHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "source": {
       "type": "string"
     },
     "averageStressLevel": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "maxStressLevel": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "stressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "restStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "activityStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "uncategorizedStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "totalStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "lowStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "mediumStressDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "highStressDuration": {
       "type": ["integer", "null"],
-      "description": "Observed null live 2026-08-02 — not every day has high-stress readings."
+      "description": "Observed null live 2026-08-02 \u2014 not every day has high-stress readings."
     },
     "stressPercentage": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "restStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "activityStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "uncategorizedStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "lowStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "mediumStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "highStressPercentage": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "stressQualifier": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "measurableAwakeDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "measurableAsleepDuration": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "lastSyncTimestampGMT": {
       "description": "observed null in captured sample"
     },
     "minAvgHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "maxAvgHeartRate": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "bodyBatteryChargedValue": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "bodyBatteryDrainedValue": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "bodyBatteryHighestValue": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "bodyBatteryLowestValue": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "bodyBatteryMostRecentValue": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "bodyBatteryDuringSleep": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "bodyBatteryAtWakeTime": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "bodyBatteryVersion": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "abnormalHeartRateAlertsCount": {
       "description": "observed null in captured sample"
     },
     "averageSpo2": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "lowestSpo2": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "latestSpo2": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "latestSpo2ReadingTimeGmt": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "latestSpo2ReadingTimeLocal": {
-      "type": "string"
+      "type": ["string", "null"]
     },
     "averageMonitoringEnvironmentAltitude": {
-      "type": "number"
+      "type": ["number", "null"]
     },
     "restingCaloriesFromActivity": {
       "type": ["number", "null"],
-      "description": "Observed null live 2026-08-02 — not populated on days with no qualifying activity."
+      "description": "Observed null live 2026-08-02 \u2014 not populated on days with no qualifying activity."
     },
     "bodyBatteryDynamicFeedbackEvent": {
       "type": "object",
@@ -281,7 +281,7 @@
         },
         "feedbackShortType": {
           "type": ["string", "null"],
-          "description": "Observed null live 2026-08-02 — not every reading has an associated feedback event."
+          "description": "Observed null live 2026-08-02 \u2014 not every reading has an associated feedback event."
         },
         "feedbackLongType": {
           "type": "string"
@@ -375,5 +375,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/daily_stats.schema.json",
   "title": "Daily stats (get_stats)",
-  "description": "Returned by garminconnect's get_stats(date). 24/7 wellness metrics \u2014 present even on rest days with no logged activity. Consumed by sync_daily_stats.\n\nVerified against: 2026-07-28 (activity day), 2026-07-25 (rest day) \u2014 both full responses, confirming these are day-level not activity-level stats. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+  "description": "Returned by garminconnect's get_stats(date). 24/7 wellness metrics \u2014 present even on rest days with no logged activity. Consumed by sync_daily_stats.\n\nVerified against: 2026-07-28 (activity day), 2026-07-25 (rest day) \u2014 both full responses, confirming these are day-level not activity-level stats. 2026-08-06 (via automatic drift-check on live data, #68): every field below observed null right after day rollover, before Garmin had computed anything for the new day yet \u2014 now nullable; see per-field notes. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
 }

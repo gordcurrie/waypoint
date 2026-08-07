@@ -5,7 +5,7 @@
       "type": "object",
       "properties": {
         "id": {
-          "type": "integer"
+          "type": ["integer", "null"]
         },
         "userProfilePK": {
           "type": "integer"
@@ -14,29 +14,29 @@
           "type": "string"
         },
         "sleepTimeSeconds": {
-          "type": "integer",
+          "type": ["integer", "null"],
           "description": "Consumed as total_sleep_s."
         },
         "napTimeSeconds": {
-          "type": "integer"
+          "type": ["integer", "null"]
         },
         "sleepWindowConfirmed": {
-          "type": "boolean"
+          "type": ["boolean", "null"]
         },
         "sleepWindowConfirmationType": {
-          "type": "string"
+          "type": ["string", "null"]
         },
         "sleepStartTimestampGMT": {
-          "type": "integer"
+          "type": ["integer", "null"]
         },
         "sleepEndTimestampGMT": {
-          "type": "integer"
+          "type": ["integer", "null"]
         },
         "sleepStartTimestampLocal": {
-          "type": "integer"
+          "type": ["integer", "null"]
         },
         "sleepEndTimestampLocal": {
-          "type": "integer"
+          "type": ["integer", "null"]
         },
         "autoSleepStartTimestampGMT": {
           "description": "observed null in captured sample"
@@ -51,22 +51,22 @@
           "description": "observed null in captured sample"
         },
         "unmeasurableSleepSeconds": {
-          "type": "integer"
+          "type": ["integer", "null"]
         },
         "deepSleepSeconds": {
-          "type": "integer",
+          "type": ["integer", "null"],
           "description": "Consumed as deep_sleep_s."
         },
         "lightSleepSeconds": {
-          "type": "integer",
+          "type": ["integer", "null"],
           "description": "Consumed as light_sleep_s."
         },
         "remSleepSeconds": {
-          "type": "integer",
+          "type": ["integer", "null"],
           "description": "Consumed as rem_sleep_s."
         },
         "awakeSleepSeconds": {
-          "type": "integer",
+          "type": ["integer", "null"],
           "description": "Consumed as awake_s."
         },
         "deviceRemCapable": {
@@ -328,7 +328,7 @@
       "additionalProperties": true
     },
     "sleepMovement": {
-      "type": "array",
+      "type": ["array", "null"],
       "items": {
         "type": "object",
         "properties": {
@@ -346,10 +346,10 @@
       }
     },
     "remSleepData": {
-      "type": "boolean"
+      "type": ["boolean", "null"]
     },
     "sleepLevels": {
-      "type": "array",
+      "type": ["array", "null"],
       "items": {
         "type": "object",
         "properties": {
@@ -599,7 +599,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/sleep.schema.json",
   "title": "Sleep data (get_sleep_data)",
-  "description": "Returned by garminconnect's get_sleep_data(date). Consumed by sync_sleep, which reads only dailySleepDTO and its nested sleepScores \u2014 the many sibling keys (sleepMovement, sleepHeartRate, hrvData, etc.) are captured here for completeness but not currently synced.\n\nVerified against: 2026-07-28, 2026-07-15 \u2014 both nights with full sleep recorded; no fixture yet for a night with none (see README gaps). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is.",
+  "description": "Returned by garminconnect's get_sleep_data(date). Consumed by sync_sleep, which reads only dailySleepDTO and its nested sleepScores \u2014 the many sibling keys (sleepMovement, sleepHeartRate, hrvData, etc.) are captured here for completeness but not currently synced.\n\nVerified against: 2026-07-28, 2026-07-15 \u2014 both nights with full sleep recorded; no fixture yet for a night with none (see README gaps). 2026-08-06 (via automatic drift-check on live data, #68): dailySleepDTO fields plus remSleepData/sleepLevels/sleepMovement observed null right after day rollover, before Garmin had computed anything for the new day yet \u2014 now nullable. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is.",
   "$defs": {
     "sleepNeed": {
       "type": "object",
