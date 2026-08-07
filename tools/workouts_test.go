@@ -226,6 +226,7 @@ func TestQueryScheduledWorkouts_EnrichesCoachPlanItem(t *testing.T) {
 			{
 				"time":        dateStr,
 				"name":        "Tempo",
+				"sport":       "running",
 				"description": "21:00@5:10/km",
 				"duration_s":  float64(2460),
 				"distance_m":  float64(7462),
@@ -274,6 +275,7 @@ func TestQueryScheduledWorkouts_DoesNotEnrichSelfCreatedWorkout(t *testing.T) {
 			{
 				"time":        dateStr,
 				"name":        "Tempo",
+				"sport":       "running",
 				"description": "21:00@5:10/km",
 				"phase":       "BUILD",
 			},
@@ -326,6 +328,60 @@ func TestQueryScheduledWorkouts_SynthesizesRestDay(t *testing.T) {
 	}
 	if w.Name != "Rest" {
 		t.Errorf("Name: got %q, want Rest", w.Name)
+	}
+}
+
+func TestQueryScheduledWorkouts_TwoADayKeptSeparate(t *testing.T) {
+	// Verified live 2026-08-07: a coach day can carry two distinct real workouts
+	// (running + strength_training) on the same date. mergeTrainingPlanDetail must
+	// join on (date, sport), not date alone, or one task clobbers the other's detail.
+	tomorrow := time.Now().UTC().Add(24 * time.Hour)
+	dateStr := tomorrow.Format(time.RFC3339)
+	client := routedMockClient(
+		[]map[string]any{
+			{"time": dateStr, "name": "Base", "sport": "running"},
+			{"time": dateStr, "name": "Total Body Circuit", "sport": "strength_training"},
+		},
+		[]map[string]any{
+			{
+				"time":        dateStr,
+				"name":        "Base",
+				"sport":       "running",
+				"description": "137bpm",
+				"duration_s":  float64(2400),
+				"phase":       "BUILD",
+			},
+			{
+				"time":        dateStr,
+				"name":        "Total Body Circuit",
+				"sport":       "strength_training",
+				"description": "3 sets",
+				"duration_s":  float64(1800),
+				"phase":       "BUILD",
+			},
+		},
+	)
+	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workouts) != 2 {
+		t.Fatalf("want 2 workouts, got %d: %+v", len(workouts), workouts)
+	}
+	var run, strength *garmin.ScheduledWorkout
+	for i := range workouts {
+		switch workouts[i].Sport {
+		case "running":
+			run = &workouts[i]
+		case "strength_training":
+			strength = &workouts[i]
+		}
+	}
+	if run == nil || run.Description != "137bpm" || run.DurationS != 2400 {
+		t.Errorf("running task not enriched correctly: %+v", run)
+	}
+	if strength == nil || strength.Description != "3 sets" || strength.DurationS != 1800 {
+		t.Errorf("strength task not enriched correctly: %+v", strength)
 	}
 }
 

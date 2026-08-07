@@ -69,7 +69,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		Title: "Scheduled Workouts",
 		Description: "Return workouts scheduled on the Garmin calendar for the next N days (default 14). Use before create_workout to avoid scheduling conflicts. " +
 			"Coach/training-plan-assigned days are enriched with real target detail from the active adaptive plan: duration_s, distance_m, description (the actual pace/HR target, e.g. \"21:00@5:10/km\" or \"137bpm\"), phase (BASE/BUILD/PEAK/TAPER/TARGET_EVENT_DAY), and rest_day. " +
-			"Rest days appear here even though they have no real Garmin calendar entry — scheduled_id is 0 for those, since it's a plan entry, not a real calendar item.",
+			"Rest days appear here even though they have no real Garmin calendar entry — scheduled_id is 0 for those, since it's a plan entry, not a real calendar item. scheduled_id is also 0 for coach/training-plan-assigned workouts generally (deduped by sport+name rather than Garmin's own id); only self-created workouts (via create_workout) carry a real nonzero scheduled_id.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input scheduledWorkoutsInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 14, 60)
@@ -255,16 +255,22 @@ func queryMeasurementRange(ctx context.Context, client influxClient, measurement
 // identified as coach-plan-sourced, not self-created via create_workout) — a self-created
 // workout that happens to land on the same date as a coach-plan task must not inherit the
 // coach's target detail.
+//
+// Joins on (date, sport), not date alone — verified live 2026-08-07 that the coach plan
+// can assign two tasks on the same calendarDate (running + strength_training, a real
+// two-a-day). A date-only join would match one task to both calendar entries and drop
+// the other's detail.
 func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.TrainingPlanTask) []garmin.ScheduledWorkout {
-	byDate := make(map[string]garmin.TrainingPlanTask, len(tasks))
+	byKey := make(map[string]garmin.TrainingPlanTask, len(tasks))
 	for _, t := range tasks {
-		byDate[t.Date] = t
+		byKey[planTaskKey(t.Date, t.Sport)] = t
 	}
 
 	merged := make([]garmin.ScheduledWorkout, 0, len(workouts)+len(tasks))
 	seen := make(map[string]bool, len(workouts))
 	for _, w := range workouts {
-		if t, ok := byDate[w.Date]; ok && w.WorkoutID == 0 {
+		key := planTaskKey(w.Date, w.Sport)
+		if t, ok := byKey[key]; ok && w.WorkoutID == 0 {
 			w.DistanceM = t.DistanceM
 			w.Description = t.Description
 			w.RestDay = t.RestDay
@@ -274,14 +280,15 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 			}
 		}
 		merged = append(merged, w)
-		seen[w.Date] = true
+		seen[key] = true
 	}
 	for _, t := range tasks {
-		if seen[t.Date] {
+		if seen[planTaskKey(t.Date, t.Sport)] {
 			continue
 		}
 		merged = append(merged, garmin.ScheduledWorkout{
 			Date:        t.Date,
+			Sport:       t.Sport,
 			Name:        t.Name,
 			DurationS:   t.DurationS,
 			DistanceM:   t.DistanceM,
@@ -291,6 +298,18 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 		})
 	}
 
-	sort.Slice(merged, func(i, j int) bool { return merged[i].Date < merged[j].Date })
+	sort.Slice(merged, func(i, j int) bool {
+		if merged[i].Date != merged[j].Date {
+			return merged[i].Date < merged[j].Date
+		}
+		if merged[i].Sport != merged[j].Sport {
+			return merged[i].Sport < merged[j].Sport
+		}
+		return merged[i].Name < merged[j].Name
+	})
 	return merged
+}
+
+func planTaskKey(date, sport string) string {
+	return date + "|" + sport
 }

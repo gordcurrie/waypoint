@@ -1201,6 +1201,71 @@ def test_scheduled_workouts_includes_coach_plan_items(no_sleep):
 
 
 @freeze_time("2026-07-06")
+def test_scheduled_workouts_coach_plan_regeneration_dedupes(no_sleep):
+    """Coach-plan items are tagged by (sport, workout_name), not the calendar item's
+    own id — that id churns every time the adaptive plan regenerates the day (same
+    real workout, brand-new id), which previously piled up ghost duplicates in
+    InfluxDB (no DELETE support). A resync of the "same" day with a new id must
+    write a point with the same tags (verified by absence of the old scheduled_id
+    tag), not a distinguishable new one."""
+    garmin = _sched_garmin([_coach_plan_item(scheduled_id=111, title="Base")])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    first = str(client.write.call_args[1]["record"][0])
+    assert "scheduled_id=" not in first
+    assert "sport=running" in first
+    assert "workout_name=Base" in first
+
+    # Same logical day, regenerated: id changes, title/sport stay the same.
+    garmin2 = _sched_garmin([_coach_plan_item(scheduled_id=999, title="Base")])
+    client2 = MagicMock()
+    sync.sync_scheduled_workouts(garmin2, client2, {})
+    second = str(client2.write.call_args[1]["record"][0])
+    assert "scheduled_id=" not in second
+    assert "sport=running" in second
+    assert "workout_name=Base" in second
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_coach_two_a_day_kept_separate(no_sleep):
+    """A real coach-assigned two-a-day (e.g. a run + a strength session on the same
+    date) must produce two distinct points, distinguished by sport — verified live
+    2026-08-07 against an actual run + strength_training coach day."""
+    garmin = _sched_garmin(
+        [
+            _coach_plan_item(scheduled_id=1, date_str="2026-07-10", title="Base", sport="running"),
+            _coach_plan_item(
+                scheduled_id=2,
+                date_str="2026-07-10",
+                title="Total Body Circuit",
+                sport="strength_training",
+            ),
+        ]
+    )
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert len(points) == 2
+    assert any("sport=running" in p and "workout_name=Base" in p for p in points)
+    assert any(
+        "sport=strength_training" in p and "workout_name=Total\\ Body\\ Circuit" in p
+        for p in points
+    )
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_self_created_keeps_scheduled_id_tag(no_sleep):
+    """Self-created workouts (real, stable workoutId) still dedupe/identify by their
+    own scheduled_id — only coach-plan items switch to (sport, workout_name)."""
+    garmin = _sched_garmin([_workout_item(scheduled_id=42, workout_id=999)])
+    client = MagicMock()
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = str(client.write.call_args[1]["record"][0])
+    assert "scheduled_id=42" in points
+    assert "workout_name=" not in points
+
+
+@freeze_time("2026-07-06")
 def test_scheduled_workouts_fbt_adaptive_without_training_plan_id_skipped(no_sleep):
     """fbtAdaptiveWorkout with no trainingPlanId is not a confirmed real workout — stay
     conservative and skip rather than guess."""
@@ -1232,11 +1297,13 @@ def _plan_task(
     distance: float | None = 5000,
     rest_day: bool = False,
     workout_phrase: str | None = "BASE",
+    sport: str | None = "running",
 ) -> dict:
     return {
         "calendarDate": calendar_date,
         "taskWorkout": {
             "workoutId": None,
+            "sportType": {"sportTypeKey": sport} if sport else None,
             "workoutName": workout_name,
             "workoutDescription": description,
             "estimatedDurationInSecs": duration,
@@ -1306,6 +1373,38 @@ def test_training_plan_includes_rest_day(no_sleep):
     s = str(points[0])
     assert 'name="Rest"' in s
     assert "rest_day=1" in s
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_two_a_day_kept_separate(no_sleep):
+    """A coach day can carry two taskList entries for the same calendarDate (verified
+    live 2026-08-07: running + strength_training on the same date) — sport must be
+    part of the tag key or the second write silently overwrites the first."""
+    garmin = _training_plan_garmin(
+        [
+            _plan_task("2026-08-03", workout_name="Base", sport="running"),
+            _plan_task("2026-08-03", workout_name="Total Body Circuit", sport="strength_training"),
+        ]
+    )
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert len(points) == 2
+    assert any("sport=running" in p and 'name="Base"' in p for p in points)
+    assert any("sport=strength_training" in p and 'name="Total Body Circuit"' in p for p in points)
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_rest_day_has_empty_sport_tag(no_sleep):
+    """Rest days have no sportType at all — must not error, just tag sport as empty."""
+    garmin = _training_plan_garmin(
+        [_plan_task("2026-08-03", workout_name=None, rest_day=True, sport=None)]
+    )
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    points = client.write.call_args[1]["record"]
+    assert len(points) == 1
+    assert 'name="Rest"' in str(points[0])
 
 
 @freeze_time("2026-08-03")
