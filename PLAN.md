@@ -432,12 +432,12 @@ Single `config.yaml` + env var overrides via Viper. Supports:
 
 ## Hosting Path
 
-1. **Now**: `docker compose up` / `podman-compose up` on local Mac; MCP server as local binary
-2. **Goal**: Deploy to Proxmox (LXC containers) or TrueNAS apps
-   - InfluxDB + Grafana + sync sidecar: TrueNAS apps (catalog) or Proxmox Docker VM
-   - MCP server: Proxmox LXC or Docker container with HTTP transport (`docker-compose.mcp.yml`)
-   - Claude connects to homelab MCP via `http://homelab-ip:8080/mcp` (LAN/Tailscale)
-   - `scripts/deploy.sh`, `scripts/setup-lxc.sh`, `deploy/traefik-waypoint.yml` automate this
+**Done**: deployed to homelab. `scripts/deploy.sh` pushes updates on every change — SSHes to
+`DEPLOY_HOST` (config in `.deploy.env`, gitignored) and runs
+`docker compose -f docker-compose.yml -f docker-compose.homelab.yml up -d --build` on the
+remote checkout. `docker-compose.mcp.yml` + `deploy/traefik-waypoint.yml` route the MCP
+server's HTTP transport. Local Mac (`docker compose up` / `podman-compose up`) is still used
+for dev-loop iteration before pushing.
 
 ---
 
