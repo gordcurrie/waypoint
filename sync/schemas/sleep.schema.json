@@ -5,8 +5,7 @@
       "type": "object",
       "properties": {
         "id": {
-          "type": ["integer", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["integer", "null"]
         },
         "userProfilePK": {
           "type": "integer"
@@ -16,35 +15,28 @@
         },
         "sleepTimeSeconds": {
           "type": ["integer", "null"],
-          "description": "Consumed as total_sleep_s. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "description": "Consumed as total_sleep_s."
         },
         "napTimeSeconds": {
-          "type": ["integer", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["integer", "null"]
         },
         "sleepWindowConfirmed": {
-          "type": ["boolean", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["boolean", "null"]
         },
         "sleepWindowConfirmationType": {
-          "type": ["string", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["string", "null"]
         },
         "sleepStartTimestampGMT": {
-          "type": ["integer", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["integer", "null"]
         },
         "sleepEndTimestampGMT": {
-          "type": ["integer", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["integer", "null"]
         },
         "sleepStartTimestampLocal": {
-          "type": ["integer", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["integer", "null"]
         },
         "sleepEndTimestampLocal": {
-          "type": ["integer", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["integer", "null"]
         },
         "autoSleepStartTimestampGMT": {
           "description": "observed null in captured sample"
@@ -59,24 +51,23 @@
           "description": "observed null in captured sample"
         },
         "unmeasurableSleepSeconds": {
-          "type": ["integer", "null"],
-          "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "type": ["integer", "null"]
         },
         "deepSleepSeconds": {
           "type": ["integer", "null"],
-          "description": "Consumed as deep_sleep_s. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "description": "Consumed as deep_sleep_s."
         },
         "lightSleepSeconds": {
           "type": ["integer", "null"],
-          "description": "Consumed as light_sleep_s. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "description": "Consumed as light_sleep_s."
         },
         "remSleepSeconds": {
           "type": ["integer", "null"],
-          "description": "Consumed as rem_sleep_s. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "description": "Consumed as rem_sleep_s."
         },
         "awakeSleepSeconds": {
           "type": ["integer", "null"],
-          "description": "Consumed as awake_s. Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+          "description": "Consumed as awake_s."
         },
         "deviceRemCapable": {
           "type": "boolean"
@@ -352,12 +343,10 @@
           }
         },
         "additionalProperties": true
-      },
-      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+      }
     },
     "remSleepData": {
-      "type": ["boolean", "null"],
-      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+      "type": ["boolean", "null"]
     },
     "sleepLevels": {
       "type": ["array", "null"],
@@ -375,8 +364,7 @@
           }
         },
         "additionalProperties": true
-      },
-      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+      }
     },
     "sleepRestlessMoments": {
       "type": "array",

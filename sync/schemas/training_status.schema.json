@@ -22,8 +22,7 @@
           "description": "Not currently consumed by sync_training_status."
         }
       },
-      "additionalProperties": true,
-      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+      "additionalProperties": true
     },
     "mostRecentTrainingLoadBalance": {
       "type": ["object", "null"],
@@ -107,8 +106,7 @@
           }
         }
       },
-      "additionalProperties": true,
-      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+      "additionalProperties": true
     },
     "mostRecentTrainingStatus": {
       "type": ["object", "null"],
@@ -236,8 +234,7 @@
           "description": "observed null in captured sample"
         }
       },
-      "additionalProperties": true,
-      "description": "Observed null on 2026-08-06 (via automatic drift-check, #68), along with every other real-data field on this response, right after day rollover before Garmin had computed anything for the new day yet. Non-null later the same day."
+      "additionalProperties": true
     },
     "heatAltitudeAcclimationDTO": {
       "description": "observed null in captured sample"

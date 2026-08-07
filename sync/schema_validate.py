@@ -87,8 +87,9 @@ def validate(method_name: str, instance: Any) -> list[str] | None:
 
 
 def _type_includes(schema: dict[str, Any], type_name: str) -> bool:
-    """ "type" is either a bare string or a list (e.g. ["object", "null"] on a
-    field marked nullable) — check membership either way."""
+    """Check whether a schema's "type" keyword allows type_name -- it's either
+    a bare string or a list (e.g. ["object", "null"] on a field marked
+    nullable), so membership has to be checked either way."""
     t = schema.get("type")
     return t == type_name or (isinstance(t, list) and type_name in t)
 
