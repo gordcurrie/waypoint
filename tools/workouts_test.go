@@ -505,6 +505,115 @@ func TestAppendToQueue_AccumulatesItems(t *testing.T) {
 	}
 }
 
+func TestQueryWorkoutDetail_ReturnsDetail(t *testing.T) {
+	client := &mockClient{
+		rows: []map[string]any{
+			{
+				"workout_id": "1656732143",
+				"name":       "Full-Body — Day 2",
+				"sport":      "strength_training",
+				"steps_json": `[{"type":"ExecutableStepDTO","stepId":14222928952}]`,
+			},
+		},
+	}
+	detail, err := queryWorkoutDetail(context.Background(), client, 1656732143)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail == nil {
+		t.Fatal("want non-nil detail")
+	}
+	if detail.WorkoutID != 1656732143 {
+		t.Errorf("WorkoutID: got %d, want 1656732143", detail.WorkoutID)
+	}
+	if detail.Name != "Full-Body — Day 2" {
+		t.Errorf("Name: got %q, want %q", detail.Name, "Full-Body — Day 2")
+	}
+	if string(detail.Steps) != `[{"type":"ExecutableStepDTO","stepId":14222928952}]` {
+		t.Errorf("Steps: got %s", detail.Steps)
+	}
+}
+
+func TestQueryWorkoutDetail_NoRowsReturnsNil(t *testing.T) {
+	client := &mockClient{rows: nil}
+	detail, err := queryWorkoutDetail(context.Background(), client, 999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail != nil {
+		t.Errorf("want nil detail when no rows match, got %+v", detail)
+	}
+}
+
+func TestQueryWorkoutDetail_PropagatesError(t *testing.T) {
+	client := &mockClient{err: errors.New("connection refused")}
+	_, err := queryWorkoutDetail(context.Background(), client, 1)
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+}
+
+// callWorkoutTool registers the workout tools against a fresh in-memory session and
+// calls the named tool with the given arguments.
+func callWorkoutTool(t *testing.T, client influxClient, name string, args map[string]any) *mcp.CallToolResult {
+	t.Helper()
+	s := mcp.NewServer(&mcp.Implementation{Name: "waypoint", Version: "test"}, nil)
+	registerWorkoutTools(s, client, t.TempDir())
+
+	ctx := context.Background()
+	t1, t2 := mcp.NewInMemoryTransports()
+	if _, err := s.Connect(ctx, t1, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "test"}, nil)
+	session, err := mcpClient.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func TestGetWorkoutDetail_MissingIDRejected(t *testing.T) {
+	result := callWorkoutTool(t, &mockClient{}, "get_workout_detail", map[string]any{})
+	if !result.IsError {
+		t.Fatal("want error when workout_id is missing")
+	}
+}
+
+func TestGetWorkoutDetail_NotFoundReturnsNullNotError(t *testing.T) {
+	result := callWorkoutTool(t, &mockClient{rows: nil}, "get_workout_detail", map[string]any{"workout_id": 123})
+	if result.IsError {
+		t.Fatalf("want success with null result (not an error) when no detail is recorded, got error: %v", result.Content)
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok || text.Text != "null" {
+		t.Errorf("want JSON null content, got %v", result.Content)
+	}
+}
+
+func TestGetWorkoutDetail_Found(t *testing.T) {
+	client := &mockClient{
+		rows: []map[string]any{
+			{
+				"workout_id": "1656732143",
+				"name":       "Full-Body",
+				"sport":      "strength_training",
+				"steps_json": `[]`,
+			},
+		},
+	}
+	result := callWorkoutTool(t, client, "get_workout_detail", map[string]any{"workout_id": 1656732143})
+	if result.IsError {
+		t.Fatalf("want success, got error: %v", result.Content)
+	}
+}
+
 func TestAppendToQueue_WritesToTmpThenRenames(t *testing.T) {
 	dir := t.TempDir()
 	dur := 300

@@ -402,10 +402,10 @@ validated against their schema as a side effect — no separate polling job or s
 - **#42** — verify `strength_training`/rowing `garminconnect` response shape once enough
   real data of that type exists to capture live (same verify-before-build rule as
   everything else — do not guess).
-- **weight target (`weight_kg`) on strength workout steps** — deferred from the exercise
-  catalog work (#51); `create_workout` doesn't set it yet.
-- **step-level `get_workout_detail` MCP tool** — deferred from #51; rollout verification
-  currently uses `inspect_api.py get_workout_by_id` manually instead.
+- **#86** — weight target (`weight_kg`) on strength workout steps; deferred from the
+  exercise catalog work (#51). `create_workout` doesn't set it yet, though the Garmin
+  step DTO already carries `weightValue`/`weightUnit` fields (confirmed live 2026-08-07,
+  currently always null on this account's workouts).
 
 ---
 
