@@ -586,10 +586,14 @@ func TestGetWorkoutDetail_MissingIDRejected(t *testing.T) {
 	}
 }
 
-func TestGetWorkoutDetail_NotFound(t *testing.T) {
+func TestGetWorkoutDetail_NotFoundReturnsNullNotError(t *testing.T) {
 	result := callWorkoutTool(t, &mockClient{rows: nil}, "get_workout_detail", map[string]any{"workout_id": 123})
-	if !result.IsError {
-		t.Fatal("want error when no detail is recorded for the given workout_id")
+	if result.IsError {
+		t.Fatalf("want success with null result (not an error) when no detail is recorded, got error: %v", result.Content)
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok || text.Text != "null" {
+		t.Errorf("want JSON null content, got %v", result.Content)
 	}
 }
 

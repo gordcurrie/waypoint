@@ -178,9 +178,9 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		if err != nil {
 			return errorResult(err)
 		}
-		if detail == nil {
-			return errorResult(fmt.Errorf("get_workout_detail: no detail recorded for workout_id %d — only workouts uploaded via create_workout are recorded", input.WorkoutID))
-		}
+		// detail is nil (jsonResult marshals to JSON null) when no detail was recorded
+		// for this workout_id — e.g. it wasn't uploaded via create_workout. Not an error
+		// condition: consistent with get_activity_hr_zones's no-match handling.
 		return jsonResult(detail)
 	})
 }
