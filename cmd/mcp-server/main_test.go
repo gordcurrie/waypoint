@@ -6,12 +6,32 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/gordcurrie/waypoint/internal/influx"
 )
+
+// syncBuffer is a bytes.Buffer safe for concurrent writes (from the background loop's
+// slog calls) and reads (from the test goroutine polling for output).
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
 
 type fakeTrainingLoadClient struct {
 	queries atomic.Int32
@@ -73,7 +93,7 @@ func (e *erroringClient) WritePoints(_ context.Context, _ ...*influx.Point) erro
 }
 
 func TestRunTrainingLoadLoop_SuppressesContextCanceledLogging(t *testing.T) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	defer slog.SetDefault(prev)
@@ -98,7 +118,7 @@ func TestRunTrainingLoadLoop_SuppressesContextCanceledLogging(t *testing.T) {
 }
 
 func TestRunTrainingLoadLoop_LogsNonCancellationErrors(t *testing.T) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	defer slog.SetDefault(prev)
