@@ -103,10 +103,18 @@ Not `mark3labs/mcp-go`. Follow the skill conventions from
 `cmd/mcp-server/` lives in this monorepo to share `internal/influx`, `internal/garmin`,
 `internal/analysis` with `cmd/cli/`. Do not split into a separate repo.
 
-### Training load is computed on demand
+### Training load: computed by get_training_load, kept fresh by a background loop
 `get_training_load` MCP tool queries the `activity` measurement, computes ATL/CTL/TSB
 (exponential moving averages: ATL=7d, CTL=42d, TSB=CTL-ATL), and optionally writes back to
-the `training_load` measurement for Grafana. No background worker or separate trigger needed.
+the `training_load` measurement for Grafana via `write_back=true`.
+
+That write-back used to be the *only* way the measurement updated — fine for "ask Claude
+about training load," but the Grafana panel was found 4 days stale (#90) since a
+dashboard-first workflow never calls the tool. `cmd/mcp-server/main.go`'s `runTrainingLoadLoop`
+now recomputes and writes back on a fixed interval (`-training-load-interval`, default 30m)
+in the background — but only under `--transport=http`. `stdio` mode is spawned fresh per
+Claude session and never lives long enough for a background loop to matter, so it's skipped
+there; `get_training_load`'s own `write_back=true` still works in both modes.
 
 ## Build order (current: Phase 3, not started)
 
