@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -52,5 +56,63 @@ func TestRunTrainingLoadLoop_ComputesImmediatelyAndOnTick(t *testing.T) {
 
 	if client.writes.Load() == 0 {
 		t.Error("want WritePoints called at least once")
+	}
+}
+
+// erroringClient always fails Query with the given error, so WritePoints is never reached.
+type erroringClient struct {
+	err error
+}
+
+func (e *erroringClient) Query(_ context.Context, _ string) ([]map[string]any, error) {
+	return nil, e.err
+}
+
+func (e *erroringClient) WritePoints(_ context.Context, _ ...*influx.Point) error {
+	return nil
+}
+
+func TestRunTrainingLoadLoop_SuppressesContextCanceledLogging(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already canceled — compute() must run at least once via the immediate call
+
+	done := make(chan struct{})
+	go func() {
+		runTrainingLoadLoop(ctx, &erroringClient{err: context.Canceled}, time.Hour)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("loop did not exit for an already-canceled context")
+	}
+
+	if strings.Contains(buf.String(), "background compute failed") {
+		t.Errorf("want context.Canceled suppressed, got log output: %s", buf.String())
+	}
+}
+
+func TestRunTrainingLoadLoop_LogsNonCancellationErrors(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go runTrainingLoadLoop(ctx, &erroringClient{err: errors.New("influx unreachable")}, time.Hour)
+
+	deadline := time.Now().Add(time.Second)
+	for !strings.Contains(buf.String(), "background compute failed") {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for a real error to be logged, got: %s", buf.String())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
