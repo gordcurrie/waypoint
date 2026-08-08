@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -24,7 +25,11 @@ type syncBuffer struct {
 func (s *syncBuffer) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.buf.Write(p)
+	n, err := s.buf.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("syncBuffer: %w", err)
+	}
+	return n, nil
 }
 
 func (s *syncBuffer) String() string {
