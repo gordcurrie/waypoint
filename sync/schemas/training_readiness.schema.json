@@ -32,8 +32,8 @@
         "description": "Consumed as score."
       },
       "sleepScore": {
-        "type": "integer",
-        "description": "Consumed as sleep_score."
+        "type": ["integer", "null"],
+        "description": "Consumed as sleep_score. Observed null (2026-08-09) on an earlier same-day array entry computed before sleep data was available (validSleep:false, feedbackShort GOOD_SLEEP_HISTORY but feedbackLong _UNKNOWN) — sync_training_readiness only consumes raw[0] (the latest entry) so this doesn't affect what's actually written, but the array is validated in full."
       },
       "sleepScoreFactorPercent": {
         "type": "integer"
