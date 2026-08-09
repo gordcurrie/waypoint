@@ -145,6 +145,12 @@
         },
         "description": {
           "description": "Same explicit-null convention as category/exerciseName. Not currently settable via create_workout (always null)."
+        },
+        "weightValue": {
+          "description": "Weight target in kilograms, or null when unset. Verified live 2026-08-09 (probe upload + readback + delete): round-trips unconverted — 60.0 in produces 60.0 kg out, no scaling applied."
+        },
+        "weightUnit": {
+          "description": "{\"unitKey\": \"kilogram\"} when weightValue is set (no unitId needed — Garmin resolves it, along with a factor field, from unitKey alone), null when weightValue is unset."
         }
       },
       "additionalProperties": false

@@ -1058,6 +1058,8 @@ def _build_garmin_step(
         target_val1 = None
         target_val2 = None
 
+    weight_kg = step.get("weight_kg")
+
     return {
         "type": "ExecutableStepDTO",
         "stepOrder": order,
@@ -1074,6 +1076,12 @@ def _build_garmin_step(
         "category": step.get("category"),
         "exerciseName": step.get("exercise_name"),
         "description": step.get("description"),
+        # Verified live 2026-08-09 (probe upload + readback + delete): sending a
+        # bare {"unitKey": "kilogram"} with no unitId is enough — Garmin resolves
+        # unitId (8) and factor (1000.0) itself — and weightValue round-trips
+        # unconverted (60.0 in -> 60.0 kg out), i.e. it's already kilograms.
+        "weightValue": float(weight_kg) if weight_kg is not None else None,
+        "weightUnit": {"unitKey": "kilogram"} if weight_kg is not None else None,
     }
 
 

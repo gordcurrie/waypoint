@@ -402,10 +402,6 @@ validated against their schema as a side effect — no separate polling job or s
 - **#42** — verify `strength_training`/rowing `garminconnect` response shape once enough
   real data of that type exists to capture live (same verify-before-build rule as
   everything else — do not guess).
-- **#86** — weight target (`weight_kg`) on strength workout steps; deferred from the
-  exercise catalog work (#51). `create_workout` doesn't set it yet, though the Garmin
-  step DTO already carries `weightValue`/`weightUnit` fields (confirmed live 2026-08-07,
-  currently always null on this account's workouts).
 
 ---
 

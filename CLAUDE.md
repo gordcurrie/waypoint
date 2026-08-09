@@ -301,8 +301,14 @@ Garmin-assigned `workoutId` and the full `workoutSegments[0].workoutSteps` tree 
 server-side `stepId`s. `sync_pending_workouts` uses this to write the `workout_detail`
 InfluxDB measurement (read by the `get_workout_detail` MCP tool) straight from the upload
 response — no separate `get_workout_by_id` round-trip needed. Each `ExecutableStepDTO` also
-carries `weightValue`/`weightUnit` fields — relevant to the still-open `weight_kg` step target
-(#86).
+carries `weightValue`/`weightUnit` fields.
+
+**`weightValue`/`weightUnit` shape** (confirmed 2026-08-09 via a live probe: uploaded a
+disposable strength step with `weightValue: 60.0, weightUnit: {"unitKey": "kilogram"}`, read
+it back, `delete_workout`'d it) — a bare `{"unitKey": "kilogram"}` is enough; Garmin resolves
+`unitId` (8) and `factor` (1000.0) itself, same as sport/step type keys. `weightValue`
+round-trips unconverted (60.0 in → 60.0 kg out) — it's already kilograms, no scaling needed.
+`create_workout`'s `weight_kg` step field (#86) uses this.
 
 ## Skill to invoke for MCP server work
 
