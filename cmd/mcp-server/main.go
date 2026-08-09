@@ -29,7 +29,7 @@ var version = "dev"
 const serverInstructions = `Waypoint exposes mostly read-only Garmin Connect fitness data (synced to InfluxDB). Two tools have side effects: create_workout always queues a workout for upload, and get_training_load writes computed results back to InfluxDB when called with write_back=true (in --transport=http mode, a background loop also does this write on its own fixed interval regardless of any tool call — see -training-load-interval).
 
 Data domains and their tools:
-- Activities: get_recent_activities (list), get_weekly_volume (aggregated by sport/week). Use an activity's activity_id from get_recent_activities with get_activity_splits (per-lap) and get_activity_hr_zones (time in HR zone) for detail on one activity.
+- Activities: get_recent_activities (list), get_weekly_volume (aggregated by sport/week). Use an activity's activity_id from get_recent_activities with get_activity_splits (per-lap), get_activity_hr_zones (time in HR zone), and get_activity_exercise_sets (strength_training only — per-set category/exercise_name/reps/weight_kg) for detail on one activity.
 - Daily health: get_daily_stats (steps, resting HR, body battery, stress), get_sleep_summary, get_hrv_trend, get_respiration.
 - Training status: get_training_status (Garmin's own overreaching/peaking status + VO2max), get_training_readiness (day-to-day readiness score, informed by HRV/sleep — see get_hrv_trend/get_sleep_summary for the underlying detail), get_training_load (computed ATL/CTL/TSB from activity data, not a Garmin field; write_back=true persists it on demand).
 - Longer-term fitness: get_performance_trend (VO2max/fitness age over months), get_lactate_threshold.

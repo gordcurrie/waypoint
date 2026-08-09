@@ -36,6 +36,7 @@ METHOD_SCHEMA = {
     "get_respiration_data": "respiration.schema.json",
     "get_adaptive_training_plan_by_id": "adaptive_training_plan.schema.json",
     "get_training_plans": "training_plans.schema.json",
+    "get_activity_exercise_sets": "activity_exercise_sets.schema.json",
 }
 
 

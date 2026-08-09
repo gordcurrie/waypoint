@@ -1,0 +1,73 @@
+{
+  "type": "object",
+  "properties": {
+    "activityId": {
+      "type": "integer"
+    },
+    "exerciseSets": {
+      "type": "array",
+      "description": "One entry per set, in wktStepIndex/messageIndex order — both ACTIVE (exercise) and REST sets. Consumed by sync_activity_details (activity_exercise_set measurement), only for activities with activityType.typeKey == strength_training.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "exercises": {
+            "type": "array",
+            "description": "Garmin's ML-detected exercise candidates for this set, most-likely first — consumed as category/exercise_name from exercises[0]. Empty array on REST sets. Observed: all candidates identical (same category/name) at ~99.6% probability in every captured set, i.e. never actually ambiguous in this account's samples, but the array shape (not a single object) implies Garmin models it as ranked candidates.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "string",
+                  "description": "Same vocabulary as create_workout's exercise catalog (internal/garmin/exercises/catalog.json), e.g. \"PLANK\", \"LUNGE\", \"HIP_RAISE\" — not verified 1:1 against the catalog's category set, but same naming convention."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "e.g. \"MOUNTAIN_CLIMBER\", \"SINGLE_LEG_HIP_RAISE\"."
+                },
+                "probability": {
+                  "type": "number",
+                  "description": "Percent (0-100), not consumed. Observed ~99.6 on every candidate captured."
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "duration": {
+            "type": "number",
+            "description": "Seconds. Consumed as duration_s."
+          },
+          "repetitionCount": {
+            "type": ["integer", "null"],
+            "description": "Consumed as reps. Null on REST sets; observed 0 on some ACTIVE sets (device detected the exercise but didn't count reps for it)."
+          },
+          "weight": {
+            "type": ["number", "null"],
+            "description": "Consumed as weight_kg — unit unconfirmed (always null in this account's captured samples, no weight ever logged on a device-tracked set; see #86's create_workout weight_kg for the separate, confirmed-kilogram upload-side field). Treat as kilograms provisionally (same assumption as weight_kg elsewhere in this codebase) until a non-null sample can verify the unit."
+          },
+          "setType": {
+            "type": "string",
+            "description": "Consumed as set_type. Observed: ACTIVE, REST."
+          },
+          "startTime": {
+            "type": "string",
+            "description": "GMT, not local — format matches the parent activity's startTimeGMT (verified: this activity's first set's startTime equals its startTimeGMT). Consumed as the point's time via _parse_gmt."
+          },
+          "wktStepIndex": {
+            "type": ["integer", "null"],
+            "description": "Not consumed — resets to 0 at the start of each detected exercise block, not a stable per-activity ordinal (see messageIndex). Null observed on the very last set of the captured activity (a long trailing REST after the workout ended)."
+          },
+          "messageIndex": {
+            "type": "integer",
+            "description": "Not consumed — a single running counter across the whole activity (0..N-1, gap-free), unlike wktStepIndex. Would be the natural per-set tag if this ever needs deduping/joining, but sync_activity_details doesn't currently tag on it."
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/activity_exercise_sets.schema.json",
+  "title": "Activity exercise sets (get_activity_exercise_sets)",
+  "description": "Returned by garminconnect's get_activity_exercise_sets(activity_id) — not present in get_activities_by_date's summary response at all, needs this separate call. Consumed by sync_activity_details for strength_training activities only (#42).\n\nVerified against: one real strength_training activity, 2026-01-30 (activity_id 21711179290), 43 sets (21 exercise blocks x [ACTIVE, REST] pairs, plus a trailing REST). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) — Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+}

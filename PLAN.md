@@ -399,9 +399,11 @@ validated against their schema as a side effect — no separate polling job or s
   (SSO/OAuth, MFA, `skip_strategies`-style quirks). Worth it only if maintaining a second
   language purely for this sidecar becomes a real cost, or as a reusable Go library for
   others hitting the same Garmin JA3 wall. See CLAUDE.md for full detail.
-- **#42** — verify `strength_training`/rowing `garminconnect` response shape once enough
-  real data of that type exists to capture live (same verify-before-build rule as
-  everything else — do not guess).
+- **#42** — `strength_training` half done: `get_activity_exercise_sets` verified live and
+  synced (`activity_exercise_set` measurement, `get_activity_exercise_sets` MCP tool).
+  `rowing` still blocked — zero `indoor_rowing` activities in this account's full history
+  as of 2026-08-09 (checked a full year back). Re-check once one exists; do not guess the
+  shape.
 
 ---
 
