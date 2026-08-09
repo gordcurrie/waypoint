@@ -33,7 +33,7 @@
       },
       "sleepScore": {
         "type": ["integer", "null"],
-        "description": "Consumed as sleep_score. Observed null (2026-08-09) on an earlier same-day array entry computed before sleep data was available (validSleep:false, feedbackShort GOOD_SLEEP_HISTORY but feedbackLong _UNKNOWN) — sync_training_readiness only consumes raw[0] (the latest entry) so this doesn't affect what's actually written, but the array is validated in full."
+        "description": "Consumed as sleep_score. Observed null (2026-08-09) on an earlier same-day array entry computed before sleep data was available (\"validSleep\": false, \"feedbackShort\": \"GOOD_SLEEP_HISTORY\" but \"feedbackLong\" ending \"_UNKNOWN\") — sync_training_readiness only consumes raw[0] (the latest entry) so this doesn't affect what's actually written, but the array is validated in full."
       },
       "sleepScoreFactorPercent": {
         "type": "integer"
@@ -103,5 +103,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/training_readiness.schema.json",
   "title": "Training readiness (get_training_readiness)",
-  "description": "Returned by garminconnect's get_training_readiness(date) as a list (single-element in samples observed). Consumed by sync_training_readiness.\n\nVerified against: 2026-07-24 (activity day), 2026-07-25 (rest day), 2026-08-05 (via automatic drift-check on live data, #68 \u2014 see recoveryTimeChangePhrase). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
+  "description": "Returned by garminconnect's get_training_readiness(date) as a list \u2014 usually single-element, but can carry more than one same-day entry (observed 2026-08-09: an early entry computed before sleep data was ready, plus a later fully-populated one). Consumed by sync_training_readiness, which only reads raw[0] (the latest entry).\n\nVerified against: 2026-07-24 (activity day), 2026-07-25 (rest day), 2026-08-05 (via automatic drift-check on live data, #68 \u2014 see recoveryTimeChangePhrase), 2026-08-09 (two-entry day, see sleepScore). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true) \u2014 Garmin adding new fields is not a breaking change; a listed field disappearing or changing type is."
 }
