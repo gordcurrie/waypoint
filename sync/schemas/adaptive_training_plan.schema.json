@@ -119,7 +119,7 @@
               "workoutCreatedDate": { "type": ["string", "null"] },
               "workoutDescriptionI18nKey": { "type": ["string", "null"] },
               "workoutNameI18nKey": { "type": ["string", "null"] },
-              "workoutScheduleId": { "description": "observed null in captured sample" },
+              "workoutScheduleId": { "type": "null", "description": "observed null in captured sample" },
               "workoutUpdatedDate": { "type": ["string", "null"] }
             },
             "additionalProperties": true
@@ -133,9 +133,9 @@
           "grouped": {
             "type": "boolean"
           },
-          "noteContentI18nKey": { "description": "observed null in captured sample" },
-          "noteNameI18nKey": { "description": "observed null in captured sample" },
-          "taskNote": { "description": "observed null in captured sample" },
+          "noteContentI18nKey": { "type": "null", "description": "observed null in captured sample" },
+          "noteNameI18nKey": { "type": "null", "description": "observed null in captured sample" },
+          "taskNote": { "type": "null", "description": "observed null in captured sample" },
           "workoutOrder": { "type": "integer" }
         },
         "additionalProperties": true
