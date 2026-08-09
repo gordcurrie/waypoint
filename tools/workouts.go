@@ -22,17 +22,17 @@ import (
 // A strength exercise step sets Category/ExerciseName (a validated pair from Garmin's
 // exercise catalog — see search_exercises) and Reps as its end condition. Sets/RestS
 // turn the step into a repeated set: sync.py wraps it in a Garmin RepeatGroupDTO with
-// a synthesized rest step between each rep, rather than the caller listing out each
-// set and rest individually. WeightKg sets a weight target, requires Category/ExerciseName
+// a synthesized rest step between each set/iteration, rather than the caller listing out
+// each set and rest individually. WeightKg sets a weight target, requires Category/ExerciseName
 // (verified live 2026-08-09: Garmin resolves a bare {"unitKey":"kilogram"} weightUnit
 // with no unitId needed, and weightValue round-trips unconverted, i.e. it's already kg).
 type WorkoutStep struct {
-	Type         string  `json:"type"`
-	DurationS    *int    `json:"duration_s,omitempty"`
-	DistanceM    *int    `json:"distance_m,omitempty"`
-	Reps         *int    `json:"reps,omitempty"`
-	Sets         *int    `json:"sets,omitempty"`
-	RestS        *int    `json:"rest_s,omitempty"`
+	Type         string   `json:"type"`
+	DurationS    *int     `json:"duration_s,omitempty"`
+	DistanceM    *int     `json:"distance_m,omitempty"`
+	Reps         *int     `json:"reps,omitempty"`
+	Sets         *int     `json:"sets,omitempty"`
+	RestS        *int     `json:"rest_s,omitempty"`
 	Category     *string  `json:"category,omitempty"`
 	ExerciseName *string  `json:"exercise_name,omitempty"`
 	TargetHRZone *int     `json:"target_hr_zone,omitempty"`
