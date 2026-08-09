@@ -35,6 +35,10 @@
             "type": "string",
             "description": "Observed values in this account: activity, fbtAdaptiveWorkout, nap, bloodpressure, weight, trainingPlan. Correction 2026-08-02: fbtAdaptiveWorkout is NOT just an auto-generated suggestion to skip \u2014 verified live against a real active coach training plan (trainingPlanId 46457367) that these are the actual coach-assigned future workouts (title e.g. \"Base\"/\"Tempo\", sportTypeKey populated, tpType: \"FBT_ADAPTIVE\"). workoutId is genuinely always null on these; sync_scheduled_workouts now also includes any item with itemType==fbtAdaptiveWorkout and a non-null trainingPlanId. Previous filter (workoutId-only) silently dropped every coach-plan workout \u2014 caught because the calendar showed nothing 6-7 days out despite the coach having added items."
           },
+          "tpType": {
+            "type": ["string", "null"],
+            "description": "\"FBT_ADAPTIVE\" for coach/training-plan items (itemType fbtAdaptiveWorkout), null for everything else (activity, nap) — verified live 2026-08-08."
+          },
           "activityTypeId": {
             "description": "observed null in captured sample"
           },

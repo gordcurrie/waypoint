@@ -306,6 +306,21 @@
             },
             "elevationLoss": {
               "type": "number"
+            },
+            "avgGroundContactTime": {
+              "type": "number"
+            },
+            "avgStepFrequency": {
+              "type": "number"
+            },
+            "avgStepLength": {
+              "type": "number"
+            },
+            "verticalOscillation": {
+              "type": "number"
+            },
+            "verticalRatio": {
+              "type": "number"
             }
           },
           "additionalProperties": true
@@ -406,6 +421,42 @@
       },
       "atpActivity": {
         "type": "boolean"
+      },
+      "isPR": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of pr, found alongside it (2026-08-08) — same value, both present in the same response."
+      },
+      "isParent": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of parent."
+      },
+      "isPurposeful": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of purposeful."
+      },
+      "isManualActivity": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of manualActivity."
+      },
+      "isFavorite": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of favorite."
+      },
+      "isDecoDive": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of decoDive."
+      },
+      "isAutoCalcCalories": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of autoCalcCalories."
+      },
+      "isElevationCorrected": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of elevationCorrected."
+      },
+      "isAtpActivity": {
+        "type": "boolean",
+        "description": "\"is\"-prefixed duplicate of atpActivity."
       }
     },
     "additionalProperties": true

@@ -64,7 +64,8 @@
                 "description": "Null on rest days.",
                 "properties": {
                   "sportTypeId": { "type": "integer" },
-                  "sportTypeKey": { "type": "string" }
+                  "sportTypeKey": { "type": "string" },
+                  "displayOrder": { "type": "integer" }
                 },
                 "additionalProperties": true
               },
@@ -110,7 +111,16 @@
               "adaptiveCoachingWorkoutStatus": {
                 "type": "string",
                 "description": "Observed: NOT_COMPLETE."
-              }
+              },
+              "priorityType": {
+                "type": ["string", "null"],
+                "description": "Observed: REQUIRED."
+              },
+              "workoutCreatedDate": { "type": ["string", "null"] },
+              "workoutDescriptionI18nKey": { "type": ["string", "null"] },
+              "workoutNameI18nKey": { "type": ["string", "null"] },
+              "workoutScheduleId": { "type": "null", "description": "observed null in captured sample" },
+              "workoutUpdatedDate": { "type": ["string", "null"] }
             },
             "additionalProperties": true
           },
@@ -122,7 +132,11 @@
           },
           "grouped": {
             "type": "boolean"
-          }
+          },
+          "noteContentI18nKey": { "type": "null", "description": "observed null in captured sample" },
+          "noteNameI18nKey": { "type": "null", "description": "observed null in captured sample" },
+          "taskNote": { "type": "null", "description": "observed null in captured sample" },
+          "workoutOrder": { "type": "integer" }
         },
         "additionalProperties": true
       }
@@ -149,11 +163,75 @@
     },
     "parentPlanId": {
       "description": "observed non-null in captured sample"
+    },
+    "createDate": { "type": "string" },
+    "daysInLastWeek": { "type": ["integer", "null"] },
+    "descriptionI18nKey": { "type": "string" },
+    "expireDate": { "type": ["string", "null"] },
+    "formatLocale": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "key": { "type": "string" },
+        "isSupported": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "nameI18nKey": { "type": "string" },
+    "ownerDisplayName": { "type": ["string", "null"] },
+    "pausedDate": { "type": ["string", "null"] },
+    "planKey": { "type": "string" },
+    "privacyRule": {
+      "type": "object",
+      "properties": {
+        "typeId": { "type": "integer" },
+        "typeKey": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "publishDate": { "type": ["string", "null"] },
+    "resumedDate": { "type": ["string", "null"] },
+    "seriesIndex": { "type": ["integer", "null"] },
+    "supplementalSports": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "trainingLevel": {
+      "type": "object",
+      "properties": {
+        "levelId": { "type": "integer" },
+        "levelKey": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "trainingSubType": {
+      "type": "object",
+      "properties": {
+        "subTypeId": { "type": "integer" },
+        "subTypeKey": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "trainingType": {
+      "type": "object",
+      "properties": {
+        "typeId": { "type": "integer" },
+        "typeKey": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "trainingVersion": {
+      "type": "object",
+      "properties": {
+        "versionId": { "type": "integer" },
+        "versionName": { "type": "string" }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true,
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/adaptive_training_plan.schema.json",
   "title": "Adaptive training plan detail (get_adaptive_training_plan_by_id)",
-  "description": "Returned by garminconnect's get_adaptive_training_plan_by_id(plan_id), where plan_id comes from get_training_plans()'s trainingPlanList. Consumed by sync_training_plan, which writes one training_plan_task point per taskList entry within today..+14 days, including rest days (which have no corresponding entry at all in get_scheduled_workouts's calendarItems).\n\nVerified against: one active FBT_ADAPTIVE (Garmin Run Coach) plan, 2026-08-03, trainingPlanId 46457367 — a mix of rest, base, tempo, and long-run task entries across the current week. No fixture yet for a non-adaptive (manually-built) training plan, or a plan with taskNote/grouped entries populated."
+  "description": "Returned by garminconnect's get_adaptive_training_plan_by_id(plan_id), where plan_id comes from get_training_plans()'s trainingPlanList. Consumed by sync_training_plan, which writes one training_plan_task point per taskList entry within today..+14 days, including rest days (which have no corresponding entry at all in get_scheduled_workouts's calendarItems).\n\nVerified against: one active FBT_ADAPTIVE (Garmin Run Coach) plan, 2026-08-03, trainingPlanId 46457367 — a mix of rest, base, tempo, and long-run task entries across the current week. No fixture yet for a non-adaptive (manually-built) training plan, or a plan with taskNote/grouped entries populated. Metadata fields (createDate..trainingVersion, taskList's noteContentI18nKey..workoutOrder, taskWorkout's priorityType..workoutUpdatedDate, sportType.displayOrder — none consumed) added 2026-08-08 after a drift-check new_fields alert."
 }

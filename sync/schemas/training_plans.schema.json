@@ -35,6 +35,77 @@
           },
           "planPhases": {
             "description": "Always null here — see taskList note."
+          },
+          "avgWeeklyWorkouts": { "type": "integer" },
+          "createDate": { "type": "string" },
+          "daysInLastWeek": { "type": ["integer", "null"] },
+          "description": { "type": "string" },
+          "descriptionI18nKey": { "type": "string" },
+          "durationInWeeks": { "type": "integer" },
+          "expireDate": { "type": ["string", "null"] },
+          "formatLocale": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "key": { "type": "string" },
+              "isSupported": { "type": "boolean" }
+            },
+            "additionalProperties": true
+          },
+          "name": { "type": "string" },
+          "nameI18nKey": { "type": "string" },
+          "ownerDisplayName": { "type": ["string", "null"] },
+          "ownerId": { "type": "integer" },
+          "parentPlanId": { "type": ["integer", "null"] },
+          "pausedDate": { "type": ["string", "null"] },
+          "planKey": { "type": "string" },
+          "privacyRule": {
+            "type": "object",
+            "properties": {
+              "typeId": { "type": "integer" },
+              "typeKey": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "publishDate": { "type": ["string", "null"] },
+          "resumedDate": { "type": ["string", "null"] },
+          "seriesIndex": { "type": ["integer", "null"] },
+          "startDate": { "type": "string" },
+          "supplementalSports": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "trainingLevel": {
+            "type": "object",
+            "properties": {
+              "levelId": { "type": "integer" },
+              "levelKey": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "trainingSubType": {
+            "type": "object",
+            "properties": {
+              "subTypeId": { "type": "integer" },
+              "subTypeKey": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "trainingType": {
+            "type": "object",
+            "properties": {
+              "typeId": { "type": "integer" },
+              "typeKey": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "trainingVersion": {
+            "type": "object",
+            "properties": {
+              "versionId": { "type": "integer" },
+              "versionName": { "type": "string" }
+            },
+            "additionalProperties": true
           }
         },
         "additionalProperties": true
@@ -50,5 +121,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/training_plans.schema.json",
   "title": "Training plan list (get_training_plans)",
-  "description": "Returned by garminconnect's get_training_plans() — no arguments, implicitly scoped to the logged-in account. Consumed by sync_training_plan as the entry point to discover active trainingPlanId(s).\n\nVerified against: 2026-08-03, one active FBT_ADAPTIVE plan (trainingPlanId 46457367)."
+  "description": "Returned by garminconnect's get_training_plans() — no arguments, implicitly scoped to the logged-in account. Consumed by sync_training_plan as the entry point to discover active trainingPlanId(s).\n\nVerified against: 2026-08-03, one active FBT_ADAPTIVE plan (trainingPlanId 46457367). Metadata fields (avgWeeklyWorkouts..trainingVersion, none consumed) added 2026-08-08 after a drift-check new_fields alert."
 }
