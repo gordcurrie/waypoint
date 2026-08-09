@@ -1674,6 +1674,42 @@ def test_build_garmin_workout_category_null_on_plain_steps():
     assert step["exerciseName"] is None
 
 
+def test_build_garmin_workout_weight_kg_sets_weight_value_and_unit():
+    # Shape verified live 2026-08-09 (probe upload + readback + delete): a bare
+    # {"unitKey": "kilogram"} is enough — Garmin resolves unitId/factor itself —
+    # and weightValue round-trips unconverted (already kilograms).
+    item = _queue_item(
+        steps=[
+            {
+                "type": "interval",
+                "reps": 8,
+                "category": "BENCH_PRESS",
+                "exercise_name": "BARBELL_BENCH_PRESS",
+                "weight_kg": 60,
+            }
+        ]
+    )
+    step = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"][0]
+    assert step["weightValue"] == 60.0
+    assert step["weightUnit"] == {"unitKey": "kilogram"}
+
+
+def test_build_garmin_workout_weight_kg_null_when_unset():
+    item = _queue_item(
+        steps=[
+            {
+                "type": "interval",
+                "reps": 8,
+                "category": "SQUAT",
+                "exercise_name": "BODYWEIGHT_SQUAT",
+            }
+        ]
+    )
+    step = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"][0]
+    assert step["weightValue"] is None
+    assert step["weightUnit"] is None
+
+
 def test_build_garmin_workout_sets_creates_repeat_group():
     item = _queue_item(
         steps=[

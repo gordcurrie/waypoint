@@ -148,6 +148,49 @@ func TestCreateWorkout_RestWithoutSetsRejected(t *testing.T) {
 	}
 }
 
+func TestCreateWorkout_ValidWeightKg(t *testing.T) {
+	result := callCreateWorkout(t, map[string]any{
+		"name":  "Bench day",
+		"sport": "strength_training",
+		"steps": []map[string]any{
+			{
+				"type": "interval", "reps": 8, "weight_kg": 60,
+				"category": "BENCH_PRESS", "exercise_name": "BARBELL_BENCH_PRESS",
+			},
+		},
+	})
+	if result.IsError {
+		t.Fatalf("want success, got error: %v", result.Content)
+	}
+}
+
+func TestCreateWorkout_WeightKgWithoutCategoryRejected(t *testing.T) {
+	result := callCreateWorkout(t, map[string]any{
+		"name":  "Bad",
+		"sport": "strength_training",
+		"steps": []map[string]any{{"type": "interval", "reps": 8, "weight_kg": 60}},
+	})
+	if !result.IsError {
+		t.Fatal("want error when weight_kg is set without category/exercise_name")
+	}
+}
+
+func TestCreateWorkout_WeightKgNotPositiveRejected(t *testing.T) {
+	result := callCreateWorkout(t, map[string]any{
+		"name":  "Bad",
+		"sport": "strength_training",
+		"steps": []map[string]any{
+			{
+				"type": "interval", "reps": 8, "weight_kg": 0,
+				"category": "BENCH_PRESS", "exercise_name": "BARBELL_BENCH_PRESS",
+			},
+		},
+	})
+	if !result.IsError {
+		t.Fatal("want error when weight_kg is 0")
+	}
+}
+
 func TestQueryScheduledWorkouts_Empty(t *testing.T) {
 	client := &mockClient{rows: nil}
 	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
@@ -479,6 +522,35 @@ func TestSaveAndLoadQueue_RoundTrip_StrengthFields(t *testing.T) {
 	}
 	if step.ExerciseName == nil || *step.ExerciseName != "BARBELL_BENCH_PRESS" {
 		t.Errorf("ExerciseName round-trip failed: got %v", step.ExerciseName)
+	}
+}
+
+func TestSaveAndLoadQueue_RoundTrip_WeightKg(t *testing.T) {
+	dir := t.TempDir()
+	reps := 8
+	weightKg := 60.0
+	category, exerciseName := "BENCH_PRESS", "BARBELL_BENCH_PRESS"
+	want := []WorkoutQueueItem{
+		{ID: "789", Name: "Bench day", Sport: "strength_training", Steps: []WorkoutStep{
+			{
+				Type: "interval", Reps: &reps, WeightKg: &weightKg,
+				Category: &category, ExerciseName: &exerciseName,
+			},
+		}},
+	}
+	if err := saveQueue(dir, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadQueue(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 item, got %d", len(got))
+	}
+	step := got[0].Steps[0]
+	if step.WeightKg == nil || *step.WeightKg != 60.0 {
+		t.Errorf("WeightKg round-trip failed: got %v", step.WeightKg)
 	}
 }
 

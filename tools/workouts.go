@@ -22,19 +22,22 @@ import (
 // A strength exercise step sets Category/ExerciseName (a validated pair from Garmin's
 // exercise catalog — see search_exercises) and Reps as its end condition. Sets/RestS
 // turn the step into a repeated set: sync.py wraps it in a Garmin RepeatGroupDTO with
-// a synthesized rest step between each rep, rather than the caller listing out each
-// set and rest individually.
+// a synthesized rest step between each set/iteration, rather than the caller listing out
+// each set and rest individually. WeightKg sets a weight target, requires Category/ExerciseName
+// (verified live 2026-08-09: Garmin resolves a bare {"unitKey":"kilogram"} weightUnit
+// with no unitId needed, and weightValue round-trips unconverted, i.e. it's already kg).
 type WorkoutStep struct {
-	Type         string  `json:"type"`
-	DurationS    *int    `json:"duration_s,omitempty"`
-	DistanceM    *int    `json:"distance_m,omitempty"`
-	Reps         *int    `json:"reps,omitempty"`
-	Sets         *int    `json:"sets,omitempty"`
-	RestS        *int    `json:"rest_s,omitempty"`
-	Category     *string `json:"category,omitempty"`
-	ExerciseName *string `json:"exercise_name,omitempty"`
-	TargetHRZone *int    `json:"target_hr_zone,omitempty"`
-	Description  string  `json:"description,omitempty"`
+	Type         string   `json:"type"`
+	DurationS    *int     `json:"duration_s,omitempty"`
+	DistanceM    *int     `json:"distance_m,omitempty"`
+	Reps         *int     `json:"reps,omitempty"`
+	Sets         *int     `json:"sets,omitempty"`
+	RestS        *int     `json:"rest_s,omitempty"`
+	Category     *string  `json:"category,omitempty"`
+	ExerciseName *string  `json:"exercise_name,omitempty"`
+	TargetHRZone *int     `json:"target_hr_zone,omitempty"`
+	WeightKg     *float64 `json:"weight_kg,omitempty"`
+	Description  string   `json:"description,omitempty"`
 }
 
 // WorkoutQueueItem is written to the shared queue file for the Python sidecar to consume.
@@ -92,7 +95,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		Description: "Queue a structured workout for upload to Garmin Connect. The Python sidecar uploads it on the next sync run (every 30 minutes by default; set via SYNC_SCHEDULE). Requires --data-dir pointing to the shared sync volume. Returns the queue ID. " +
 			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
-			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. " +
+			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. Optionally set weight_kg (requires category/exercise_name) for a weight target shown on the watch. " +
 			"Optional target: target_hr_zone (1–5).",
 		// Queues a new item onto the shared file — additive, not destructive (nothing is
 		// overwritten or deleted), and each call creates a distinct queue entry so it's not
@@ -145,6 +148,12 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			}
 			if step.Sets == nil && step.RestS != nil {
 				return errorResult(fmt.Errorf("create_workout: step %d: rest_s requires sets", i+1))
+			}
+			if step.WeightKg != nil && step.Category == nil {
+				return errorResult(fmt.Errorf("create_workout: step %d: weight_kg requires category/exercise_name", i+1))
+			}
+			if step.WeightKg != nil && *step.WeightKg <= 0 {
+				return errorResult(fmt.Errorf("create_workout: step %d: weight_kg must be > 0", i+1))
 			}
 		}
 		item := WorkoutQueueItem{
