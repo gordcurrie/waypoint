@@ -191,6 +191,52 @@ func TestCreateWorkout_WeightKgNotPositiveRejected(t *testing.T) {
 	}
 }
 
+func TestQueryScheduledWorkouts_DedupesStaleGhostCoachPlanEntries(t *testing.T) {
+	// Reproduces a real live case found 2026-08-10: 4 stale pre-#85 points (each
+	// with a since-churned scheduled_id tag, WorkoutID never set) plus 1 correctly
+	// (sport, workout_name)-tagged current point, all for the same real coach-plan
+	// item — must collapse to exactly 1.
+	dateStr := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	client := &mockClient{
+		rows: []map[string]any{
+			{"scheduled_id": "1786447936000", "time": dateStr, "name": "Threshold", "sport": "running"},
+			{"time": dateStr, "name": "Threshold", "sport": "running", "workout_name": "Threshold"},
+			{"scheduled_id": "1786428000000", "time": dateStr, "name": "Threshold", "sport": "running"},
+			{"scheduled_id": "1786428001000", "time": dateStr, "name": "Threshold", "sport": "running"},
+			{"scheduled_id": "1786442183000", "time": dateStr, "name": "Threshold", "sport": "running"},
+		},
+	}
+	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workouts) != 1 {
+		t.Fatalf("want 1 deduped workout, got %d: %+v", len(workouts), workouts)
+	}
+	if workouts[0].Name != "Threshold" {
+		t.Errorf("Name: got %q, want Threshold", workouts[0].Name)
+	}
+}
+
+func TestQueryScheduledWorkouts_DedupeDoesNotCollapseSelfCreatedWorkouts(t *testing.T) {
+	// Self-created workouts keep a stable, non-churning WorkoutID — never collapse
+	// those even if two happen to share date/sport/name.
+	dateStr := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	client := &mockClient{
+		rows: []map[string]any{
+			{"scheduled_id": "111", "workout_id": float64(555), "time": dateStr, "name": "Easy Run", "sport": "running"},
+			{"scheduled_id": "222", "workout_id": float64(666), "time": dateStr, "name": "Easy Run", "sport": "running"},
+		},
+	}
+	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workouts) != 2 {
+		t.Fatalf("want 2 distinct self-created workouts kept, got %d: %+v", len(workouts), workouts)
+	}
+}
+
 func TestQueryScheduledWorkouts_Empty(t *testing.T) {
 	client := &mockClient{rows: nil}
 	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
