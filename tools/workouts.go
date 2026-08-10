@@ -71,7 +71,8 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		Name:  "get_scheduled_workouts",
 		Title: "Scheduled Workouts",
 		Description: "Return workouts scheduled on the Garmin calendar for the next N days (default 14). Use before create_workout to avoid scheduling conflicts. " +
-			"Coach/training-plan-assigned days are enriched with real target detail from the active adaptive plan: duration_s, distance_m, description (the actual pace/HR target, e.g. \"21:00@5:10/km\" or \"137bpm\"), phase (BASE/BUILD/PEAK/TAPER/TARGET_EVENT_DAY), and rest_day. " +
+			"Coach/training-plan-assigned days are enriched with real target detail from the active adaptive plan: duration_s, distance_m, description (a flat display summary, e.g. \"21:00@5:10/km\" or \"137bpm\"), phase (BASE/BUILD/PEAK/TAPER/TARGET_EVENT_DAY), and rest_day. " +
+			"description's number is NOT a hard cap — e.g. \"137bpm\" is the MIDPOINT of the real prescribed range, not a ceiling. The actual range is target_type (\"heart_rate\" or \"pace\", absent when the workout has no such target, e.g. strength) with target_lo/target_hi (target_lo is always <= target_hi): bpm bounds for heart_rate (e.g. 124-149 behind a \"137bpm\" description), m/s pace bounds for pace (higher m/s = faster pace, so target_hi is the faster end of the range) — prefer these over parsing description when the real range matters, e.g. judging whether an activity stayed on target. " +
 			"Rest days appear here even though they have no real Garmin calendar entry — scheduled_id is 0 for those, since it's a plan entry, not a real calendar item. scheduled_id is also 0 for coach/training-plan-assigned workouts generally (deduped by sport+name rather than Garmin's own id); only self-created workouts (via create_workout) carry a real nonzero scheduled_id.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input scheduledWorkoutsInput) (*mcp.CallToolResult, any, error) {
@@ -312,19 +313,23 @@ func queryMeasurementRange(ctx context.Context, client influxClient, measurement
 // the other's detail.
 func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.TrainingPlanTask) []garmin.ScheduledWorkout {
 	byKey := make(map[string]garmin.TrainingPlanTask, len(tasks))
-	for _, t := range tasks {
-		byKey[planTaskKey(t.Date, t.Sport)] = t
+	for i := range tasks {
+		byKey[planTaskKey(tasks[i].Date, tasks[i].Sport)] = tasks[i]
 	}
 
 	merged := make([]garmin.ScheduledWorkout, 0, len(workouts)+len(tasks))
 	seen := make(map[string]bool, len(workouts))
-	for _, w := range workouts {
+	for i := range workouts {
+		w := workouts[i]
 		key := planTaskKey(w.Date, w.Sport)
 		if t, ok := byKey[key]; ok && w.WorkoutID == 0 {
 			w.DistanceM = t.DistanceM
 			w.Description = t.Description
 			w.RestDay = t.RestDay
 			w.Phase = t.Phase
+			w.TargetType = t.TargetType
+			w.TargetLo = t.TargetLo
+			w.TargetHi = t.TargetHi
 			if w.DurationS == 0 {
 				w.DurationS = t.DurationS
 			}
@@ -332,7 +337,8 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 		merged = append(merged, w)
 		seen[key] = true
 	}
-	for _, t := range tasks {
+	for i := range tasks {
+		t := tasks[i]
 		if seen[planTaskKey(t.Date, t.Sport)] {
 			continue
 		}
@@ -345,6 +351,9 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 			Description: t.Description,
 			RestDay:     t.RestDay,
 			Phase:       t.Phase,
+			TargetType:  t.TargetType,
+			TargetLo:    t.TargetLo,
+			TargetHi:    t.TargetHi,
 		})
 	}
 

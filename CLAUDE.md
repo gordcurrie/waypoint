@@ -310,6 +310,34 @@ it back, `delete_workout`'d it) — a bare `{"unitKey": "kilogram"}` is enough; 
 round-trips unconverted (60.0 in → 60.0 kg out) — it's already kilograms, no scaling needed.
 `create_workout`'s `weight_kg` step field (#86) uses this.
 
+**Coach-plan workout's real target range — `GET workout-service/fbt-adaptive/<workoutUuid>`**
+(#97, confirmed 2026-08-09 against 3 real tasks: a single-step HR-zone run, a 3-step pace-zone
+tempo run, a strength RepeatGroupDTO) — `sync_training_plan`'s flat `workoutDescription` string
+(e.g. `"137bpm"`) is only a display summary; it's the *midpoint* of the real prescribed range, not
+a cap (a real run was misread as "8bpm over a 137bpm cap" when it was actually well inside a real
+124-149bpm range the whole time — the incident that prompted this investigation). The real range
+lives in each step's `targetValueOne`/`targetValueTwo`, whose meaning depends on `targetType`:
+- `heart.rate.zone`: bpm, `targetValueOne` = LOW bound, `targetValueTwo` = HIGH bound (124/149).
+- `pace.zone` (not seen elsewhere in this codebase before this): m/s, **not** the lactate-threshold
+  1/10th-scale quirk — plain m/s round-trips directly to a sane pace with no scaling. `targetValueOne`
+  is the FASTER (numerically higher) bound, `targetValueTwo` the slower one — the *opposite* polarity
+  from heart.rate.zone's low/high ordering. `_extract_workout_target` does **not** trust One/Two's
+  positional order — it normalizes to `min(one, two)`/`max(one, two)` so the synced `target_lo`/
+  `target_hi` fields always satisfy `target_lo <= target_hi` regardless of target type (caught by
+  `/code-review` before merge: the first version returned One→lo/Two→hi verbatim, so every synced
+  pace target had `target_lo > target_hi`).
+- `no.target`: strength steps (wrapped in a `RepeatGroupDTO`, same shape as `create_workout`'s own
+  upload steps) — nothing to extract.
+
+A multi-step workout (tempo: warmup/interval/cooldown) can carry a *different, wider* range on its
+warmup/cooldown than its main interval — `sync._extract_workout_target` picks the first
+`stepType=="interval"` step with a real target, falling back to the first step with any real target
+at all. Not wrapped by `garminconnect` — call `garmin.connectapi(f"workout-service/fbt-adaptive/{uuid}")`
+directly (same pattern as `fitness_age.schema.json`), where `uuid` is
+`taskList[].taskWorkout.workoutUuid` from `get_adaptive_training_plan_by_id` (already synced, was
+previously unused). Skipped entirely for rest-day tasks — no real workoutUuid, no target to enrich,
+so that shape was never captured and isn't guessed at.
+
 ## Skill to invoke for MCP server work
 
 When building `tools/` or `cmd/mcp-server/`, invoke the `generate-mcp` skill:

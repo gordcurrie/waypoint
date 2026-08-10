@@ -300,6 +300,46 @@ func TestQueryScheduledWorkouts_EnrichesCoachPlanItem(t *testing.T) {
 	}
 }
 
+func TestQueryScheduledWorkouts_EnrichesTargetRange(t *testing.T) {
+	// Shape verified live 2026-08-09 against a real coach-plan Base day (#97):
+	// description "137bpm" is the midpoint of the real 124-149bpm target range.
+	tomorrow := time.Now().UTC().Add(24 * time.Hour)
+	dateStr := tomorrow.Format(time.RFC3339)
+	client := routedMockClient(
+		[]map[string]any{
+			{"time": dateStr, "name": "Base", "sport": "running"},
+		},
+		[]map[string]any{
+			{
+				"time":        dateStr,
+				"name":        "Base",
+				"sport":       "running",
+				"description": "137bpm",
+				"target_type": "heart_rate",
+				"target_lo":   float64(124),
+				"target_hi":   float64(149),
+			},
+		},
+	)
+	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workouts) != 1 {
+		t.Fatalf("want 1 workout, got %d", len(workouts))
+	}
+	w := workouts[0]
+	if w.TargetType != "heart_rate" {
+		t.Errorf("TargetType: got %q, want heart_rate", w.TargetType)
+	}
+	if w.TargetLo != 124 {
+		t.Errorf("TargetLo: got %v, want 124", w.TargetLo)
+	}
+	if w.TargetHi != 149 {
+		t.Errorf("TargetHi: got %v, want 149", w.TargetHi)
+	}
+}
+
 func TestQueryScheduledWorkouts_DoesNotEnrichSelfCreatedWorkout(t *testing.T) {
 	tomorrow := time.Now().UTC().Add(24 * time.Hour)
 	dateStr := tomorrow.Format(time.RFC3339)

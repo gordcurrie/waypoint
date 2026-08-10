@@ -934,6 +934,56 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
 
 TRAINING_PLAN_LOOKAHEAD_DAYS = 14
 
+# targetType.workoutTargetTypeKey -> our target_type label. pace.zone's
+# targetValueOne/Two are m/s (not the lactate-threshold 1/10th-scale quirk —
+# verified live 2026-08-09: 2.972/2.638 m/s round-trip to a sane 5:36-6:19/km
+# easy-pace range with no scaling needed).
+_TARGET_TYPE_LABELS = {"heart.rate.zone": "heart_rate", "pace.zone": "pace"}
+
+
+def _extract_workout_target(detail: dict[str, Any]) -> tuple[str, float | None, float | None]:
+    """Pick "the" target range for a coach-plan workout (#97).
+
+    A multi-step workout (e.g. a tempo run: warmup/interval/cooldown) can carry a
+    different, wider range on its warmup/cooldown than its main interval — the
+    interval's range is what the coach's flat description string (e.g. "137bpm",
+    itself the midpoint of a 124-149bpm range, not a cap) actually refers to, so
+    the first stepType=="interval" step with a real target wins; falls back to the
+    first step with any real target at all if no interval step has one. Strength
+    workouts wrap their steps in a RepeatGroupDTO — recurse into workoutSteps
+    either way, since a repeat group's own targetType is always null.
+
+    Returned as (label, lo, hi) with lo always <= hi — targetValueOne isn't
+    consistently the lower bound (it's the LOW bpm bound for heart.rate.zone, but
+    the FASTER/numerically-HIGHER m/s bound for pace.zone), so this normalizes to
+    min/max rather than trusting One/Two's positional order. Only returned when
+    BOTH targetValueOne and targetValueTwo are present — a step with just one of
+    the pair (not observed live; Garmin may support an open-ended target) isn't
+    treated as a usable range rather than guessing which bound is missing.
+
+    Returns ("", None, None) if no step anywhere has a real, complete target (e.g.
+    an all-no.target strength workout).
+    """
+    fallback: tuple[str, float | None, float | None] | None = None
+    for segment in detail.get("workoutSegments") or []:
+        for step in segment.get("workoutSteps") or []:
+            for leaf in [step, *(step.get("workoutSteps") or [])]:
+                target_type = leaf.get("targetType") or {}
+                key = target_type.get("workoutTargetTypeKey") or ""
+                label = _TARGET_TYPE_LABELS.get(key)
+                if label is None:
+                    continue
+                one = _fval(leaf, "targetValueOne")
+                two = _fval(leaf, "targetValueTwo")
+                if one is None or two is None:
+                    continue
+                lo, hi = min(one, two), max(one, two)
+                if leaf.get("stepType", {}).get("stepTypeKey") == "interval":
+                    return label, lo, hi
+                if fallback is None:
+                    fallback = (label, lo, hi)
+    return fallback or ("", None, None)
+
 
 def sync_training_plan(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """Sync per-day target detail from the active adaptive coach training plan.
@@ -951,6 +1001,10 @@ def sync_training_plan(garmin: Garmin, client: InfluxDBClient3, state: dict[str,
     The plan regenerates day to day (workoutUuid on the same calendarDate differs
     between captures a day apart) so this always re-syncs the near-term window fresh
     rather than tracking a watermark, same pattern as sync_scheduled_workouts.
+
+    Also fetches the real HR/pace target range per non-rest-day task (#97) — see
+    _extract_workout_target — since workoutDescription is only a flat display
+    summary (e.g. "137bpm" is the midpoint of a real 124-149bpm range, not a cap).
     """
     today = date.today()
     horizon = today + timedelta(days=TRAINING_PLAN_LOOKAHEAD_DAYS)
@@ -1035,9 +1089,39 @@ def sync_training_plan(garmin: Garmin, client: InfluxDBClient3, state: dict[str,
                     "workout_phrase": str(w.get("workoutPhrase") or ""),
                     "phase": phase,
                 }
+
+                # Real HR/pace target range, not just the flat description string
+                # (#97) — a rest day has no target to enrich, and its taskWorkout
+                # doesn't carry a real workoutUuid, so skip the extra API call
+                # entirely rather than guess at that shape.
+                workout_uuid = w.get("workoutUuid")
+                if not rest_day and workout_uuid:
+                    try:
+                        wdetail = garmin.connectapi(f"workout-service/fbt-adaptive/{workout_uuid}")
+                        target_type, target_lo, target_hi = _extract_workout_target(wdetail or {})
+                        if target_type:
+                            fields["target_type"] = target_type
+                            fields["target_lo"] = target_lo
+                            fields["target_hi"] = target_hi
+                    except (
+                        GarminConnectAuthenticationError,
+                        GarminConnectTooManyRequestsError,
+                        GarminConnectConnectionError,
+                    ):
+                        raise
+                    except Exception as exc:
+                        log.warning("training_plan: fbt-adaptive %s: %s", workout_uuid, exc)
+                    time.sleep(0.2)
+
                 p, n = _add_fields(p, fields)
                 if n:
                     points.append(p)
+            except (
+                GarminConnectAuthenticationError,
+                GarminConnectTooManyRequestsError,
+                GarminConnectConnectionError,
+            ):
+                raise
             except Exception as exc:
                 log.warning("training_plan: task %s: %s", task.get("calendarDate"), exc)
 

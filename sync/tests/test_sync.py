@@ -1,6 +1,7 @@
 """Tests for sync.py — Garmin → InfluxDB sync sidecar."""
 
 from datetime import UTC, date, datetime
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1350,6 +1351,7 @@ def _plan_task(
     rest_day: bool = False,
     workout_phrase: str | None = "BASE",
     sport: str | None = "running",
+    workout_uuid: str | None = None,
 ) -> dict:
     return {
         "calendarDate": calendar_date,
@@ -1362,6 +1364,7 @@ def _plan_task(
             "estimatedDistanceInMeters": distance,
             "restDay": rest_day,
             "workoutPhrase": workout_phrase,
+            "workoutUuid": workout_uuid,
         },
     }
 
@@ -1371,6 +1374,8 @@ def _training_plan_garmin(
     plan_id: int = 46457367,
     end_date: str = "2026-10-18T00:00:00.0",
     phases: list | None = None,
+    connectapi_return: Any = None,
+    connectapi_side_effect: Any = None,
 ) -> MagicMock:
     garmin = MagicMock()
     garmin.get_training_plans.return_value = {
@@ -1380,7 +1385,30 @@ def _training_plan_garmin(
         "taskList": tasks,
         "adaptivePlanPhases": phases or [],
     }
+    if connectapi_side_effect is not None:
+        garmin.connectapi.side_effect = connectapi_side_effect
+    else:
+        garmin.connectapi.return_value = connectapi_return
     return garmin
+
+
+def _fbt_step(
+    step_type: str,
+    target_key: str | None,
+    lo: float | None = None,
+    hi: float | None = None,
+) -> dict:
+    return {
+        "type": "ExecutableStepDTO",
+        "stepType": {"stepTypeKey": step_type},
+        "targetType": {"workoutTargetTypeKey": target_key} if target_key else None,
+        "targetValueOne": lo,
+        "targetValueTwo": hi,
+    }
+
+
+def _fbt_workout(steps: list) -> dict:
+    return {"workoutSegments": [{"workoutSteps": steps}]}
 
 
 @freeze_time("2026-08-03")
@@ -1506,6 +1534,146 @@ def test_training_plan_get_training_plans_connection_error_propagates(no_sleep):
 def test_training_plan_get_adaptive_plan_connection_error_propagates(no_sleep):
     garmin = _training_plan_garmin([_plan_task("2026-08-03")])
     garmin.get_adaptive_training_plan_by_id.side_effect = GarminConnectConnectionError("timeout")
+    client = MagicMock()
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_training_plan(garmin, client, {})
+
+
+# ── sync_training_plan: real HR/pace target range (#97) ─────────────────────────
+
+
+def test_extract_workout_target_single_step_heart_rate():
+    # Shape verified live 2026-08-09 against a real Long Run task.
+    workout = _fbt_workout([_fbt_step("interval", "heart.rate.zone", 124.0, 149.0)])
+    assert sync._extract_workout_target(workout) == ("heart_rate", 124.0, 149.0)
+
+
+def test_extract_workout_target_multi_step_picks_interval_not_warmup():
+    # Shape verified live 2026-08-09 against a real Threshold (tempo) task — warmup/
+    # cooldown carry a wider, easier pace range than the interval itself.
+    workout = _fbt_workout(
+        [
+            _fbt_step("warmup", "pace.zone", 2.972, 2.638),
+            _fbt_step("interval", "pace.zone", 3.555, 3.277),
+            _fbt_step("cooldown", "pace.zone", 2.972, 2.638),
+        ]
+    )
+    # target_lo/target_hi are normalized to min/max, not targetValueOne/Two's
+    # positional order — pace.zone's One is the FASTER (numerically higher) bound,
+    # the opposite polarity from heart.rate.zone's One-is-low.
+    assert sync._extract_workout_target(workout) == ("pace", 3.277, 3.555)
+
+
+def test_extract_workout_target_falls_back_when_no_interval_step_has_target():
+    workout = _fbt_workout(
+        [
+            _fbt_step("warmup", "pace.zone", 2.972, 2.638),
+            _fbt_step("interval", "no.target"),
+        ]
+    )
+    assert sync._extract_workout_target(workout) == ("pace", 2.638, 2.972)
+
+
+def test_extract_workout_target_no_target_strength_workout():
+    # Shape verified live 2026-08-09 against a real Total Body Circuit task — strength
+    # steps live inside a RepeatGroupDTO wrapper, all no.target.
+    workout = _fbt_workout(
+        [
+            {
+                "type": "RepeatGroupDTO",
+                "stepType": {"stepTypeKey": "repeat"},
+                "targetType": None,
+                "workoutSteps": [
+                    _fbt_step("interval", "no.target"),
+                    _fbt_step("rest", "no.target"),
+                ],
+            }
+        ]
+    )
+    assert sync._extract_workout_target(workout) == ("", None, None)
+
+
+def test_extract_workout_target_empty_response():
+    assert sync._extract_workout_target({}) == ("", None, None)
+
+
+def test_extract_workout_target_skips_partial_range():
+    """Not observed live — Garmin may support an open-ended target with only one of
+    targetValueOne/Two set. Rather than guess which bound is missing, treat it as no
+    usable target at all (falls through to the next step, or ("", None, None))."""
+    workout = _fbt_workout([_fbt_step("interval", "heart.rate.zone", 124.0, None)])
+    assert sync._extract_workout_target(workout) == ("", None, None)
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_writes_target_fields(no_sleep):
+    garmin = _training_plan_garmin(
+        [_plan_task("2026-08-03", workout_uuid="2417009b-bebc-4c20-9a08-87032fd507f6")],
+        connectapi_return=_fbt_workout([_fbt_step("interval", "heart.rate.zone", 124.0, 149.0)]),
+    )
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    garmin.connectapi.assert_called_once_with(
+        "workout-service/fbt-adaptive/2417009b-bebc-4c20-9a08-87032fd507f6"
+    )
+    points = client.write.call_args[1]["record"]
+    s = str(points[0])
+    assert 'target_type="heart_rate"' in s
+    assert "target_lo=124" in s
+    assert "target_hi=149" in s
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_skips_target_fetch_for_rest_day(no_sleep):
+    garmin = _training_plan_garmin(
+        [
+            _plan_task(
+                "2026-08-03",
+                workout_name=None,
+                description=None,
+                duration=None,
+                distance=None,
+                rest_day=True,
+                workout_uuid="some-uuid",
+            )
+        ]
+    )
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    garmin.connectapi.assert_not_called()
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_skips_target_fetch_when_no_workout_uuid(no_sleep):
+    garmin = _training_plan_garmin([_plan_task("2026-08-03", workout_uuid=None)])
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    garmin.connectapi.assert_not_called()
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_target_fetch_failure_does_not_break_task(no_sleep):
+    """A failed fbt-adaptive fetch must not lose the rest of the task's fields —
+    it's enrichment, not a required field."""
+    garmin = _training_plan_garmin(
+        [_plan_task("2026-08-03", workout_uuid="some-uuid")],
+        connectapi_side_effect=Exception("500 server error"),
+    )
+    client = MagicMock()
+    sync.sync_training_plan(garmin, client, {})
+    points = client.write.call_args[1]["record"]
+    assert len(points) == 1
+    s = str(points[0])
+    assert 'name="Base"' in s
+    assert "target_lo" not in s
+
+
+@freeze_time("2026-08-03")
+def test_training_plan_target_fetch_connection_error_propagates(no_sleep):
+    garmin = _training_plan_garmin(
+        [_plan_task("2026-08-03", workout_uuid="some-uuid")],
+        connectapi_side_effect=GarminConnectConnectionError("timeout"),
+    )
     client = MagicMock()
     with pytest.raises(GarminConnectConnectionError):
         sync.sync_training_plan(garmin, client, {})
