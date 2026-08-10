@@ -953,8 +953,16 @@ def _extract_workout_target(detail: dict[str, Any]) -> tuple[str, float | None, 
     workouts wrap their steps in a RepeatGroupDTO — recurse into workoutSteps
     either way, since a repeat group's own targetType is always null.
 
-    Returns ("", None, None) if no step anywhere has a real target (e.g. an
-    all-no.target strength workout).
+    Returned as (label, lo, hi) with lo always <= hi — targetValueOne isn't
+    consistently the lower bound (it's the LOW bpm bound for heart.rate.zone, but
+    the FASTER/numerically-HIGHER m/s bound for pace.zone), so this normalizes to
+    min/max rather than trusting One/Two's positional order. Only returned when
+    BOTH targetValueOne and targetValueTwo are present — a step with just one of
+    the pair (not observed live; Garmin may support an open-ended target) isn't
+    treated as a usable range rather than guessing which bound is missing.
+
+    Returns ("", None, None) if no step anywhere has a real, complete target (e.g.
+    an all-no.target strength workout).
     """
     fallback: tuple[str, float | None, float | None] | None = None
     for segment in detail.get("workoutSegments") or []:
@@ -965,10 +973,11 @@ def _extract_workout_target(detail: dict[str, Any]) -> tuple[str, float | None, 
                 label = _TARGET_TYPE_LABELS.get(key)
                 if label is None:
                     continue
-                lo = _fval(leaf, "targetValueOne")
-                hi = _fval(leaf, "targetValueTwo")
-                if lo is None and hi is None:
+                one = _fval(leaf, "targetValueOne")
+                two = _fval(leaf, "targetValueTwo")
+                if one is None or two is None:
                     continue
+                lo, hi = min(one, two), max(one, two)
                 if leaf.get("stepType", {}).get("stepTypeKey") == "interval":
                     return label, lo, hi
                 if fallback is None:

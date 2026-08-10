@@ -320,8 +320,12 @@ lives in each step's `targetValueOne`/`targetValueTwo`, whose meaning depends on
 - `heart.rate.zone`: bpm, `targetValueOne` = LOW bound, `targetValueTwo` = HIGH bound (124/149).
 - `pace.zone` (not seen elsewhere in this codebase before this): m/s, **not** the lactate-threshold
   1/10th-scale quirk — plain m/s round-trips directly to a sane pace with no scaling. `targetValueOne`
-  is the FASTER (numerically higher) bound, `targetValueTwo` the slower one — the reverse polarity
-  from heart.rate.zone's low/high ordering, so don't assume One-is-always-low.
+  is the FASTER (numerically higher) bound, `targetValueTwo` the slower one — the *opposite* polarity
+  from heart.rate.zone's low/high ordering. `_extract_workout_target` does **not** trust One/Two's
+  positional order — it normalizes to `min(one, two)`/`max(one, two)` so the synced `target_lo`/
+  `target_hi` fields always satisfy `target_lo <= target_hi` regardless of target type (caught by
+  `/code-review` before merge: the first version returned One→lo/Two→hi verbatim, so every synced
+  pace target had `target_lo > target_hi`).
 - `no.target`: strength steps (wrapped in a `RepeatGroupDTO`, same shape as `create_workout`'s own
   upload steps) — nothing to extract.
 

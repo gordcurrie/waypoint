@@ -39,7 +39,7 @@
           "segmentOrder": { "type": "integer" },
           "workoutSteps": {
             "type": "array",
-            "description": "ExecutableStepDTO entries directly, or one RepeatGroupDTO wrapping them (strength workouts) — same two shapes as workout_upload.schema.json's executableStep/repeatGroup. sync_training_plan picks the first ExecutableStepDTO step of stepType interval with a non-\"no.target\" targetType as \"the\" workout target (falling back to the first step with any real target at all) — a multi-step workout's warmup/cooldown legitimately carry a different, wider pace/HR range than its main interval, and the interval is what the coach's flat description string actually refers to.",
+            "description": "ExecutableStepDTO entries directly, or one RepeatGroupDTO wrapping them (strength workouts) — same two shapes as workout_upload.schema.json's executableStep/repeatGroup. sync_training_plan picks the first ExecutableStepDTO step of stepType interval with a non-\"no.target\" targetType as \"the\" workout target (falling back to the first step with any real target at all) — a multi-step workout's warmup/cooldown legitimately carry a different, wider pace/HR range than its main interval, and the interval is what the coach's flat description string actually refers to. Written as target_lo/target_hi with target_lo always <= target_hi (normalized to min/max of targetValueOne/Two, not their positional order — see targetValueOne's own description for why that order isn't consistent across target types).",
             "items": {
               "type": "object",
               "properties": {

@@ -1558,7 +1558,10 @@ def test_extract_workout_target_multi_step_picks_interval_not_warmup():
             _fbt_step("cooldown", "pace.zone", 2.972, 2.638),
         ]
     )
-    assert sync._extract_workout_target(workout) == ("pace", 3.555, 3.277)
+    # target_lo/target_hi are normalized to min/max, not targetValueOne/Two's
+    # positional order — pace.zone's One is the FASTER (numerically higher) bound,
+    # the opposite polarity from heart.rate.zone's One-is-low.
+    assert sync._extract_workout_target(workout) == ("pace", 3.277, 3.555)
 
 
 def test_extract_workout_target_falls_back_when_no_interval_step_has_target():
@@ -1568,7 +1571,7 @@ def test_extract_workout_target_falls_back_when_no_interval_step_has_target():
             _fbt_step("interval", "no.target"),
         ]
     )
-    assert sync._extract_workout_target(workout) == ("pace", 2.972, 2.638)
+    assert sync._extract_workout_target(workout) == ("pace", 2.638, 2.972)
 
 
 def test_extract_workout_target_no_target_strength_workout():
@@ -1592,6 +1595,14 @@ def test_extract_workout_target_no_target_strength_workout():
 
 def test_extract_workout_target_empty_response():
     assert sync._extract_workout_target({}) == ("", None, None)
+
+
+def test_extract_workout_target_skips_partial_range():
+    """Not observed live — Garmin may support an open-ended target with only one of
+    targetValueOne/Two set. Rather than guess which bound is missing, treat it as no
+    usable target at all (falls through to the next step, or ("", None, None))."""
+    workout = _fbt_workout([_fbt_step("interval", "heart.rate.zone", 124.0, None)])
+    assert sync._extract_workout_target(workout) == ("", None, None)
 
 
 @freeze_time("2026-08-03")
