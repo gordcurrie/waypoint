@@ -780,7 +780,20 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
         # Exercise sets (strength_training only — #42; not present in the summary
         # response at all, needs this separate call, and only meaningful for this
         # activity type).
-        if a.get("activityType", {}).get("typeKey") == "strength_training":
+        #
+        # API shape (verified 2026-08-09 against a real 43-set activity, see
+        # sync/schemas/activity_exercise_sets.schema.json):
+        # {"activityId": ..., "exerciseSets": [
+        #   {"exercises": [{"category": "LUNGE", "name": "LUNGE", "probability": 99.6}, ...],
+        #    "duration": 40.0, "repetitionCount": 6 | null, "weight": null,
+        #    "setType": "ACTIVE" | "REST", "startTime": "<GMT, matches startTimeGMT format>",
+        #    "wktStepIndex": ..., "messageIndex": ...}, ...]}
+        # exercises is a ranked list of ML candidates (top one used here) — every captured
+        # set had all candidates identical at ~99.6% probability, i.e. never actually
+        # ambiguous in this account's sample. repetitionCount is null on REST, sometimes a
+        # real 0 on ACTIVE (device detected the exercise but didn't count reps). weight has
+        # always been null — no device in this account ever logged one.
+        if (a.get("activityType") or {}).get("typeKey") == "strength_training":
             try:
                 detail = garmin.get_activity_exercise_sets(str(activity_id)) or {}
                 for exercise_set in detail.get("exerciseSets") or []:

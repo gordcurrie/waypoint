@@ -1,6 +1,7 @@
 package garmin_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func TestExerciseSetFrom(t *testing.T) {
 	if set.DurationS != 40 {
 		t.Errorf("DurationS: got %v, want 40", set.DurationS)
 	}
-	if set.Reps != 8 {
+	if set.Reps == nil || *set.Reps != 8 {
 		t.Errorf("Reps: got %v, want 8", set.Reps)
 	}
 	if set.WeightKg != 20 {
@@ -66,10 +67,42 @@ func TestExerciseSetFrom_RestSetHasNoCategory(t *testing.T) {
 	if set.Category != "" {
 		t.Errorf("Category: got %q, want empty on a REST set", set.Category)
 	}
-	if set.Reps != 0 {
-		t.Errorf("Reps: got %v, want 0 (absent) on a REST set", set.Reps)
+	if set.Reps != nil {
+		t.Errorf("Reps: got %v, want nil (absent) on a REST set", set.Reps)
 	}
 	if set.SetType != "REST" {
 		t.Errorf("SetType: got %q, want REST", set.SetType)
+	}
+}
+
+func TestExerciseSetFrom_RepsZeroSurvivesJSONMarshal(t *testing.T) {
+	// Observed live: device detected the exercise but didn't count reps for
+	// it — a real 0, not the same as a REST set having no reps at all. Must
+	// not be dropped by omitempty the way a plain float64 would be.
+	row := map[string]any{
+		"activity_id": "21711179290",
+		"set_index":   "8",
+		"time":        "2026-01-30T14:35:17Z",
+		"category":    "PLANK",
+		"duration_s":  float64(40),
+		"reps":        float64(0),
+		"set_type":    "ACTIVE",
+	}
+
+	set := garmin.ExerciseSetFrom(row)
+	if set.Reps == nil || *set.Reps != 0 {
+		t.Fatalf("Reps: got %v, want a non-nil pointer to 0", set.Reps)
+	}
+
+	b, err := json.Marshal(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := decoded["reps"]; !ok || v != float64(0) {
+		t.Errorf("JSON reps: got %v (present=%v), want 0", v, ok)
 	}
 }

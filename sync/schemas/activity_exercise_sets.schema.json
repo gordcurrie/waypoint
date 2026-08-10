@@ -58,7 +58,7 @@
           },
           "messageIndex": {
             "type": "integer",
-            "description": "Not consumed — a single running counter across the whole activity (0..N-1, gap-free), unlike wktStepIndex. Would be the natural per-set tag if this ever needs deduping/joining, but sync_activity_details doesn't currently tag on it."
+            "description": "Consumed as the set_index tag — a single running counter across the whole activity (0..N-1, gap-free), unlike wktStepIndex, so it's the natural per-set identity/ordering key. Falls back to 0 if ever absent (not observed in the captured sample)."
           }
         },
         "additionalProperties": true
