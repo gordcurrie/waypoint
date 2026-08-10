@@ -313,13 +313,14 @@ func queryMeasurementRange(ctx context.Context, client influxClient, measurement
 // the other's detail.
 func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.TrainingPlanTask) []garmin.ScheduledWorkout {
 	byKey := make(map[string]garmin.TrainingPlanTask, len(tasks))
-	for _, t := range tasks {
-		byKey[planTaskKey(t.Date, t.Sport)] = t
+	for i := range tasks {
+		byKey[planTaskKey(tasks[i].Date, tasks[i].Sport)] = tasks[i]
 	}
 
 	merged := make([]garmin.ScheduledWorkout, 0, len(workouts)+len(tasks))
 	seen := make(map[string]bool, len(workouts))
-	for _, w := range workouts {
+	for i := range workouts {
+		w := workouts[i]
 		key := planTaskKey(w.Date, w.Sport)
 		if t, ok := byKey[key]; ok && w.WorkoutID == 0 {
 			w.DistanceM = t.DistanceM
@@ -336,7 +337,8 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 		merged = append(merged, w)
 		seen[key] = true
 	}
-	for _, t := range tasks {
+	for i := range tasks {
+		t := tasks[i]
 		if seen[planTaskKey(t.Date, t.Sport)] {
 			continue
 		}
