@@ -392,10 +392,19 @@ func planTaskKey(date, sport string) string {
 // a stable, non-churning id, so duplicate detection isn't needed and collapsing two
 // distinct same-day-same-name self-created workouts would be a real, if rare, data
 // loss. Only entries with WorkoutID == 0 (coach-plan-sourced or a synthesized rest
-// day, per ScheduledWorkout's own doc comment) are deduped by (date, sport, name) —
-// content-identical by construction, so which one survives doesn't matter.
+// day, per ScheduledWorkout's own doc comment) are deduped by (date, sport, name).
+//
+// Content is otherwise identical by construction, but ScheduledID isn't: a stale
+// ghost can carry a nonzero, since-churned scheduled_id (leaked from a pre-#85
+// misclassification — see this function's own doc comment above), while the
+// correctly-tagged current point always has ScheduledID == 0. Picking an arbitrary
+// survivor could leak that stale id back to callers, contradicting
+// get_scheduled_workouts' own documented contract ("scheduled_id is also 0 for
+// coach/training-plan-assigned workouts generally") — so a ScheduledID == 0 entry
+// always wins over one with a nonzero ScheduledID when both exist for the same key.
 func dedupeGhostCoachPlanEntries(workouts []garmin.ScheduledWorkout) []garmin.ScheduledWorkout {
-	seen := make(map[string]bool, len(workouts))
+	chosen := make(map[string]garmin.ScheduledWorkout, len(workouts))
+	keyOrder := make([]string, 0, len(workouts))
 	deduped := make([]garmin.ScheduledWorkout, 0, len(workouts))
 	for i := range workouts {
 		w := workouts[i]
@@ -404,11 +413,18 @@ func dedupeGhostCoachPlanEntries(workouts []garmin.ScheduledWorkout) []garmin.Sc
 			continue
 		}
 		key := planTaskKey(w.Date, w.Sport) + "|" + w.Name
-		if seen[key] {
+		existing, ok := chosen[key]
+		if !ok {
+			keyOrder = append(keyOrder, key)
+			chosen[key] = w
 			continue
 		}
-		seen[key] = true
-		deduped = append(deduped, w)
+		if existing.ScheduledID != 0 && w.ScheduledID == 0 {
+			chosen[key] = w
+		}
+	}
+	for _, key := range keyOrder {
+		deduped = append(deduped, chosen[key])
 	}
 	return deduped
 }
