@@ -45,7 +45,7 @@ func TestExerciseSetFrom(t *testing.T) {
 	if set.Reps == nil || *set.Reps != 8 {
 		t.Errorf("Reps: got %v, want 8", set.Reps)
 	}
-	if set.WeightKg != 20 {
+	if set.WeightKg == nil || *set.WeightKg != 20 {
 		t.Errorf("WeightKg: got %v, want 20", set.WeightKg)
 	}
 	if set.SetType != "ACTIVE" {
@@ -104,5 +104,36 @@ func TestExerciseSetFrom_RepsZeroSurvivesJSONMarshal(t *testing.T) {
 	}
 	if v, ok := decoded["reps"]; !ok || v != float64(0) {
 		t.Errorf("JSON reps: got %v (present=%v), want 0", v, ok)
+	}
+}
+
+func TestExerciseSetFrom_WeightKgZeroSurvivesJSONMarshal(t *testing.T) {
+	// A bodyweight-only exercise can log an explicit 0 kg — a real value, not
+	// the same as no weight ever having been logged at all.
+	row := map[string]any{
+		"activity_id": "21711179290",
+		"set_index":   "0",
+		"time":        "2026-01-30T14:31:18Z",
+		"category":    "LUNGE",
+		"duration_s":  float64(40),
+		"weight_kg":   float64(0),
+		"set_type":    "ACTIVE",
+	}
+
+	set := garmin.ExerciseSetFrom(row)
+	if set.WeightKg == nil || *set.WeightKg != 0 {
+		t.Fatalf("WeightKg: got %v, want a non-nil pointer to 0", set.WeightKg)
+	}
+
+	b, err := json.Marshal(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := decoded["weight_kg"]; !ok || v != float64(0) {
+		t.Errorf("JSON weight_kg: got %v (present=%v), want 0", v, ok)
 	}
 }

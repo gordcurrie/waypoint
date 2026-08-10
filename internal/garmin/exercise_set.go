@@ -11,12 +11,13 @@ type ExerciseSet struct {
 	Category     string    `json:"category,omitempty"`
 	ExerciseName string    `json:"exercise_name,omitempty"`
 	DurationS    float64   `json:"duration_s,omitempty"`
-	// Reps is a pointer: 0 is a real, meaningful value (device detected the
-	// exercise but didn't count reps for it — observed live), distinct from
-	// absent (REST sets have no reps at all). Use floatPtrFrom instead of
-	// floatFrom for the same reason it exists on hrv.go's Status field.
+	// Reps and WeightKg are pointers: 0 is a real, meaningful value (a device
+	// can detect the exercise but not count reps for it, or log an explicit
+	// 0 kg on a bodyweight-only exercise), distinct from absent (REST sets
+	// have neither at all). Use floatPtrFrom instead of floatFrom for the
+	// same reason it exists on hrv.go's Status field.
 	Reps     *float64 `json:"reps,omitempty"`
-	WeightKg float64  `json:"weight_kg,omitempty"`
+	WeightKg *float64 `json:"weight_kg,omitempty"`
 	SetType  string   `json:"set_type,omitempty"`
 }
 
@@ -32,7 +33,7 @@ func ExerciseSetFrom(row map[string]any) ExerciseSet {
 		ExerciseName: stringFrom(row, "exercise_name"),
 		DurationS:    roundF(floatFrom(row, "duration_s")),
 		Reps:         roundFPtr(floatPtrFrom(row, "reps")),
-		WeightKg:     roundF(floatFrom(row, "weight_kg")),
+		WeightKg:     roundFPtr(floatPtrFrom(row, "weight_kg")),
 		SetType:      stringFrom(row, "set_type"),
 	}
 }
