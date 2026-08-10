@@ -675,7 +675,8 @@ def sync_lactate_threshold(garmin: Garmin, client: InfluxDBClient3, state: dict[
 
 
 def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
-    """Fetch per-lap splits and HR zone distribution for each recent activity."""
+    """Fetch per-lap splits, HR zone distribution, and (strength_training only) exercise
+    sets for each recent activity."""
     start = _last_synced(state, "activity_details")
     end = date.today()
     log.info("activity_details: %s → %s", start, end)
@@ -775,6 +776,64 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
             log.warning("activity_hr_zones %s: %s", activity_id, exc)
 
         time.sleep(0.3)
+
+        # Exercise sets (strength_training only — #42; not present in the summary
+        # response at all, needs this separate call, and only meaningful for this
+        # activity type).
+        #
+        # API shape (verified 2026-08-09 against a real 43-set activity, see
+        # sync/schemas/activity_exercise_sets.schema.json):
+        # {"activityId": ..., "exerciseSets": [
+        #   {"exercises": [{"category": "LUNGE", "name": "LUNGE", "probability": 99.6}, ...],
+        #    "duration": 40.0, "repetitionCount": 6 | null, "weight": null,
+        #    "setType": "ACTIVE" | "REST", "startTime": "<GMT, matches startTimeGMT format>",
+        #    "wktStepIndex": ..., "messageIndex": ...}, ...]}
+        # exercises is a ranked list of ML candidates (top one used here) — every captured
+        # set had all candidates identical at ~99.6% probability, i.e. never actually
+        # ambiguous in this account's sample. repetitionCount is null on REST, sometimes a
+        # real 0 on ACTIVE (device detected the exercise but didn't count reps). weight has
+        # always been null — no device in this account ever logged one.
+        if (a.get("activityType") or {}).get("typeKey") == "strength_training":
+            try:
+                detail = garmin.get_activity_exercise_sets(str(activity_id)) or {}
+                for exercise_set in detail.get("exerciseSets") or []:
+                    set_ts_str = exercise_set.get("startTime")
+                    try:
+                        set_ts = _parse_gmt(set_ts_str) if set_ts_str else activity_ts
+                    except Exception:
+                        set_ts = activity_ts
+                    msg_idx = exercise_set.get("messageIndex")
+                    p = (
+                        Point("activity_exercise_set")
+                        .tag("activity_id", str(activity_id))
+                        .tag("set_index", str(msg_idx if msg_idx is not None else 0))
+                        .time(set_ts)
+                    )
+                    exercises = exercise_set.get("exercises") or []
+                    top = exercises[0] if exercises else {}
+                    exercise_fields: dict[str, Any] = {
+                        "category": top.get("category"),
+                        "exercise_name": top.get("name"),
+                        "duration_s": _fval(exercise_set, "duration"),
+                        "reps": _fval(exercise_set, "repetitionCount"),
+                        "weight_kg": _fval(exercise_set, "weight"),
+                        "set_type": exercise_set.get("setType"),
+                    }
+                    p, n = _add_fields(p, exercise_fields)
+                    if n:
+                        points.append(p)
+            except (
+                GarminConnectAuthenticationError,
+                GarminConnectTooManyRequestsError,
+                GarminConnectConnectionError,
+            ):
+                raise
+            except Exception as exc:
+                if _first_err is None:
+                    _first_err = activity_date
+                log.warning("activity_exercise_sets %s: %s", activity_id, exc)
+
+            time.sleep(0.3)
 
     watermark = max((_first_err - timedelta(days=1)) if _first_err else end, start)
     _write(client, points)

@@ -879,11 +879,13 @@ def _make_details_garmin(
     activities: list,
     splits: dict | None = None,
     hr_zones: list | None = None,
+    exercise_sets: dict | None = None,
 ) -> MagicMock:
     g = MagicMock()
     g.get_activities_by_date.return_value = activities
     g.get_activity_splits.return_value = splits or {}
     g.get_activity_hr_in_timezones.return_value = hr_zones or []
+    g.get_activity_exercise_sets.return_value = exercise_sets or {}
     return g
 
 
@@ -1000,6 +1002,56 @@ def test_activity_details_hr_zones_dict_payload():
     written = _written_points(client)
     zone_points = [p for p in written if "activity_hr_zones" in str(p)]
     assert len(zone_points) == 1
+
+
+@freeze_time("2026-01-30")
+def test_activity_details_writes_exercise_set_points_for_strength_training():
+    """Shape verified live 2026-08-09 against a real strength_training activity (#42)."""
+    exercise_sets = {
+        "exerciseSets": [
+            {
+                "exercises": [{"category": "LUNGE", "name": "LUNGE", "probability": 99.6}],
+                "duration": 40.0,
+                "repetitionCount": 6,
+                "weight": None,
+                "setType": "ACTIVE",
+                "startTime": "2026-01-30 14:34:17",
+                "messageIndex": 6,
+            },
+            {
+                "exercises": [],
+                "duration": 20.0,
+                "repetitionCount": None,
+                "weight": None,
+                "setType": "REST",
+                "startTime": "2026-01-30 14:34:57",
+                "messageIndex": 7,
+            },
+        ]
+    }
+    garmin = _make_details_garmin(
+        [_activity_stub(sport="strength_training")], exercise_sets=exercise_sets
+    )
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, {})
+    written = _written_points(client)
+    set_points = [p for p in written if "activity_exercise_set" in str(p)]
+    assert len(set_points) == 2
+    active = next(p for p in set_points if 'set_type="ACTIVE"' in str(p))
+    assert 'category="LUNGE"' in str(active)
+    assert "reps=6" in str(active)
+    rest = next(p for p in set_points if 'set_type="REST"' in str(p))
+    assert "category=" not in str(rest)
+
+
+@freeze_time("2026-07-06")
+def test_activity_details_skips_exercise_sets_for_non_strength_activities():
+    garmin = _make_details_garmin([_activity_stub(sport="running")])
+    client = MagicMock()
+    with patch.object(sync, "_save_state"):
+        sync.sync_activity_details(garmin, client, {})
+    garmin.get_activity_exercise_sets.assert_not_called()
 
 
 @freeze_time("2026-07-06")
