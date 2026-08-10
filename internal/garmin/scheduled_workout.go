@@ -19,6 +19,11 @@ type ScheduledWorkout struct {
 	Description string  `json:"description,omitempty"`
 	RestDay     bool    `json:"rest_day,omitempty"`
 	Phase       string  `json:"phase,omitempty"`
+	// TargetType/TargetLo/TargetHi (#97): the real prescribed range behind
+	// Description's flat summary — see TrainingPlanTask's doc comment.
+	TargetType string  `json:"target_type,omitempty"`
+	TargetLo   float64 `json:"target_lo,omitempty"`
+	TargetHi   float64 `json:"target_hi,omitempty"`
 }
 
 // ScheduledWorkoutFrom converts a query row from the "scheduled_workout" measurement.

@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/fbt_adaptive_workout.schema.json",
+  "title": "Coach-plan workout detail (GET workout-service/fbt-adaptive/<workoutUuid>)",
+  "description": "Not wrapped by garminconnect — called directly via garmin.connectapi(f\"workout-service/fbt-adaptive/{uuid}\") (same connectapi-direct pattern as fitness_age.schema.json; drop the /gc-api gateway prefix the Garmin Connect page itself uses). workoutUuid comes from get_adaptive_training_plan_by_id's taskList[].taskWorkout.workoutUuid. Same overall shape as create_workout's own upload/get_workout_by_id response (workout_upload.schema.json) but this is the coach's real prescribed target detail — the source sync_training_plan's flat workoutDescription string (e.g. \"137bpm\") summarizes, but doesn't replace: 137 is the midpoint of a 124-149bpm range, not a hard cap (#97).\n\nVerified against 3 real tasks, 2026-08-09: a single-step HR-zone run (Long Run, 124-149bpm), a 3-step pace-zone tempo run (Threshold: warmup/interval/cooldown, each with its own pace range — the interval step's range is the one that matters, not warmup/cooldown), and a strength RepeatGroupDTO (Total Body Circuit, no.target throughout, category/exerciseName same shape as create_workout's own steps). No rest-day sample captured — sync_training_plan does not currently fetch this endpoint for rest-day tasks (skipped entirely, since a rest day has no target to enrich), so that gap is intentionally out of scope rather than guessed at.",
+  "type": "object",
+  "properties": {
+    "workoutName": {
+      "type": "string"
+    },
+    "description": {
+      "type": ["string", "null"],
+      "description": "Same flat summary as taskWorkout.workoutDescription elsewhere (e.g. \"137bpm\") — not consumed here, sync_training_plan already has this from get_adaptive_training_plan_by_id directly."
+    },
+    "sportType": {
+      "type": "object",
+      "properties": {
+        "sportTypeId": { "type": "integer" },
+        "sportTypeKey": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "workoutUuid": {
+      "type": "string",
+      "description": "Matches the workoutUuid used to fetch this endpoint."
+    },
+    "estimatedDurationInSecs": {
+      "type": ["number", "null"]
+    },
+    "estimatedDistanceInMeters": {
+      "type": ["number", "null"]
+    },
+    "workoutSegments": {
+      "type": "array",
+      "description": "One segment observed in every captured sample.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "segmentOrder": { "type": "integer" },
+          "workoutSteps": {
+            "type": "array",
+            "description": "ExecutableStepDTO entries directly, or one RepeatGroupDTO wrapping them (strength workouts) — same two shapes as workout_upload.schema.json's executableStep/repeatGroup. sync_training_plan picks the first ExecutableStepDTO step of stepType interval with a non-\"no.target\" targetType as \"the\" workout target (falling back to the first step with any real target at all) — a multi-step workout's warmup/cooldown legitimately carry a different, wider pace/HR range than its main interval, and the interval is what the coach's flat description string actually refers to.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "enum": ["ExecutableStepDTO", "RepeatGroupDTO"]
+                },
+                "stepOrder": { "type": "integer" },
+                "stepType": {
+                  "type": "object",
+                  "properties": {
+                    "stepTypeId": { "type": "integer" },
+                    "stepTypeKey": { "type": "string" }
+                  },
+                  "additionalProperties": true
+                },
+                "endCondition": {
+                  "type": "object",
+                  "properties": {
+                    "conditionTypeId": { "type": "integer" },
+                    "conditionTypeKey": { "type": "string" }
+                  },
+                  "additionalProperties": true
+                },
+                "endConditionValue": {
+                  "type": ["number", "null"]
+                },
+                "targetType": {
+                  "oneOf": [
+                    { "type": "null" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "workoutTargetTypeId": { "type": "integer" },
+                        "workoutTargetTypeKey": {
+                          "enum": ["no.target", "heart.rate.zone", "pace.zone"],
+                          "description": "no.target on strength steps and null-targetType steps; heart.rate.zone (id 4) or pace.zone (id 6, not previously seen elsewhere in this codebase) on running steps."
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "targetValueOne": {
+                  "description": "Meaning depends on targetType: bpm (upper... actually lower, see targetValueTwo) bound for heart.rate.zone (observed 124 for a 124-149bpm range — targetValueOne is the LOW bound), m/s pace bound for pace.zone (observed 2.972 warmup / 3.555 interval — targetValueOne is the FASTER, i.e. numerically higher, m/s bound, which is the low end of the pace-per-km range), null for no.target/null targetType."
+                },
+                "targetValueTwo": {
+                  "description": "Paired with targetValueOne: bpm HIGH bound for heart.rate.zone (149 in the captured sample), the SLOWER (numerically lower) m/s bound for pace.zone (2.638 warmup / 3.277 interval), null otherwise."
+                },
+                "category": {
+                  "description": "Exercise catalog category on strength steps (e.g. \"TOTAL_BODY\"), null otherwise — same convention as workout_upload.schema.json."
+                },
+                "exerciseName": {
+                  "description": "Paired with category, e.g. \"SQUAT_THRUSTS\"."
+                },
+                "numberOfIterations": {
+                  "type": ["integer", "null"],
+                  "description": "RepeatGroupDTO only — set count."
+                },
+                "workoutSteps": {
+                  "type": "array",
+                  "description": "RepeatGroupDTO's children — same ExecutableStepDTO shape as this array's own items, one level deeper."
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
