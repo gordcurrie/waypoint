@@ -254,6 +254,7 @@ func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) 
 	for _, row := range rows {
 		workouts = append(workouts, garmin.ScheduledWorkoutFrom(row))
 	}
+	workouts = dedupeGhostCoachPlanEntries(workouts)
 
 	planRows, err := queryMeasurementRange(ctx, client, influx.MeasurementTrainingPlanTask, start, end)
 	if err != nil {
@@ -371,4 +372,59 @@ func mergeTrainingPlanDetail(workouts []garmin.ScheduledWorkout, tasks []garmin.
 
 func planTaskKey(date, sport string) string {
 	return date + "|" + sport
+}
+
+// dedupeGhostCoachPlanEntries collapses stale duplicate scheduled_workout points for
+// the same coach-plan item down to one.
+//
+// sync_scheduled_workouts tags coach-plan items by (sport, workout_name) specifically
+// so the plan regenerating the same logical workout under a new calendar-item id
+// doesn't pile up ghost duplicates (#85, since InfluxDB 3 Core has no DELETE to clean
+// old points up). That fix only stops new duplicates from being written — it can't
+// retroactively fix points written by older code before the fix existed. Found live
+// 2026-08-10: a single real coach-plan item ("Threshold", 2026-08-11) had 5 points in
+// InfluxDB — 4 stale ones from pre-#85 runs (each with a since-churned scheduled_id
+// tag, content otherwise identical) plus 1 correctly (sport, workout_name)-tagged
+// current one — because those old runs classified this same live item as
+// self-created (scheduled_id) instead of coach-plan.
+//
+// Self-created workouts (WorkoutID != 0) are never touched: those legitimately keep
+// a stable, non-churning id, so duplicate detection isn't needed and collapsing two
+// distinct same-day-same-name self-created workouts would be a real, if rare, data
+// loss. Only entries with WorkoutID == 0 (coach-plan-sourced or a synthesized rest
+// day, per ScheduledWorkout's own doc comment) are deduped by (date, sport, name).
+//
+// Content is otherwise identical by construction, but ScheduledID isn't: a stale
+// ghost can carry a nonzero, since-churned scheduled_id (leaked from a pre-#85
+// misclassification — see this function's own doc comment above), while the
+// correctly-tagged current point always has ScheduledID == 0. Picking an arbitrary
+// survivor could leak that stale id back to callers, contradicting
+// get_scheduled_workouts' own documented contract ("scheduled_id is also 0 for
+// coach/training-plan-assigned workouts generally") — so a ScheduledID == 0 entry
+// always wins over one with a nonzero ScheduledID when both exist for the same key.
+func dedupeGhostCoachPlanEntries(workouts []garmin.ScheduledWorkout) []garmin.ScheduledWorkout {
+	chosen := make(map[string]garmin.ScheduledWorkout, len(workouts))
+	keyOrder := make([]string, 0, len(workouts))
+	deduped := make([]garmin.ScheduledWorkout, 0, len(workouts))
+	for i := range workouts {
+		w := workouts[i]
+		if w.WorkoutID != 0 {
+			deduped = append(deduped, w)
+			continue
+		}
+		key := planTaskKey(w.Date, w.Sport) + "|" + w.Name
+		existing, ok := chosen[key]
+		if !ok {
+			keyOrder = append(keyOrder, key)
+			chosen[key] = w
+			continue
+		}
+		if existing.ScheduledID != 0 && w.ScheduledID == 0 {
+			chosen[key] = w
+		}
+	}
+	for _, key := range keyOrder {
+		deduped = append(deduped, chosen[key])
+	}
+	return deduped
 }
