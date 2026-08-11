@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -66,10 +67,53 @@ func registerSplitTools(s *mcp.Server, client influxClient) {
 	})
 }
 
-func queryActivitySplits(ctx context.Context, client influxClient, activityID int64) ([]garmin.Lap, error) {
+// activityLookupHorizon bounds the initial activity_id -> date lookup itself
+// (#95) — the "activity" measurement has far fewer rows than the per-activity
+// detail measurements (one row per activity vs. many per activity), so it hits
+// InfluxDB 3 Core's file-scan limit much later, but an unbounded query against
+// it would eventually hit the same wall. 2 years comfortably covers anything
+// these detail tools are realistically asked about.
+const activityLookupHorizon = 2 * 365 * 24 * time.Hour
+
+// activityTimeWindow resolves activityID's own timestamp (a single bounded query
+// against the small "activity" measurement) and returns a window around it,
+// wide enough to contain every point written for that activity (laps/HR-zones/
+// exercise-sets are all timestamped within the activity's own duration, plus a
+// day of slack either side for any timezone-adjacent edge case) without scanning
+// the detail measurement's entire history.
+//
+// #95: get_activity_splits/hr_zones/exercise_sets previously queried
+// activity_lap/activity_hr_zones/activity_exercise_set filtered only by
+// activity_id, with no time bound at all — InfluxDB 3 Core partitions by time
+// and can't prune on a non-time predicate, so this scanned every Parquet file
+// in the table's entire history and started failing live once that file count
+// passed InfluxDB's scan limit (432 files on a real activity, 2026-08-09).
+func activityTimeWindow(ctx context.Context, client influxClient, activityID int64) (time.Time, time.Time, error) {
+	start := time.Now().UTC().Add(-activityLookupHorizon)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE activity_id = '%d' ORDER BY time ASC",
+		"SELECT * FROM %s WHERE activity_id = '%d' AND time >= '%s' ORDER BY time DESC LIMIT 1",
+		influx.MeasurementActivity, activityID, start.Format(time.RFC3339),
+	)
+	rows, err := client.Query(ctx, sql)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("look up activity %d date: %w", activityID, err)
+	}
+	if len(rows) == 0 {
+		return time.Time{}, time.Time{}, fmt.Errorf("activity %d not found in the last 2 years", activityID)
+	}
+	activityTime := garmin.ActivityFrom(rows[0]).Time
+	return activityTime.Add(-24 * time.Hour), activityTime.Add(24 * time.Hour), nil
+}
+
+func queryActivitySplits(ctx context.Context, client influxClient, activityID int64) ([]garmin.Lap, error) {
+	windowStart, windowEnd, err := activityTimeWindow(ctx, client, activityID)
+	if err != nil {
+		return nil, fmt.Errorf("get_activity_splits: %w", err)
+	}
+	sql := fmt.Sprintf(
+		"SELECT * FROM %s WHERE activity_id = '%d' AND time >= '%s' AND time < '%s' ORDER BY time ASC",
 		influx.MeasurementActivityLap, activityID,
+		windowStart.Format(time.RFC3339), windowEnd.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
@@ -83,13 +127,18 @@ func queryActivitySplits(ctx context.Context, client influxClient, activityID in
 }
 
 func queryActivityExerciseSets(ctx context.Context, client influxClient, activityID int64) ([]garmin.ExerciseSet, error) {
+	windowStart, windowEnd, err := activityTimeWindow(ctx, client, activityID)
+	if err != nil {
+		return nil, fmt.Errorf("get_activity_exercise_sets: %w", err)
+	}
 	// set_index (messageIndex) breaks ties on time — sync.py falls back to the
 	// activity's own start time when a set's startTime is missing/unparseable,
 	// which can put more than one set at the same timestamp. Cast: set_index is
 	// stored as a string tag, so a plain ORDER BY would sort "10" before "2".
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE activity_id = '%d' ORDER BY time ASC, CAST(set_index AS BIGINT) ASC",
+		"SELECT * FROM %s WHERE activity_id = '%d' AND time >= '%s' AND time < '%s' ORDER BY time ASC, CAST(set_index AS BIGINT) ASC",
 		influx.MeasurementActivityExerciseSet, activityID,
+		windowStart.Format(time.RFC3339), windowEnd.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
@@ -103,9 +152,14 @@ func queryActivityExerciseSets(ctx context.Context, client influxClient, activit
 }
 
 func queryActivityHRZones(ctx context.Context, client influxClient, activityID int64) (*garmin.ActivityHRZones, error) {
+	windowStart, windowEnd, err := activityTimeWindow(ctx, client, activityID)
+	if err != nil {
+		return nil, fmt.Errorf("get_activity_hr_zones: %w", err)
+	}
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE activity_id = '%d' ORDER BY time DESC LIMIT 1",
+		"SELECT * FROM %s WHERE activity_id = '%d' AND time >= '%s' AND time < '%s' ORDER BY time DESC LIMIT 1",
 		influx.MeasurementActivityHRZones, activityID,
+		windowStart.Format(time.RFC3339), windowEnd.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {
