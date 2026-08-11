@@ -102,6 +102,13 @@ func activityTimeWindow(ctx context.Context, client influxClient, activityID int
 		return time.Time{}, time.Time{}, fmt.Errorf("activity %d not found in the last 2 years", activityID)
 	}
 	activity := garmin.ActivityFrom(rows[0])
+	if activity.Time.IsZero() {
+		// A row with an unparseable/missing time would otherwise produce a
+		// window anchored at year 0001 — narrow (still time-bounded, so not a
+		// return to #95's unbounded scan) but nonsensical, silently returning
+		// zero detail rows instead of surfacing that something is actually wrong.
+		return time.Time{}, time.Time{}, fmt.Errorf("activity %d row has no parseable time", activityID)
+	}
 	// Window end tracks the activity's own duration (not a flat +24h) so an
 	// ultra/expedition-length activity doesn't silently lose laps/HR-zone/
 	// exercise-set points past a fixed cutoff — padded generously on both sides

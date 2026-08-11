@@ -88,6 +88,25 @@ func TestQueryActivitySplits_ActivityNotFound(t *testing.T) {
 	}
 }
 
+func TestActivityTimeWindow_UnparseableActivityTimeIsAnError(t *testing.T) {
+	// A row with a missing/unparseable time would otherwise produce a window
+	// anchored at year 0001 — still technically bounded (not #95's unbounded
+	// scan), but nonsensical, and would silently return zero detail rows
+	// instead of surfacing that something is actually wrong.
+	client := &mockClient{
+		queryFn: func(_ context.Context, sql string) ([]map[string]any, error) {
+			if strings.Contains(sql, "FROM activity WHERE") {
+				return []map[string]any{{"activity_id": "123456"}}, nil // no "time" key at all
+			}
+			return nil, errors.New("detail query should not run when the activity's own time can't be parsed")
+		},
+	}
+	_, err := queryActivitySplits(context.Background(), client, 123456)
+	if err == nil {
+		t.Fatal("want error when the activity row has no parseable time")
+	}
+}
+
 func TestQueryActivityHRZones_Empty(t *testing.T) {
 	client := activityDetailMockClient(123456, time.Now().UTC(), nil, nil)
 	zones, err := queryActivityHRZones(context.Background(), client, 123456)
@@ -186,27 +205,51 @@ func TestActivityTimeWindow_QueriesAreBoundedByTime(t *testing.T) {
 	// carry a time bound — an unbounded activity_id-only filter forces InfluxDB 3
 	// Core to scan every Parquet file in the table's history, which fails once
 	// the file count passes its scan limit (hit live at 432 files, 2026-08-09).
+	// Covers all three per-activity-detail tools, not just get_activity_splits —
+	// each goes through its own SQL-building path (different measurement, ORDER
+	// BY clause, and row-conversion function via queryActivityDetailRows).
 	now := time.Now().UTC()
-	var sqls []string
-	client := &mockClient{
-		queryFn: func(_ context.Context, sql string) ([]map[string]any, error) {
-			sqls = append(sqls, sql)
-			if strings.Contains(sql, "FROM activity WHERE") {
-				return []map[string]any{{"activity_id": "123456", "time": now.Format(time.RFC3339)}}, nil
+	calls := []struct {
+		name string
+		run  func(client influxClient) error
+	}{
+		{"queryActivitySplits", func(client influxClient) error {
+			_, err := queryActivitySplits(context.Background(), client, 123456)
+			return err
+		}},
+		{"queryActivityHRZones", func(client influxClient) error {
+			_, err := queryActivityHRZones(context.Background(), client, 123456)
+			return err
+		}},
+		{"queryActivityExerciseSets", func(client influxClient) error {
+			_, err := queryActivityExerciseSets(context.Background(), client, 123456)
+			return err
+		}},
+	}
+	for _, c := range calls {
+		t.Run(c.name, func(t *testing.T) {
+			var sqls []string
+			client := &mockClient{
+				queryFn: func(_ context.Context, sql string) ([]map[string]any, error) {
+					sqls = append(sqls, sql)
+					if strings.Contains(sql, "FROM activity WHERE") {
+						return []map[string]any{{"activity_id": "123456", "time": now.Format(time.RFC3339)}}, nil
+					}
+					return nil, nil
+				},
 			}
-			return nil, nil
-		},
-	}
-	if _, err := queryActivitySplits(context.Background(), client, 123456); err != nil {
-		t.Fatal(err)
-	}
-	if len(sqls) != 2 {
-		t.Fatalf("want 2 queries (activity lookup + bounded detail query), got %d: %v", len(sqls), sqls)
-	}
-	for _, sql := range sqls {
-		if !strings.Contains(sql, "time >=") {
-			t.Errorf("query has no time lower bound: %s", sql)
-		}
+			if err := c.run(client); err != nil {
+				t.Fatal(err)
+			}
+			if len(sqls) != 2 {
+				t.Fatalf("want 2 queries (activity lookup + bounded detail query), got %d: %v", len(sqls), sqls)
+			}
+			for _, sql := range sqls {
+				if !strings.Contains(sql, "time >=") {
+					t.Errorf("query has no time lower bound: %s", sql)
+				}
+			}
+		})
 	}
 }
 
