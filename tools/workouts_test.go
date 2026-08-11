@@ -722,6 +722,24 @@ func TestQueryWorkoutDetail_ReturnsDetail(t *testing.T) {
 	}
 }
 
+func TestQueryWorkoutDetail_QueryIsBoundedByTime(t *testing.T) {
+	// #95's follow-up: queryWorkoutDetail had the same unbounded activity/
+	// workout-id-only WHERE clause that broke get_activity_splits live.
+	var sql string
+	client := &mockClient{
+		queryFn: func(_ context.Context, q string) ([]map[string]any, error) {
+			sql = q
+			return nil, nil
+		},
+	}
+	if _, err := queryWorkoutDetail(context.Background(), client, 123); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sql, "time >=") {
+		t.Errorf("query has no time lower bound: %s", sql)
+	}
+}
+
 func TestQueryWorkoutDetail_NoRowsReturnsNil(t *testing.T) {
 	client := &mockClient{rows: nil}
 	detail, err := queryWorkoutDetail(context.Background(), client, 999)

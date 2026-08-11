@@ -269,9 +269,16 @@ func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) 
 }
 
 func queryWorkoutDetail(ctx context.Context, client influxClient, workoutID int64) (*garmin.WorkoutDetail, error) {
+	// Time-bounded for the same reason as tools/splits.go's activityTimeWindow
+	// (#95) — an unbounded activity/workout-id-only filter forces InfluxDB 3 Core
+	// to scan the table's entire history. workout_detail is written by
+	// sync.py's Point(...).time(datetime.now(UTC)) (sync time, not event time),
+	// so there's no smaller sibling measurement to look the real timestamp up in
+	// first; a generous flat lookback bound is the direct equivalent instead.
+	start := time.Now().UTC().Add(-activityLookupHorizon)
 	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE workout_id = '%d' ORDER BY time DESC LIMIT 1",
-		influx.MeasurementWorkoutDetail, workoutID,
+		"SELECT * FROM %s WHERE workout_id = '%d' AND time >= '%s' ORDER BY time DESC LIMIT 1",
+		influx.MeasurementWorkoutDetail, workoutID, start.Format(time.RFC3339),
 	)
 	rows, err := client.Query(ctx, sql)
 	if err != nil {

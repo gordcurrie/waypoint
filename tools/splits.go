@@ -101,21 +101,47 @@ func activityTimeWindow(ctx context.Context, client influxClient, activityID int
 	if len(rows) == 0 {
 		return time.Time{}, time.Time{}, fmt.Errorf("activity %d not found in the last 2 years", activityID)
 	}
-	activityTime := garmin.ActivityFrom(rows[0]).Time
-	return activityTime.Add(-24 * time.Hour), activityTime.Add(24 * time.Hour), nil
+	activity := garmin.ActivityFrom(rows[0])
+	// Window end tracks the activity's own duration (not a flat +24h) so an
+	// ultra/expedition-length activity doesn't silently lose laps/HR-zone/
+	// exercise-set points past a fixed cutoff — padded generously on both sides
+	// for clock-skew/timezone-adjacent edge cases, not because detail points are
+	// ever expected outside the activity's own span.
+	pad := 6 * time.Hour
+	duration := time.Duration(activity.DurationS) * time.Second
+	if duration <= 0 {
+		duration = 24 * time.Hour // DurationS missing/zero — fall back to a generous flat window
+	}
+	return activity.Time.Add(-pad), activity.Time.Add(duration).Add(pad), nil
+}
+
+// queryActivityDetailRows resolves activityID's time window (#95) and runs a
+// time-bounded query against a per-activity detail measurement. Centralized so
+// any future per-activity-detail tool goes through the same time-bounding path
+// by construction, rather than copying the SQL shape by hand and risking the
+// same drift that left tools/workouts.go's queryWorkoutDetail unbounded even
+// after this exact pattern was established here.
+func queryActivityDetailRows(
+	ctx context.Context, client influxClient, measurement string, activityID int64, orderClause string,
+) ([]map[string]any, error) {
+	windowStart, windowEnd, err := activityTimeWindow(ctx, client, activityID)
+	if err != nil {
+		return nil, err
+	}
+	sql := fmt.Sprintf(
+		"SELECT * FROM %s WHERE activity_id = '%d' AND time >= '%s' AND time < '%s' %s",
+		measurement, activityID,
+		windowStart.Format(time.RFC3339), windowEnd.Format(time.RFC3339), orderClause,
+	)
+	rows, err := client.Query(ctx, sql)
+	if err != nil {
+		return nil, fmt.Errorf("query %s: %w", measurement, err)
+	}
+	return rows, nil
 }
 
 func queryActivitySplits(ctx context.Context, client influxClient, activityID int64) ([]garmin.Lap, error) {
-	windowStart, windowEnd, err := activityTimeWindow(ctx, client, activityID)
-	if err != nil {
-		return nil, fmt.Errorf("get_activity_splits: %w", err)
-	}
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE activity_id = '%d' AND time >= '%s' AND time < '%s' ORDER BY time ASC",
-		influx.MeasurementActivityLap, activityID,
-		windowStart.Format(time.RFC3339), windowEnd.Format(time.RFC3339),
-	)
-	rows, err := client.Query(ctx, sql)
+	rows, err := queryActivityDetailRows(ctx, client, influx.MeasurementActivityLap, activityID, "ORDER BY time ASC")
 	if err != nil {
 		return nil, fmt.Errorf("get_activity_splits: %w", err)
 	}
@@ -127,20 +153,14 @@ func queryActivitySplits(ctx context.Context, client influxClient, activityID in
 }
 
 func queryActivityExerciseSets(ctx context.Context, client influxClient, activityID int64) ([]garmin.ExerciseSet, error) {
-	windowStart, windowEnd, err := activityTimeWindow(ctx, client, activityID)
-	if err != nil {
-		return nil, fmt.Errorf("get_activity_exercise_sets: %w", err)
-	}
 	// set_index (messageIndex) breaks ties on time — sync.py falls back to the
 	// activity's own start time when a set's startTime is missing/unparseable,
 	// which can put more than one set at the same timestamp. Cast: set_index is
 	// stored as a string tag, so a plain ORDER BY would sort "10" before "2".
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE activity_id = '%d' AND time >= '%s' AND time < '%s' ORDER BY time ASC, CAST(set_index AS BIGINT) ASC",
-		influx.MeasurementActivityExerciseSet, activityID,
-		windowStart.Format(time.RFC3339), windowEnd.Format(time.RFC3339),
+	rows, err := queryActivityDetailRows(
+		ctx, client, influx.MeasurementActivityExerciseSet, activityID,
+		"ORDER BY time ASC, CAST(set_index AS BIGINT) ASC",
 	)
-	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_activity_exercise_sets: %w", err)
 	}
@@ -152,16 +172,9 @@ func queryActivityExerciseSets(ctx context.Context, client influxClient, activit
 }
 
 func queryActivityHRZones(ctx context.Context, client influxClient, activityID int64) (*garmin.ActivityHRZones, error) {
-	windowStart, windowEnd, err := activityTimeWindow(ctx, client, activityID)
-	if err != nil {
-		return nil, fmt.Errorf("get_activity_hr_zones: %w", err)
-	}
-	sql := fmt.Sprintf(
-		"SELECT * FROM %s WHERE activity_id = '%d' AND time >= '%s' AND time < '%s' ORDER BY time DESC LIMIT 1",
-		influx.MeasurementActivityHRZones, activityID,
-		windowStart.Format(time.RFC3339), windowEnd.Format(time.RFC3339),
+	rows, err := queryActivityDetailRows(
+		ctx, client, influx.MeasurementActivityHRZones, activityID, "ORDER BY time DESC LIMIT 1",
 	)
-	rows, err := client.Query(ctx, sql)
 	if err != nil {
 		return nil, fmt.Errorf("get_activity_hr_zones: %w", err)
 	}

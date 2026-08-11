@@ -209,3 +209,31 @@ func TestActivityTimeWindow_QueriesAreBoundedByTime(t *testing.T) {
 		}
 	}
 }
+
+func TestActivityTimeWindow_ExtendsPastFlatCutoffForLongActivities(t *testing.T) {
+	// An earlier version of this fix used a flat +24h window regardless of the
+	// activity's own duration — a >23h activity (ultra race, multi-day tracked
+	// expedition) would silently lose laps/HR-zone/exercise-set points past that
+	// cutoff. duration_s must extend the window instead.
+	activityStart := time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC)
+	durationS := 30 * 3600.0 // 30h — past the old flat 24h window
+	client := activityDetailMockClient(123456, activityStart, nil, nil)
+	client.queryFn = func(_ context.Context, sql string) ([]map[string]any, error) {
+		if strings.Contains(sql, "FROM activity WHERE") {
+			return []map[string]any{{
+				"activity_id": "123456",
+				"time":        activityStart.Format(time.RFC3339),
+				"duration_s":  durationS,
+			}}, nil
+		}
+		return nil, nil
+	}
+	windowStart, windowEnd, err := activityTimeWindow(context.Background(), client, 123456)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lapAt29h := activityStart.Add(29 * time.Hour)
+	if lapAt29h.Before(windowStart) || !lapAt29h.Before(windowEnd) {
+		t.Errorf("a point 29h into a 30h activity must fall inside [%v, %v), got point at %v", windowStart, windowEnd, lapAt29h)
+	}
+}
