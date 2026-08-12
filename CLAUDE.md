@@ -116,6 +116,23 @@ in the background — but only under `--transport=http`. `stdio` mode is spawned
 Claude session and never lives long enough for a background loop to matter, so it's skipped
 there; `get_training_load`'s own `write_back=true` still works in both modes.
 
+### Every InfluxDB query filtered by activity_id (or any non-time predicate) must also bound time
+InfluxDB 3 Core partitions data by time and can't prune Parquet files on a non-time predicate —
+an `activity_id`-only `WHERE` clause forces a scan of the *entire table history*. `get_activity_splits`
+failed live with this exact error (#95, 2026-08-09, real activity, 432 files scanned):
+```
+Query would scan 432 Parquet files, exceeding the file limit.
+```
+Not a one-off: the file count only grows as history accumulates, so any per-activity detail query
+(`activity_lap`, `activity_hr_zones`, `activity_exercise_set` — anything with many rows per
+activity) will eventually hit this regardless of which activity_id is queried. Fixed via
+`tools/splits.go`'s `activityTimeWindow`: one bounded lookup against the much smaller `activity`
+measurement (one row per activity, so it hits the same wall far later — bounded defensively to a
+2-year lookback rather than left fully unbounded) resolves the activity's own timestamp, then the
+detail query is scoped to a ±1-day window around it. Any new per-activity-detail tool must follow
+this pattern — a bare `WHERE activity_id = '...'` with no time bound is a ticking time bomb, not
+a one-time bug.
+
 ## Build order (current: Phase 3, not started)
 
 1. ~~Docker Compose — InfluxDB 3 Core + Grafana + sync placeholder~~ ✓ done
