@@ -356,6 +356,9 @@
       "fastestSplit_5000": {
         "type": "number"
       },
+      "fastestSplit_10000": {
+        "type": "number"
+      },
       "hrTimeInZone_1": {
         "type": "number"
       },
