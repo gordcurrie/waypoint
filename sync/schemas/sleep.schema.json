@@ -413,7 +413,8 @@
           "type": "number"
         },
         "averageSpO2HR": {
-          "type": "number"
+          "type": ["number", "null"],
+          "description": "Observed null live 2026-08-14 14:15-21:48 (get_sleep_data), self-resolved by 2026-08-15 05:20."
         },
         "lowestSPO2": {
           "type": "integer"
