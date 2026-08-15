@@ -59,7 +59,8 @@
           "type": "integer"
         },
         "heatTrend": {
-          "type": "string"
+          "type": ["string", "null"],
+          "description": "Observed null live 2026-08-15 (get_training_status)."
         },
         "altitudeTrend": {
           "description": "observed null in captured sample"
