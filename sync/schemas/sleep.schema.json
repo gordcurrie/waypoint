@@ -319,7 +319,8 @@
               "type": "integer"
             },
             "lastSleepMidpointMins": {
-              "type": "integer"
+              "type": ["integer", "null"],
+              "description": "Observed null live 2026-08-15 (get_sleep_data), early-day before night's sleep processed — self-resolved by 13:22 same day."
             }
           },
           "additionalProperties": true
