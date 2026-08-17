@@ -4,6 +4,10 @@
     "userProfileId": {
       "type": "integer"
     },
+    "displayName": {
+      "type": "string",
+      "description": "Account UUID (e.g. \"b4af342d-d7ff-40d3-a368-6a342cac7ece\"), not a human display name. Observed live 2026-08-17 during early-morning hours (00:10-02:41); intermittently absent at other times, same as the other day-rollover-window fields in this schema. Not currently consumed by sync_daily_stats."
+    },
     "totalKilocalories": {
       "type": ["number", "null"]
     },
