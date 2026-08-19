@@ -40,6 +40,35 @@ func TestScheduledWorkoutFrom(t *testing.T) {
 	}
 }
 
+func TestScheduledWorkoutFrom_DeletedAt(t *testing.T) {
+	row := map[string]any{
+		"time":       "2026-08-17T00:00:00Z",
+		"sport":      "running",
+		"deleted_at": float64(1786900000),
+	}
+	w := garmin.ScheduledWorkoutFrom(row)
+	if w.DeletedAt != 1786900000 {
+		t.Errorf("DeletedAt: got %v, want 1786900000", w.DeletedAt)
+	}
+}
+
+func TestScheduledWorkoutFrom_DeletedAtNotInJSON(t *testing.T) {
+	// DeletedAt is an internal filter signal (#104), not part of the tool's JSON
+	// contract — must never leak to callers even when set.
+	row := map[string]any{
+		"time":       "2026-08-17T00:00:00Z",
+		"sport":      "running",
+		"deleted_at": float64(1786900000),
+	}
+	b, err := json.Marshal(garmin.ScheduledWorkoutFrom(row))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "deleted_at") {
+		t.Errorf("JSON must never contain deleted_at, got: %s", string(b))
+	}
+}
+
 func TestScheduledWorkoutFrom_OptionalFieldsOmitted(t *testing.T) {
 	row := map[string]any{
 		"scheduled_id": "999",

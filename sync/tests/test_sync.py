@@ -1331,6 +1331,66 @@ def test_scheduled_workouts_fbt_adaptive_without_training_plan_id_skipped(no_sle
 
 
 @freeze_time("2026-07-06")
+def test_scheduled_workouts_tombstones_renamed_coach_plan_entry(no_sleep):
+    """#104: the adaptive plan can rename a same-day/sport coach-plan slot between
+    sync runs (e.g. "Recovery" -> "Base") without changing sportTypeKey. Since
+    coach-plan points are keyed by (sport, workout_name), a rename alone would
+    otherwise leave the old-name row silently stale and indistinguishable from real
+    data once merged with training_plan_task. The old row must get a tombstone
+    point (same tags+time, deleted_at set) so it can be filtered out query-side."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
+    )
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-10 00:00:00", "sport": "running", "workout_name": "Recovery"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert len(points) == 2
+
+    fresh = next(p for p in points if "workout_name=Base" in p)
+    assert "deleted_at=" not in fresh
+
+    tombstone = next(p for p in points if "workout_name=Recovery" in p)
+    assert "sport=running" in tombstone
+    assert "deleted_at=" in tombstone
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_no_tombstone_when_name_unchanged(no_sleep):
+    """A coach-plan entry that's still current (same name as last sync) must not
+    get tombstoned — only entries the fresh fetch no longer contains."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
+    )
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-10 00:00:00", "sport": "running", "workout_name": "Base"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert len(points) == 1
+    assert "deleted_at=" not in points[0]
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_active_key_lookup_failure_does_not_break_sync(no_sleep):
+    """If the tombstone-comparison query fails (e.g. deleted_at column doesn't exist
+    yet on a fresh deploy), sync must still write the fresh points rather than
+    crash the whole run."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
+    )
+    client = MagicMock()
+    client.query.side_effect = Exception("column not found")
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert len(points) == 1
+    assert "workout_name=Base" in points[0]
+
+
+@freeze_time("2026-07-06")
 def test_scheduled_workouts_connection_error_propagates(no_sleep):
     garmin = MagicMock()
     garmin.get_scheduled_workouts.side_effect = GarminConnectConnectionError("timeout")

@@ -252,7 +252,11 @@ func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) 
 	}
 	workouts := make([]garmin.ScheduledWorkout, 0, len(rows))
 	for _, row := range rows {
-		workouts = append(workouts, garmin.ScheduledWorkoutFrom(row))
+		w := garmin.ScheduledWorkoutFrom(row)
+		if w.DeletedAt > 0 {
+			continue
+		}
+		workouts = append(workouts, w)
 	}
 	workouts = dedupeGhostCoachPlanEntries(workouts)
 

@@ -267,6 +267,35 @@ func TestQueryScheduledWorkouts_DedupeDoesNotCollapseSelfCreatedWorkouts(t *test
 	}
 }
 
+func TestQueryScheduledWorkouts_FiltersTombstonedCoachPlanEntry(t *testing.T) {
+	// #104: a coach-plan slot renamed between sync runs (e.g. "Recovery" -> "Base")
+	// leaves the old-name row tombstoned via deleted_at rather than deleted outright
+	// (no DELETE support in InfluxDB 3 Core) — must be filtered out entirely, not
+	// merely deduped, since it carries a different Name than the current row and
+	// dedupeGhostCoachPlanEntries's key includes Name.
+	dateStr := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	client := routedMockClient(
+		[]map[string]any{
+			{"time": dateStr, "name": "Base", "sport": "running", "workout_name": "Base"},
+			{
+				"time": dateStr, "name": "Recovery", "sport": "running",
+				"workout_name": "Recovery", "deleted_at": float64(1786900000),
+			},
+		},
+		nil,
+	)
+	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workouts) != 1 {
+		t.Fatalf("want 1 workout (tombstoned entry filtered), got %d: %+v", len(workouts), workouts)
+	}
+	if workouts[0].Name != "Base" {
+		t.Errorf("Name: got %q, want Base", workouts[0].Name)
+	}
+}
+
 func TestQueryScheduledWorkouts_Empty(t *testing.T) {
 	client := &mockClient{rows: nil}
 	workouts, err := queryScheduledWorkouts(context.Background(), client, 14)
