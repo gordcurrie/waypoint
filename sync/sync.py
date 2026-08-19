@@ -876,6 +876,7 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
 
     points: list[Any] = []
     fresh_coach_keys: set[tuple[str, str, str]] = set()
+    had_error = False
     for year, month in months:
         try:
             raw = garmin.get_scheduled_workouts(year, month) or {}
@@ -938,10 +939,21 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                         if dur is not None
                         else _fval(item, "estimatedDurationInSecs"),
                     }
+                    if is_coach_plan_item:
+                        # Explicitly clear any stale tombstone from a prior rename
+                        # (#104): InfluxDB merges fields at the same series+timestamp
+                        # rather than replacing the point outright, so if this exact
+                        # (sport, workout_name) key was tombstoned before and is now
+                        # fresh again (plan reverted or regenerated identically), a
+                        # write that omits deleted_at would leave the earlier
+                        # deleted_at value in place and this real, current workout
+                        # would stay permanently filtered out.
+                        fields["deleted_at"] = 0.0
                     p, n = _add_fields(p, fields)
                     if n:
                         points.append(p)
                 except Exception as exc:
+                    had_error = True
                     log.warning("scheduled_workouts: item %s: %s", item.get("id"), exc)
         except (
             GarminConnectAuthenticationError,
@@ -950,6 +962,7 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         ):
             raise
         except Exception as exc:
+            had_error = True
             log.warning("scheduled_workouts %d-%02d: %s", year, month, exc)
         time.sleep(0.3)
 
@@ -968,25 +981,35 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     # task at the same moment, so neither is a trustworthy stable key). Since
     # InfluxDB 3 Core has no DELETE, mark the old row dead in place instead: same
     # tags + time so it overwrites the existing series, with only deleted_at set.
-    window_start = date(months[0][0], months[0][1], 1)
-    last_year, last_month = months[-1]
-    window_end = (
-        date(last_year + 1, 1, 1) if last_month == 12 else date(last_year, last_month + 1, 1)
-    )
-    stored_coach_keys = _query_active_coach_plan_keys(client, window_start, window_end)
-    stale_keys = stored_coach_keys - fresh_coach_keys
-    deleted_at = datetime.now(UTC).timestamp()
-    for date_str, sport_val, name_val in stale_keys:
-        p = (
-            Point("scheduled_workout")
-            .time(_day_ts(date.fromisoformat(date_str)))
-            .tag("sport", sport_val)
-            .tag("workout_name", name_val)
-            .field("deleted_at", deleted_at)
+    #
+    # Skipped entirely if any month/item failed to fetch or parse above (had_error):
+    # fresh_coach_keys would then be incomplete for reasons that have nothing to do
+    # with the plan actually changing, and diffing against it would wrongly
+    # tombstone every real, still-current coach-plan entry that simply failed to
+    # make it into this run's fetch. Safe to skip — a clean run next cycle will
+    # tombstone anything genuinely stale then.
+    if had_error:
+        log.warning("scheduled_workouts: fetch/parse error this run, skipping tombstoning")
+    else:
+        window_start = date(months[0][0], months[0][1], 1)
+        last_year, last_month = months[-1]
+        window_end = (
+            date(last_year + 1, 1, 1) if last_month == 12 else date(last_year, last_month + 1, 1)
         )
-        points.append(p)
-    if stale_keys:
-        log.info("scheduled_workouts: tombstoned %d stale coach-plan entries", len(stale_keys))
+        stored_coach_keys = _query_active_coach_plan_keys(client, window_start, window_end)
+        stale_keys = stored_coach_keys - fresh_coach_keys
+        deleted_at = datetime.now(UTC).timestamp()
+        for date_str, sport_val, name_val in stale_keys:
+            p = (
+                Point("scheduled_workout")
+                .time(_day_ts(date.fromisoformat(date_str)))
+                .tag("sport", sport_val)
+                .tag("workout_name", name_val)
+                .field("deleted_at", deleted_at)
+            )
+            points.append(p)
+        if stale_keys:
+            log.info("scheduled_workouts: tombstoned %d stale coach-plan entries", len(stale_keys))
 
     _write(client, points)
     log.info("scheduled_workouts: wrote %d points", len(points))
