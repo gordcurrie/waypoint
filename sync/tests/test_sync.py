@@ -1426,6 +1426,22 @@ def test_scheduled_workouts_month_fetch_error_skips_tombstoning(no_sleep):
 
 
 @freeze_time("2026-07-06")
+def test_scheduled_workouts_tombstone_query_uses_rfc3339_bounds(no_sleep):
+    """The tombstone-comparison query's time bounds must be full RFC3339 timestamps,
+    not date-only literals (Copilot review on #105) — matches how every other
+    bounded time query in this codebase formats time bounds."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
+    )
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_scheduled_workouts(garmin, client, {})
+    sql = client.query.call_args[0][0]
+    assert "2026-07-01T00:00:00Z" in sql
+    assert "2026-09-01T00:00:00Z" in sql
+
+
+@freeze_time("2026-07-06")
 def test_scheduled_workouts_active_key_lookup_failure_does_not_break_sync(no_sleep):
     """If the tombstone-comparison query fails (e.g. deleted_at column doesn't exist
     yet on a fresh deploy), sync must still write the fresh points rather than

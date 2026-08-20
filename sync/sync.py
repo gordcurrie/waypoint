@@ -851,9 +851,15 @@ def _query_active_coach_plan_keys(
     here too and gets harmlessly re-tombstoned on every run until it ages out of the
     sync window entirely.
     """
+    # Explicit UTC-midnight RFC3339 timestamps, not date-only literals (#105 review) —
+    # matches how every other bounded time query in this codebase (e.g.
+    # tools/workouts.go's queryMeasurementRange) formats time bounds, and avoids
+    # relying on an implicit date-string cast in InfluxDB's SQL engine.
+    start_ts = _day_ts(start).strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_ts = _day_ts(end).strftime("%Y-%m-%dT%H:%M:%SZ")
     sql = (
         "SELECT DISTINCT time, sport, workout_name FROM scheduled_workout "
-        f"WHERE time >= '{start.isoformat()}' AND time < '{end.isoformat()}' "
+        f"WHERE time >= '{start_ts}' AND time < '{end_ts}' "
         "AND workout_name IS NOT NULL"
     )
     try:
