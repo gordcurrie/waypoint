@@ -908,12 +908,18 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                     scheduled_id = item.get("id")
                     if scheduled_id is None:
                         log.warning("scheduled_workouts: item missing id, skipping")
+                        # Same incompleteness class the had_error guard around
+                        # tombstoning exists for (#105 review) — this item silently
+                        # can't contribute to fresh_coach_keys, so tombstoning must
+                        # not treat its absence as "the plan changed."
+                        had_error = True
                         continue
                     date_str = item.get("date") or item.get("calendarDate")
                     if not date_str:
                         log.warning(
                             "scheduled_workouts: item %s missing date, skipping", scheduled_id
                         )
+                        had_error = True
                         continue
                     scheduled_date = date.fromisoformat(str(date_str)[:10])
 
@@ -997,7 +1003,15 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     if had_error:
         log.warning("scheduled_workouts: fetch/parse error this run, skipping tombstoning")
     else:
-        window_start = date(months[0][0], months[0][1], 1)
+        # Starts tomorrow, not the 1st of the month (#105 review): today's own
+        # calendar item can legitimately look different by the time this sync runs
+        # (e.g. once a workout's underway/completed) for reasons that have nothing
+        # to do with the plan changing, and today is the one date where this
+        # write-side window would otherwise overlap tools/workouts.go's read-side
+        # window (which starts from today forward) — a false tombstone here would
+        # hide a real, still-relevant entry the same day it's scheduled. Nothing
+        # needs a rename caught for a day that's already happening or done.
+        window_start = today + timedelta(days=1)
         last_year, last_month = months[-1]
         window_end = (
             date(last_year + 1, 1, 1) if last_month == 12 else date(last_year, last_month + 1, 1)

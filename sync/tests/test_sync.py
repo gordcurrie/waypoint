@@ -1405,6 +1405,41 @@ def test_scheduled_workouts_item_parse_error_skips_tombstoning(no_sleep):
 
 
 @freeze_time("2026-07-06")
+def test_scheduled_workouts_missing_id_skips_tombstoning(no_sleep):
+    """A coach-plan item missing `id` is skipped via a plain continue before it can
+    contribute to fresh_coach_keys — same incompleteness class as a parse
+    exception, so it must also suppress tombstoning this run (#105 review)."""
+    item_no_id = _coach_plan_item(date_str="2026-07-10", title="Base", sport="running")
+    del item_no_id["id"]
+    garmin = _sched_garmin([item_no_id])
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-11 00:00:00", "sport": "running", "workout_name": "StillActive"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    if client.write.called:
+        points = [str(p) for p in client.write.call_args[1]["record"]]
+        assert not any("workout_name=StillActive" in p for p in points)
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_missing_date_skips_tombstoning(no_sleep):
+    """Same as the missing-id case, for an item missing both `date` and
+    `calendarDate` (#105 review)."""
+    item_no_date = _coach_plan_item(title="Base", sport="running")
+    del item_no_date["date"]
+    garmin = _sched_garmin([item_no_date])
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-11 00:00:00", "sport": "running", "workout_name": "StillActive"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    if client.write.called:
+        points = [str(p) for p in client.write.call_args[1]["record"]]
+        assert not any("workout_name=StillActive" in p for p in points)
+
+
+@freeze_time("2026-07-06")
 def test_scheduled_workouts_month_fetch_error_skips_tombstoning(no_sleep):
     """A whole-month fetch failure (e.g. a transient non-GarminConnect exception)
     must also suppress tombstoning for this run, same as a per-item parse error —
@@ -1437,7 +1472,7 @@ def test_scheduled_workouts_tombstone_query_uses_rfc3339_bounds(no_sleep):
     client.query.return_value.to_pylist.return_value = []
     sync.sync_scheduled_workouts(garmin, client, {})
     sql = client.query.call_args[0][0]
-    assert "2026-07-01T00:00:00Z" in sql
+    assert "2026-07-07T00:00:00Z" in sql
     assert "2026-09-01T00:00:00Z" in sql
 
 
