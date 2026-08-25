@@ -24,6 +24,13 @@ type ScheduledWorkout struct {
 	TargetType string  `json:"target_type,omitempty"`
 	TargetLo   float64 `json:"target_lo,omitempty"`
 	TargetHi   float64 `json:"target_hi,omitempty"`
+	// DeletedAt is a unix-timestamp tombstone marker (#104): set when a coach-plan
+	// row has been superseded (the plan renamed the same day/sport slot, so a new
+	// row was written under the new name and this one is stale) or removed from the
+	// plan entirely. Internal filter signal only, not part of the tool's JSON
+	// contract — queryScheduledWorkouts drops any row with DeletedAt > 0 before
+	// returning results.
+	DeletedAt float64 `json:"-"`
 }
 
 // ScheduledWorkoutFrom converts a query row from the "scheduled_workout" measurement.
@@ -35,5 +42,6 @@ func ScheduledWorkoutFrom(row map[string]any) ScheduledWorkout {
 		Name:        stringFrom(row, "name"),
 		Sport:       stringFrom(row, "sport"),
 		DurationS:   roundF(floatFrom(row, "duration_s")),
+		DeletedAt:   floatFrom(row, "deleted_at"),
 	}
 }

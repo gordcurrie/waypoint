@@ -1331,6 +1331,168 @@ def test_scheduled_workouts_fbt_adaptive_without_training_plan_id_skipped(no_sle
 
 
 @freeze_time("2026-07-06")
+def test_scheduled_workouts_tombstones_renamed_coach_plan_entry(no_sleep):
+    """#104: the adaptive plan can rename a same-day/sport coach-plan slot between
+    sync runs (e.g. "Recovery" -> "Base") without changing sportTypeKey. Since
+    coach-plan points are keyed by (sport, workout_name), a rename alone would
+    otherwise leave the old-name row silently stale and indistinguishable from real
+    data once merged with training_plan_task. The old row must get a tombstone
+    point (same tags+time, deleted_at set) so it can be filtered out query-side."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
+    )
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-10 00:00:00", "sport": "running", "workout_name": "Recovery"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert len(points) == 2
+
+    fresh = next(p for p in points if "workout_name=Base" in p)
+    assert "deleted_at=0" in fresh
+
+    tombstone = next(p for p in points if "workout_name=Recovery" in p)
+    assert "sport=running" in tombstone
+    assert "deleted_at=" in tombstone
+    assert "deleted_at=0" not in tombstone
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_no_tombstone_when_name_unchanged(no_sleep):
+    """A coach-plan entry that's still current (same name as last sync) must not
+    get tombstoned — only entries the fresh fetch no longer contains. Also covers a
+    reverted/re-identical regeneration: every fresh coach-plan write explicitly sets
+    deleted_at=0 unconditionally (not just when a rename is detected), since
+    InfluxDB merges fields at the same series+timestamp rather than replacing the
+    point outright — an omitted field would leave a prior tombstone's deleted_at
+    value in place forever."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
+    )
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-10 00:00:00", "sport": "running", "workout_name": "Base"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert len(points) == 1
+    assert "deleted_at=0" in points[0]
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_item_parse_error_skips_tombstoning(no_sleep):
+    """A single item that fails to parse (e.g. an unparseable date) must not cause
+    every other genuinely-active coach-plan entry for the window to be wrongly
+    tombstoned — fresh_coach_keys is incomplete for a reason unrelated to the plan
+    actually changing, so tombstoning must be skipped entirely this run."""
+    good_item = _coach_plan_item(
+        scheduled_id=111, date_str="2026-07-10", title="Base", sport="running"
+    )
+    bad_item = _coach_plan_item(
+        scheduled_id=222, date_str="not-a-date", title="Broken", sport="running"
+    )
+    garmin = _sched_garmin([good_item, bad_item])
+    client = MagicMock()
+    # A real, still-active entry that would be wrongly tombstoned if the parse
+    # error above didn't suppress tombstoning for this run.
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-11 00:00:00", "sport": "running", "workout_name": "StillActive"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert not any("workout_name=StillActive" in p for p in points)
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_missing_id_skips_tombstoning(no_sleep):
+    """A coach-plan item missing `id` is skipped via a plain continue before it can
+    contribute to fresh_coach_keys — same incompleteness class as a parse
+    exception, so it must also suppress tombstoning this run (#105 review)."""
+    item_no_id = _coach_plan_item(date_str="2026-07-10", title="Base", sport="running")
+    del item_no_id["id"]
+    garmin = _sched_garmin([item_no_id])
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-11 00:00:00", "sport": "running", "workout_name": "StillActive"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    if client.write.called:
+        points = [str(p) for p in client.write.call_args[1]["record"]]
+        assert not any("workout_name=StillActive" in p for p in points)
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_missing_date_skips_tombstoning(no_sleep):
+    """Same as the missing-id case, for an item missing both `date` and
+    `calendarDate` (#105 review)."""
+    item_no_date = _coach_plan_item(title="Base", sport="running")
+    del item_no_date["date"]
+    garmin = _sched_garmin([item_no_date])
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-11 00:00:00", "sport": "running", "workout_name": "StillActive"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    if client.write.called:
+        points = [str(p) for p in client.write.call_args[1]["record"]]
+        assert not any("workout_name=StillActive" in p for p in points)
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_month_fetch_error_skips_tombstoning(no_sleep):
+    """A whole-month fetch failure (e.g. a transient non-GarminConnect exception)
+    must also suppress tombstoning for this run, same as a per-item parse error —
+    fresh_coach_keys is missing every item from that month for a reason unrelated
+    to the plan actually changing."""
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = [
+        RuntimeError("transient timeout"),
+        {"calendarItems": []},
+    ]
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-07-11 00:00:00", "sport": "running", "workout_name": "StillActive"}
+    ]
+    sync.sync_scheduled_workouts(garmin, client, {})
+    if client.write.called:
+        points = [str(p) for p in client.write.call_args[1]["record"]]
+        assert not any("workout_name=StillActive" in p for p in points)
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_tombstone_query_uses_rfc3339_bounds(no_sleep):
+    """The tombstone-comparison query's time bounds must be full RFC3339 timestamps,
+    not date-only literals (Copilot review on #105) — matches how every other
+    bounded time query in this codebase formats time bounds."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
+    )
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_scheduled_workouts(garmin, client, {})
+    sql = client.query.call_args[0][0]
+    assert "2026-07-07T00:00:00Z" in sql
+    assert "2026-09-01T00:00:00Z" in sql
+
+
+@freeze_time("2026-07-06")
+def test_scheduled_workouts_active_key_lookup_failure_does_not_break_sync(no_sleep):
+    """If the tombstone-comparison query fails (e.g. deleted_at column doesn't exist
+    yet on a fresh deploy), sync must still write the fresh points rather than
+    crash the whole run."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
+    )
+    client = MagicMock()
+    client.query.side_effect = Exception("column not found")
+    sync.sync_scheduled_workouts(garmin, client, {})
+    points = [str(p) for p in client.write.call_args[1]["record"]]
+    assert len(points) == 1
+    assert "workout_name=Base" in points[0]
+
+
+@freeze_time("2026-07-06")
 def test_scheduled_workouts_connection_error_propagates(no_sleep):
     garmin = MagicMock()
     garmin.get_scheduled_workouts.side_effect = GarminConnectConnectionError("timeout")
