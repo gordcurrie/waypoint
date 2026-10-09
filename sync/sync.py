@@ -1035,6 +1035,166 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     log.info("scheduled_workouts: wrote %d points", len(points))
 
 
+# Races are typically registered months out, well past sync_scheduled_workouts'
+# current+next-month window — so race events get their own, longer lookahead.
+RACE_EVENT_LOOKAHEAD_MONTHS = 6
+
+# completionTarget.unit -> meters. Only units actually observed live are mapped
+# (don't guess Garmin's other unit keys); an unmapped unit still has its raw
+# target_value/target_unit stored, just no derived distance_m.
+_RACE_TARGET_UNIT_M = {"mile": 1609.344}
+
+
+def _query_active_race_event_keys(
+    client: InfluxDBClient3, start: date, end: date
+) -> set[tuple[str, str]]:
+    """Return the (date, event_id) keys currently stored in race_event in [start, end).
+    Same tombstone-lookup role as _query_active_coach_plan_keys — used by
+    sync_race_events to find events that were moved to a different date or deleted.
+    """
+    start_ts = _day_ts(start).strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_ts = _day_ts(end).strftime("%Y-%m-%dT%H:%M:%SZ")
+    sql = (
+        "SELECT DISTINCT time, event_id FROM race_event "
+        f"WHERE time >= '{start_ts}' AND time < '{end_ts}'"
+    )
+    try:
+        rows = client.query(sql, language="sql").to_pylist()
+        return {(str(r["time"])[:10], str(r["event_id"])) for r in rows}
+    except Exception as exc:
+        log.warning("race_events: active-key lookup failed, skipping tombstoning: %s", exc)
+        return set()
+
+
+def sync_race_events(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
+    """Sync Garmin calendar events (races) for the next RACE_EVENT_LOOKAHEAD_MONTHS.
+
+    Event items come from the same calendar-service month response as scheduled
+    workouts, as itemType == "event". Verified live 2026-10-09 against a real
+    half-marathon race event (non-null fields only):
+        {
+          "id": 28702711,
+          "itemType": "event",
+          "activityTypeId": 1,
+          "title": "<race name>",
+          "date": "2026-10-18",
+          "isRace": true,
+          "eventTimeLocal": {"startTimeHhMm": "08:00", "timeZoneId": "America/Chicago"},
+          "completionTarget": {"value": 13.11, "unit": "mile", "unitType": "distance"},
+          "primaryEvent": true
+        }
+    No goal time is present in this response. sportTypeKey is null on event items —
+    activityTypeId is the only sport signal, stored raw rather than mapped.
+
+    Tagged by event_id (Garmin's own id, stable for a real calendar event — unlike
+    coach-plan items, it isn't regenerated). A race moved to a new date writes a
+    new point at the new time; the old-date point is tombstoned the same way
+    sync_scheduled_workouts handles coach-plan renames (#104), since InfluxDB 3
+    Core has no DELETE.
+    """
+    today = date.today()
+    months: list[tuple[int, int]] = []
+    year, month = today.year, today.month
+    for _ in range(RACE_EVENT_LOOKAHEAD_MONTHS):
+        months.append((year, month))
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+
+    points: list[Any] = []
+    fresh_keys: set[tuple[str, str]] = set()
+    had_error = False
+    for year, month in months:
+        try:
+            raw = garmin.get_scheduled_workouts(year, month) or {}
+            for item in raw.get("calendarItems") or []:
+                if item.get("itemType") != "event":
+                    continue
+                try:
+                    event_id = item.get("id")
+                    date_str = item.get("date")
+                    if event_id is None or not date_str:
+                        log.warning("race_events: event item missing id/date, skipping")
+                        had_error = True
+                        continue
+                    event_date = date.fromisoformat(str(date_str)[:10])
+
+                    start_time = item.get("eventTimeLocal") or {}
+                    target = item.get("completionTarget") or {}
+                    target_value = _fval(target, "value")
+                    target_unit = target.get("unit")
+                    unit_m = _RACE_TARGET_UNIT_M.get(str(target_unit))
+                    distance_m = (
+                        round(target_value * unit_m, 1)
+                        if target_value is not None
+                        and unit_m is not None
+                        and target.get("unitType") == "distance"
+                        else None
+                    )
+                    is_race = item.get("isRace")
+                    primary = item.get("primaryEvent")
+                    activity_type_id = item.get("activityTypeId")
+
+                    p = Point("race_event").time(_day_ts(event_date)).tag("event_id", str(event_id))
+                    p, _ = _add_fields(
+                        p,
+                        {
+                            "name": str(item.get("title") or ""),
+                            "activity_type_id": float(activity_type_id)
+                            if activity_type_id is not None
+                            else None,
+                            "is_race": 1.0 if is_race else 0.0,
+                            "primary_event": 1.0 if primary else 0.0,
+                            "start_time_local": start_time.get("startTimeHhMm"),
+                            "time_zone": start_time.get("timeZoneId"),
+                            "target_value": target_value,
+                            "target_unit": str(target_unit) if target_unit else None,
+                            "distance_m": distance_m,
+                            # Clear any prior tombstone on this exact key — same
+                            # field-merge reason as sync_scheduled_workouts (#104).
+                            "deleted_at": 0.0,
+                        },
+                    )
+                    points.append(p)
+                    fresh_keys.add((event_date.isoformat(), str(event_id)))
+                except Exception as exc:
+                    had_error = True
+                    log.warning("race_events: item %s: %s", item.get("id"), exc)
+        except (
+            GarminConnectAuthenticationError,
+            GarminConnectTooManyRequestsError,
+            GarminConnectConnectionError,
+        ):
+            raise
+        except Exception as exc:
+            had_error = True
+            log.warning("race_events %d-%02d: %s", year, month, exc)
+        time.sleep(0.3)
+
+    # Same had_error guard and tomorrow-onward window as sync_scheduled_workouts'
+    # tombstoning — an incomplete fetch must not be mistaken for a deleted race.
+    if had_error:
+        log.warning("race_events: fetch/parse error this run, skipping tombstoning")
+    else:
+        window_start = today + timedelta(days=1)
+        last_year, last_month = months[-1]
+        window_end = (
+            date(last_year + 1, 1, 1) if last_month == 12 else date(last_year, last_month + 1, 1)
+        )
+        stale = _query_active_race_event_keys(client, window_start, window_end) - fresh_keys
+        deleted_at = datetime.now(UTC).timestamp()
+        for date_str, event_id in stale:
+            points.append(
+                Point("race_event")
+                .time(_day_ts(date.fromisoformat(date_str)))
+                .tag("event_id", event_id)
+                .field("deleted_at", deleted_at)
+            )
+        if stale:
+            log.info("race_events: tombstoned %d stale entries", len(stale))
+
+    _write(client, points)
+    log.info("race_events: wrote %d points", len(points))
+
+
 TRAINING_PLAN_LOOKAHEAD_DAYS = 14
 
 # targetType.workoutTargetTypeKey -> our target_type label. pace.zone's
@@ -1564,6 +1724,7 @@ SYNC_FUNCS = [
     sync_respiration,
     sync_pending_workouts,  # upload queued workouts before reading the calendar back
     sync_scheduled_workouts,
+    sync_race_events,
     sync_training_plan,
 ]
 

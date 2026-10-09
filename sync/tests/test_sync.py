@@ -2211,3 +2211,115 @@ def test_build_garmin_workout_rest_distinct_from_recovery():
     assert recovery_step["stepType"] == {"stepTypeId": 4, "stepTypeKey": "recovery"}
     assert rest_step["stepType"] == {"stepTypeId": 5, "stepTypeKey": "rest"}
     assert recovery_step["stepType"] != rest_step["stepType"]
+
+
+# ── sync_race_events ───────────────────────────────────────────────────────────
+
+
+def _race_garmin(months: dict[int, list]) -> MagicMock:
+    """Calendar mock keyed by month number; unlisted months return no items."""
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = lambda year, month: {
+        "calendarItems": months.get(month, [])
+    }
+    return garmin
+
+
+def _race_item(
+    event_id: int = 28702711,
+    date_str: str = "2026-10-18",
+    title: str = "Test Half",
+    value: float = 13.11,
+    unit: str = "mile",
+) -> dict:
+    # Synthetic, shaped like the live event item captured 2026-10-09.
+    return {
+        "id": event_id,
+        "itemType": "event",
+        "activityTypeId": 1,
+        "title": title,
+        "date": date_str,
+        "isRace": True,
+        "eventTimeLocal": {"startTimeHhMm": "08:00", "timeZoneId": "America/Chicago"},
+        "completionTarget": {"value": value, "unit": unit, "unitType": "distance"},
+        "primaryEvent": True,
+        "sportTypeKey": None,
+    }
+
+
+@freeze_time("2026-10-09")
+def test_race_events_writes_event_fields(no_sleep):
+    garmin = _race_garmin({10: [_race_item(), _workout_item(date_str="2026-10-12")]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_race_events(garmin, client, {})
+    points = [str(p) for p in _written_points(client)]
+    assert len(points) == 1  # the workout item is ignored
+    p = points[0]
+    assert p.startswith("race_event,event_id=28702711 ")
+    assert 'name="Test Half"' in p
+    assert "is_race=1" in p
+    assert "primary_event=1" in p
+    assert 'start_time_local="08:00"' in p
+    assert 'time_zone="America/Chicago"' in p
+    assert 'target_unit="mile"' in p
+    assert "distance_m=21098.5" in p  # 13.11 mi as Garmin stores it, not exactly 21097.5
+    assert "deleted_at=0" in p
+
+
+@freeze_time("2026-10-09")
+def test_race_events_unmapped_unit_keeps_raw_target(no_sleep):
+    garmin = _race_garmin({11: [_race_item(value=10, unit="furlong")]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_race_events(garmin, client, {})
+    p = str(_written_points(client)[0])
+    assert "target_value=10" in p
+    assert 'target_unit="furlong"' in p
+    assert "distance_m" not in p
+
+
+@freeze_time("2026-11-15")
+def test_race_events_lookahead_spans_year_boundary(no_sleep):
+    garmin = _race_garmin({})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_race_events(garmin, client, {})
+    calls = [c.args for c in garmin.get_scheduled_workouts.call_args_list]
+    assert calls == [(2026, 11), (2026, 12), (2027, 1), (2027, 2), (2027, 3), (2027, 4)]
+
+
+@freeze_time("2026-10-09")
+def test_race_events_tombstones_moved_event(no_sleep):
+    garmin = _race_garmin({10: [_race_item(date_str="2026-10-25")]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-10-18 00:00:00", "event_id": "28702711"}
+    ]
+    sync.sync_race_events(garmin, client, {})
+    points = [str(p) for p in _written_points(client)]
+    assert len(points) == 2
+    tombstone = next(p for p in points if "deleted_at=0" not in p)
+    assert tombstone.startswith("race_event,event_id=28702711 deleted_at=")
+    assert "name=" not in tombstone
+
+
+@freeze_time("2026-10-09")
+def test_race_events_no_tombstone_on_fetch_error(no_sleep):
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = ValueError("boom")
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-10-18 00:00:00", "event_id": "28702711"}
+    ]
+    sync.sync_race_events(garmin, client, {})
+    assert _written_points(client) == []
+    client.query.assert_not_called()
+
+
+@freeze_time("2026-10-09")
+def test_race_events_propagates_connection_error(no_sleep):
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = GarminConnectConnectionError("down")
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_race_events(garmin, MagicMock(), {})
