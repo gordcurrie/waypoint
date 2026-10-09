@@ -84,21 +84,21 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		return jsonResult(workouts)
 	})
 
-	type raceEventsInput struct {
+	type calendarEventsInput struct {
 		Days int `json:"days,omitempty" jsonschema:"look-ahead window in days, default 180, max 180"`
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:  "get_race_events",
-		Title: "Race Events",
-		Description: "Return race/calendar events on the Garmin calendar for the next N days (default and max 180 — the sync only fetches ~6 months ahead). " +
-			"primary_event marks the race an adaptive coach plan is building toward (see get_scheduled_workouts' phase field). " +
-			"target_value/target_unit are Garmin's raw race distance (e.g. 13.11 mile); distance_m is derived from them only for verified units. " +
-			"start_time_local is HH:MM in time_zone. Garmin's calendar does not expose a goal time.",
+		Name:  "get_calendar_events",
+		Title: "Calendar Events",
+		Description: "Return Garmin calendar events (itemType \"event\", e.g. races — is_race marks those) for the next N days (default and max 180 — the sync only fetches ~6 months ahead). " +
+			"primary_event marks the event an adaptive coach plan is building toward (see get_scheduled_workouts' phase field). " +
+			"completion_target_value/completion_target_unit are Garmin's raw completionTarget (event distance, e.g. 13.11 mile); distance_m is derived from them only for verified units. " +
+			"start_time_local is HH:MM (Garmin's startTimeHhMm) in time_zone_id. Garmin's calendar does not expose a goal time.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input raceEventsInput) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input calendarEventsInput) (*mcp.CallToolResult, any, error) {
 		days := clampInt(input.Days, 180, 180)
-		events, err := queryRaceEvents(ctx, client, days)
+		events, err := queryCalendarEvents(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
 		}
@@ -293,17 +293,17 @@ func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) 
 	return mergeTrainingPlanDetail(workouts, tasks), nil
 }
 
-func queryRaceEvents(ctx context.Context, client influxClient, days int) ([]garmin.RaceEvent, error) {
+func queryCalendarEvents(ctx context.Context, client influxClient, days int) ([]garmin.CalendarEvent, error) {
 	start := time.Now().UTC().Truncate(24 * time.Hour)
 	end := start.Add(time.Duration(days) * 24 * time.Hour)
 
-	rows, err := queryMeasurementRange(ctx, client, influx.MeasurementRaceEvent, start, end)
+	rows, err := queryMeasurementRange(ctx, client, influx.MeasurementCalendarEvent, start, end)
 	if err != nil {
-		return nil, fmt.Errorf("get_race_events: %w", err)
+		return nil, fmt.Errorf("get_calendar_events: %w", err)
 	}
-	events := make([]garmin.RaceEvent, 0, len(rows))
+	events := make([]garmin.CalendarEvent, 0, len(rows))
 	for _, row := range rows {
-		e := garmin.RaceEventFrom(row)
+		e := garmin.CalendarEventFrom(row)
 		if e.DeletedAt > 0 {
 			continue
 		}

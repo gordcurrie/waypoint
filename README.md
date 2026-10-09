@@ -83,7 +83,7 @@ Add to Claude's MCP config (stdio, local dev):
 
 For homelab HTTP deployment: `./waypoint-mcp --transport=http --addr=0.0.0.0:8080 --data-dir=/data`
 
-**Available tools:** `get_recent_activities`, `get_weekly_volume`, `get_daily_stats`, `get_sleep_summary`, `get_hrv_trend`, `get_respiration`, `get_training_status`, `get_training_load`, `get_training_readiness`, `get_performance_trend`, `get_lactate_threshold`, `get_activity_splits`, `get_activity_hr_zones`, `get_scheduled_workouts`, `get_race_events`, `create_workout`, `search_exercises`
+**Available tools:** `get_recent_activities`, `get_weekly_volume`, `get_daily_stats`, `get_sleep_summary`, `get_hrv_trend`, `get_respiration`, `get_training_status`, `get_training_load`, `get_training_readiness`, `get_performance_trend`, `get_lactate_threshold`, `get_activity_splits`, `get_activity_hr_zones`, `get_scheduled_workouts`, `get_calendar_events`, `create_workout`, `search_exercises`
 
 Each tool's description documents how it relates to the others (e.g. which tool to call first, which tools cover the same data at a different granularity) — the server also sends this as connection-level `Instructions` (see `cmd/mcp-server/main.go`) so most MCP clients surface it without an extra call.
 

@@ -33,7 +33,7 @@ Data domains and their tools:
 - Daily health: get_daily_stats (steps, resting HR, body battery, stress), get_sleep_summary, get_hrv_trend, get_respiration.
 - Training status: get_training_status (Garmin's own overreaching/peaking status + VO2max), get_training_readiness (day-to-day readiness score, informed by HRV/sleep — see get_hrv_trend/get_sleep_summary for the underlying detail), get_training_load (computed ATL/CTL/TSB from activity data, not a Garmin field; write_back=true persists it on demand).
 - Longer-term fitness: get_performance_trend (VO2max/fitness age over months), get_lactate_threshold.
-- Workouts: get_scheduled_workouts (check the calendar before scheduling to avoid conflicts), get_race_events (upcoming races — date, distance, start time; primary_event is the coach plan's target race) and create_workout (queues a workout for upload on the next sync run). For any strength_training step, call search_exercises first to get a valid category/exercise_name pair — free-text guesses are rejected.
+- Workouts: get_scheduled_workouts (check the calendar before scheduling to avoid conflicts), get_calendar_events (Garmin calendar events, e.g. races — date, distance, start time; primary_event is the coach plan's target event) and create_workout (queues a workout for upload on the next sync run). For any strength_training step, call search_exercises first to get a valid category/exercise_name pair — free-text guesses are rejected.
 
 When in doubt about which tool answers "what training data exists for date X", start with get_recent_activities and get_daily_stats — most other tools narrow or aggregate from there.`
 

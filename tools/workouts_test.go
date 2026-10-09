@@ -862,8 +862,8 @@ func TestAppendToQueue_WritesToTmpThenRenames(t *testing.T) {
 	}
 }
 
-func TestQueryRaceEvents_FiltersTombstonedAndBoundsTime(t *testing.T) {
-	// A race moved to a new date leaves its old-date row tombstoned (no DELETE in
+func TestQueryCalendarEvents_FiltersTombstonedAndBoundsTime(t *testing.T) {
+	// An event moved to a new date leaves its old-date row tombstoned (no DELETE in
 	// InfluxDB 3 Core) — only the live row may come back.
 	oldDate := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
 	newDate := time.Now().UTC().Add(72 * time.Hour).Format(time.RFC3339)
@@ -877,7 +877,7 @@ func TestQueryRaceEvents_FiltersTombstonedAndBoundsTime(t *testing.T) {
 			}, nil
 		},
 	}
-	events, err := queryRaceEvents(context.Background(), client, 180)
+	events, err := queryCalendarEvents(context.Background(), client, 180)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -887,14 +887,14 @@ func TestQueryRaceEvents_FiltersTombstonedAndBoundsTime(t *testing.T) {
 	if events[0].Date != newDate[:10] || !events[0].IsRace {
 		t.Errorf("got %+v, want live row on %s", events[0], newDate[:10])
 	}
-	if !strings.Contains(gotSQL, influx.MeasurementRaceEvent) || !strings.Contains(gotSQL, "time >= ") || !strings.Contains(gotSQL, "time < ") {
-		t.Errorf("query not time-bounded on race_event: %s", gotSQL)
+	if !strings.Contains(gotSQL, influx.MeasurementCalendarEvent) || !strings.Contains(gotSQL, "time >= ") || !strings.Contains(gotSQL, "time < ") {
+		t.Errorf("query not time-bounded on calendar_event: %s", gotSQL)
 	}
 }
 
-func TestQueryRaceEvents_QueryError(t *testing.T) {
+func TestQueryCalendarEvents_QueryError(t *testing.T) {
 	client := &mockClient{err: errors.New("boom")}
-	if _, err := queryRaceEvents(context.Background(), client, 180); err == nil {
+	if _, err := queryCalendarEvents(context.Background(), client, 180); err == nil {
 		t.Fatal("want error, got nil")
 	}
 }
