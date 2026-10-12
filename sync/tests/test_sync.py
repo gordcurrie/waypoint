@@ -1,6 +1,6 @@
 """Tests for sync.py — Garmin → InfluxDB sync sidecar."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -2211,3 +2211,225 @@ def test_build_garmin_workout_rest_distinct_from_recovery():
     assert recovery_step["stepType"] == {"stepTypeId": 4, "stepTypeKey": "recovery"}
     assert rest_step["stepType"] == {"stepTypeId": 5, "stepTypeKey": "rest"}
     assert recovery_step["stepType"] != rest_step["stepType"]
+
+
+# ── sync_calendar_events ───────────────────────────────────────────────────────────
+
+
+def _calendar_event_garmin(months: dict[int, list]) -> MagicMock:
+    """Calendar mock keyed by month number; unlisted months return no items."""
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = lambda year, month: {
+        "calendarItems": months.get(month, [])
+    }
+    return garmin
+
+
+def _event_item(
+    event_id: int = 28702711,
+    date_str: str = "2026-10-18",
+    title: str = "Test Half",
+    value: float = 13.11,
+    unit: str = "mile",
+) -> dict:
+    # Synthetic, shaped like the live event item captured 2026-10-09.
+    return {
+        "id": event_id,
+        "itemType": "event",
+        "activityTypeId": 1,
+        "title": title,
+        "date": date_str,
+        "isRace": True,
+        "eventTimeLocal": {"startTimeHhMm": "08:00", "timeZoneId": "America/Chicago"},
+        "completionTarget": {"value": value, "unit": unit, "unitType": "distance"},
+        "primaryEvent": True,
+        "sportTypeKey": None,
+    }
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_writes_event_fields(no_sleep):
+    garmin = _calendar_event_garmin({10: [_event_item(), _workout_item(date_str="2026-10-12")]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_calendar_events(garmin, client, {})
+    points = [str(p) for p in _written_points(client)]
+    assert len(points) == 1  # the workout item is ignored
+    p = points[0]
+    assert p.startswith("calendar_event,event_id=28702711 ")
+    assert 'name="Test Half"' in p
+    assert "is_race=1" in p
+    assert "primary_event=1" in p
+    assert 'start_time_local="08:00"' in p
+    assert 'time_zone_id="America/Chicago"' in p
+    assert 'completion_target_unit="mile"' in p
+    assert "distance_m=21098.5" in p  # 13.11 mi as Garmin stores it, not exactly 21097.5
+    assert "deleted_at=0" in p
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_unmapped_unit_keeps_raw_target(no_sleep):
+    garmin = _calendar_event_garmin({11: [_event_item(value=10, unit="furlong")]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_calendar_events(garmin, client, {})
+    p = str(_written_points(client)[0])
+    assert "completion_target_value=10" in p
+    assert 'completion_target_unit="furlong"' in p
+    # Written as an explicit 0 sentinel, not omitted, so a previously-derived
+    # distance_m can't survive InfluxDB's field merge.
+    assert "distance_m=0," in p
+
+
+@freeze_time("2026-11-15")
+def test_calendar_events_lookahead_spans_year_boundary(no_sleep):
+    garmin = _calendar_event_garmin({})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_calendar_events(garmin, client, {})
+    calls = [c.args for c in garmin.get_scheduled_workouts.call_args_list]
+    assert calls == [(2026, 11), (2026, 12), (2027, 1), (2027, 2), (2027, 3), (2027, 4), (2027, 5)]
+
+
+@freeze_time("2026-10-31")
+def test_calendar_events_lookahead_covers_tool_window(no_sleep):
+    """get_calendar_events serves 180 days ahead; the sync must fetch every month
+    that window touches, even when run on the last day of a month."""
+    garmin = _calendar_event_garmin({})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_calendar_events(garmin, client, {})
+    last_year, last_month = garmin.get_scheduled_workouts.call_args_list[-1].args
+    horizon = date(2026, 10, 31) + timedelta(days=180)
+    assert (last_year, last_month) >= (horizon.year, horizon.month)
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_absent_optional_fields_written_as_sentinels(no_sleep):
+    """An event whose start time/target was removed in Garmin must overwrite the
+    previously-synced values, not leave them in place via InfluxDB's field merge."""
+    item = _event_item()
+    item["eventTimeLocal"] = None
+    item["completionTarget"] = None
+    item["activityTypeId"] = None
+    garmin = _calendar_event_garmin({10: [item]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_calendar_events(garmin, client, {})
+    p = str(_written_points(client)[0])
+    for sentinel in (
+        'start_time_local=""',
+        'time_zone_id=""',
+        'completion_target_unit=""',
+        "completion_target_value=0",
+        "distance_m=0",
+        "activity_type_id=0",
+    ):
+        assert sentinel in p, sentinel
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_tombstones_moved_event(no_sleep):
+    garmin = _calendar_event_garmin({10: [_event_item(date_str="2026-10-25")]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-10-18 00:00:00", "event_id": "28702711"}
+    ]
+    sync.sync_calendar_events(garmin, client, {})
+    points = [str(p) for p in _written_points(client)]
+    assert len(points) == 2
+    tombstone = next(p for p in points if "deleted_at=0" not in p)
+    assert tombstone.startswith("calendar_event,event_id=28702711 deleted_at=")
+    assert "name=" not in tombstone
+
+
+@freeze_time("2026-10-18")
+def test_calendar_events_tombstones_event_removed_on_its_own_day(no_sleep):
+    """get_calendar_events serves today, so an event deleted on its own day must be
+    tombstoned now — the tombstone lookup window has to include today."""
+    garmin = _calendar_event_garmin({})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-10-18 00:00:00", "event_id": "28702711"}
+    ]
+    sync.sync_calendar_events(garmin, client, {})
+    sql = client.query.call_args.args[0]
+    assert "time >= '2026-10-18T00:00:00Z'" in sql
+    points = [str(p) for p in _written_points(client)]
+    assert len(points) == 1
+    assert points[0].startswith("calendar_event,event_id=28702711 deleted_at=")
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_no_tombstone_on_fetch_error(no_sleep):
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = ValueError("boom")
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-10-18 00:00:00", "event_id": "28702711"}
+    ]
+    sync.sync_calendar_events(garmin, client, {})
+    assert _written_points(client) == []
+    client.query.assert_not_called()
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_propagates_connection_error(no_sleep):
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.side_effect = GarminConnectConnectionError("down")
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_calendar_events(garmin, MagicMock(), {})
+
+
+# ── shared calendar month fetch ────────────────────────────────────────────────
+
+
+@freeze_time("2026-10-09")
+def test_calendar_months_fetched_once_across_both_syncs(no_sleep):
+    """sync_calendar_events must reuse the months sync_scheduled_workouts already
+    fetched this run instead of calling Garmin for them again."""
+    garmin = _calendar_event_garmin({10: [_event_item()]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_scheduled_workouts(garmin, client, {})
+    sync.sync_calendar_events(garmin, client, {})
+    calls = [c.args for c in garmin.get_scheduled_workouts.call_args_list]
+    assert len(calls) == len(set(calls)) == sync.CALENDAR_EVENT_LOOKAHEAD_MONTHS
+
+
+@freeze_time("2026-10-09")
+def test_calendar_month_failure_not_cached(no_sleep):
+    """A month that failed for sync_scheduled_workouts is retried by
+    sync_calendar_events rather than served as a cached failure."""
+    garmin = MagicMock()
+    responses = {(2026, 10): [ValueError("boom"), {"calendarItems": [_event_item()]}]}
+
+    def fake(year, month):
+        queue = responses.get((year, month))
+        result = queue.pop(0) if queue else {"calendarItems": []}
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    garmin.get_scheduled_workouts.side_effect = fake
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_scheduled_workouts(garmin, client, {})
+    sync.sync_calendar_events(garmin, client, {})
+    oct_calls = [c for c in garmin.get_scheduled_workouts.call_args_list if c.args == (2026, 10)]
+    assert len(oct_calls) == 2
+    assert any("calendar_event," in str(p) for p in _written_points(client))
+
+
+def test_run_sync_resets_calendar_month_cache(no_sleep):
+    """The same Garmin client is reused across sync runs in the main loop — each run
+    must refetch the calendar, not serve the previous run's responses."""
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
+    with (
+        patch.object(sync, "SYNC_FUNCS", [sync.sync_calendar_events]),
+        patch.object(sync, "_load_state", return_value={}),
+    ):
+        sync.run_sync(garmin, MagicMock())
+        sync.run_sync(garmin, MagicMock())
+    assert garmin.get_scheduled_workouts.call_count == 2 * sync.CALENDAR_EVENT_LOOKAHEAD_MONTHS

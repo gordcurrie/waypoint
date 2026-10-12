@@ -33,20 +33,22 @@
           },
           "itemType": {
             "type": "string",
-            "description": "Observed values in this account: activity, fbtAdaptiveWorkout, nap, bloodpressure, weight, trainingPlan. Correction 2026-08-02: fbtAdaptiveWorkout is NOT just an auto-generated suggestion to skip \u2014 verified live against a real active coach training plan (trainingPlanId 46457367) that these are the actual coach-assigned future workouts (title e.g. \"Base\"/\"Tempo\", sportTypeKey populated, tpType: \"FBT_ADAPTIVE\"). workoutId is genuinely always null on these; sync_scheduled_workouts now also includes any item with itemType==fbtAdaptiveWorkout and a non-null trainingPlanId. Previous filter (workoutId-only) silently dropped every coach-plan workout \u2014 caught because the calendar showed nothing 6-7 days out despite the coach having added items."
+            "description": "Observed values in this account: activity, fbtAdaptiveWorkout, nap, bloodpressure, weight, trainingPlan, event (a Garmin calendar event, e.g. a race \u2014 verified live 2026-10-09, consumed by sync_calendar_events). Correction 2026-08-02: fbtAdaptiveWorkout is NOT just an auto-generated suggestion to skip \u2014 verified live against a real active coach training plan (trainingPlanId 46457367) that these are the actual coach-assigned future workouts (title e.g. \"Base\"/\"Tempo\", sportTypeKey populated, tpType: \"FBT_ADAPTIVE\"). workoutId is genuinely always null on these; sync_scheduled_workouts now also includes any item with itemType==fbtAdaptiveWorkout and a non-null trainingPlanId. Previous filter (workoutId-only) silently dropped every coach-plan workout \u2014 caught because the calendar showed nothing 6-7 days out despite the coach having added items."
           },
           "tpType": {
             "type": ["string", "null"],
             "description": "\"FBT_ADAPTIVE\" for coach/training-plan items (itemType fbtAdaptiveWorkout), null for everything else (activity, nap) — verified live 2026-08-08."
           },
           "activityTypeId": {
-            "description": "observed null in captured sample"
+            "type": ["integer", "null"],
+            "description": "null on workout/activity samples; 1 on a running event \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events. Only sport signal on event items (sportTypeKey is null there); stored raw, not mapped."
           },
           "wellnessActivityUuid": {
             "description": "observed null in captured sample"
           },
           "title": {
-            "description": "observed null in captured sample"
+            "type": ["string", "null"],
+            "description": "String on all 20 items of the 2026-10 live capture (activity, fbtAdaptiveWorkout, event, trainingPlan) \u2014 verified 2026-10-09; the earlier \"observed null in captured sample\" note did not hold there. Read as the workout name by sync_scheduled_workouts and as the event name by sync_calendar_events."
           },
           "date": {
             "type": "string",
@@ -94,7 +96,8 @@
             "description": "observed null in captured sample"
           },
           "isRace": {
-            "description": "observed null in captured sample"
+            "type": ["boolean", "null"],
+            "description": "null on non-event items; true on an event item marked as a race \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events."
           },
           "recurrenceId": {
             "description": "observed null in captured sample"
@@ -127,7 +130,13 @@
             "description": "observed null in captured sample"
           },
           "eventTimeLocal": {
-            "description": "observed null in captured sample"
+            "type": ["object", "null"],
+            "properties": {
+              "startTimeHhMm": { "type": ["string", "null"], "description": "Local start time, HH:MM (e.g. \"08:00\"). Read by sync_calendar_events -> start_time_local." },
+              "timeZoneId": { "type": ["string", "null"], "description": "IANA zone (e.g. \"America/Chicago\"). Read by sync_calendar_events -> time_zone_id." }
+            },
+            "additionalProperties": true,
+            "description": "null on non-event items; on an event item: {\"startTimeHhMm\": \"08:00\", \"timeZoneId\": \"America/Chicago\"} \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events."
           },
           "diveNumber": {
             "description": "observed null in captured sample"
@@ -211,7 +220,14 @@
             "description": "observed null in captured sample"
           },
           "completionTarget": {
-            "description": "observed null in captured sample"
+            "type": ["object", "null"],
+            "properties": {
+              "value": { "type": ["number", "null"], "description": "Event distance in `unit` (e.g. 13.11). Read by sync_calendar_events -> completion_target_value." },
+              "unit": { "type": ["string", "null"], "description": "Observed: \"mile\". Only mapped units derive distance_m (_COMPLETION_TARGET_UNIT_M)." },
+              "unitType": { "type": ["string", "null"], "description": "Observed: \"distance\". distance_m is only derived when this is \"distance\"." }
+            },
+            "additionalProperties": true,
+            "description": "null on non-event items; on an event item: {\"value\": 13.11, \"unit\": \"mile\", \"unitType\": \"distance\"} (a half marathon, rounded to 2dp) \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events. Only unit \"mile\" observed so far; no goal time anywhere in this response."
           },
           "workoutUuid": {
             "description": "observed null in captured sample"
@@ -241,7 +257,8 @@
             "type": "boolean"
           },
           "primaryEvent": {
-            "description": "observed null in captured sample"
+            "type": ["boolean", "null"],
+            "description": "null on non-event items; true on the coach plan's target race \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events."
           },
           "subscribed": {
             "description": "observed null in captured sample"
