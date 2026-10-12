@@ -23,7 +23,7 @@
         "properties": {
           "id": {
             "type": ["integer", "null"],
-            "description": "Observed null live 2026-08-02 on non-workout itemTypes (e.g. weight/bloodpressure entries). sync.py already handles this — sync_scheduled_workouts skips and logs any item with a null id."
+            "description": "Observed null live 2026-08-02 on non-workout itemTypes (e.g. weight/bloodpressure entries). sync.py already handles this — sync_scheduled_workouts skips and logs any item with a null id. Also null on a subscribed shareable event item (verified live 2026-10-12) \u2014 sync_calendar_events keys those by shareableEventUuid instead."
           },
           "groupId": {
             "description": "observed null in captured sample"
@@ -90,7 +90,8 @@
             "description": "Consumed as sport tag. Bug #62 (fixed): code previously read item.get(\"sport\") or item.get(\"activityType\"), neither of which exist \u2014 sportTypeKey is the real, flat-string field."
           },
           "url": {
-            "description": "observed null in captured sample"
+            "type": ["string", "null"],
+            "description": "null on most items; the public event listing URL on a shareable event \u2014 verified live 2026-10-12 on a subscribed shareable event (itemType \"event\", no id); consumed by sync_calendar_events -> url."
           },
           "isStart": {
             "description": "observed null in captured sample"
@@ -211,10 +212,12 @@
             "description": "observed null in captured sample"
           },
           "location": {
-            "description": "observed null in captured sample"
+            "type": ["string", "null"],
+            "description": "null on most items; city on a shareable event (e.g. \"<city>, CA\") \u2014 verified live 2026-10-12 on a subscribed shareable event (itemType \"event\", no id); consumed by sync_calendar_events -> location."
           },
           "shareableEventUuid": {
-            "description": "observed null in captured sample"
+            "type": ["string", "null"],
+            "description": "null on most items; the only identifier on a shareable event (id is null there) \u2014 verified live 2026-10-12 on a subscribed shareable event (itemType \"event\", no id); consumed by sync_calendar_events -> shareable_event_uuid tag."
           },
           "splitSummaryMode": {
             "description": "observed null in captured sample"
@@ -223,11 +226,11 @@
             "type": ["object", "null"],
             "properties": {
               "value": { "type": ["number", "null"], "description": "Event distance in `unit` (e.g. 13.11). Read by sync_calendar_events -> completion_target_value." },
-              "unit": { "type": ["string", "null"], "description": "Observed: \"mile\". Only mapped units derive distance_m (_COMPLETION_TARGET_UNIT_M)." },
+              "unit": { "type": ["string", "null"], "description": "Observed: \"mile\" (personal event), \"meter\" (shareable event, 2026-10-12). Only mapped units derive distance_m (_COMPLETION_TARGET_UNIT_M)." },
               "unitType": { "type": ["string", "null"], "description": "Observed: \"distance\". distance_m is only derived when this is \"distance\"." }
             },
             "additionalProperties": true,
-            "description": "null on non-event items; on an event item: {\"value\": 13.11, \"unit\": \"mile\", \"unitType\": \"distance\"} (a half marathon, rounded to 2dp) \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events. Only unit \"mile\" observed so far; no goal time anywhere in this response."
+            "description": "null on non-event items; on an event item: {\"value\": 13.11, \"unit\": \"mile\", \"unitType\": \"distance\"} on a personal event (a half marathon, rounded to 2dp) \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events. Units observed: \"mile\" (personal event), \"meter\" (shareable event, e.g. {\"value\": 21100.0, \"unit\": \"meter\"}, 2026-10-12); no goal time anywhere in this response."
           },
           "workoutUuid": {
             "description": "observed null in captured sample"
@@ -254,14 +257,16 @@
             "description": "observed null in captured sample"
           },
           "shareableEvent": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "false on most items; true on a shareable event \u2014 verified live 2026-10-12 on a subscribed shareable event (itemType \"event\", no id); consumed by sync_calendar_events -> shareable_event."
           },
           "primaryEvent": {
             "type": ["boolean", "null"],
             "description": "null on non-event items; true on the coach plan's target race \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events."
           },
           "subscribed": {
-            "description": "observed null in captured sample"
+            "type": ["boolean", "null"],
+            "description": "null on most items; true on a shareable event the account subscribed to \u2014 verified live 2026-10-12 on a subscribed shareable event (itemType \"event\", no id); consumed by sync_calendar_events -> subscribed."
           }
         },
         "additionalProperties": true

@@ -93,6 +93,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		Title: "Calendar Events",
 		Description: "Return Garmin calendar events (itemType \"event\", e.g. races — is_race marks those) for the next N days (default and max 180 — the sync only fetches ~6 months ahead). " +
 			"primary_event marks the event an adaptive coach plan is building toward (see get_scheduled_workouts' phase field). " +
+			"A personal event has event_id; a shareable event subscribed to from Garmin's public event listing has shareable_event_uuid instead (shareable_event/subscribed true, plus location/url) — the same race can appear once as each. " +
 			"completion_target_value/completion_target_unit are Garmin's raw completionTarget (event distance, e.g. 13.11 mile); distance_m is derived from them only for verified units. " +
 			"start_time_local is HH:MM (Garmin's startTimeHhMm) in time_zone_id. Garmin's calendar does not expose a goal time.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
