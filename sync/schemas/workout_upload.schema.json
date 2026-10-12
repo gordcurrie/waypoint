@@ -92,13 +92,13 @@
         },
         {
           "type": "object",
-          "description": "heart.rate.zone when a target_hr_zone is set on the source step; no.target (still an explicit object, not null/omitted) for every other non-rest step.",
+          "description": "heart.rate.zone when a target_hr_zone is set on the source step; pace.zone (id 6 \u2014 verified live 2026-10-12 by probe upload + readback + delete) when target_pace_zone_fast_s_per_km/target_pace_zone_slow_s_per_km are set; no.target (still an explicit object, not null/omitted) for every other non-rest step.",
           "properties": {
             "workoutTargetTypeId": {
-              "enum": [1, 4]
+              "enum": [1, 4, 6]
             },
             "workoutTargetTypeKey": {
-              "enum": ["no.target", "heart.rate.zone"]
+              "enum": ["no.target", "heart.rate.zone", "pace.zone"]
             }
           },
           "additionalProperties": false
@@ -132,10 +132,12 @@
           "$ref": "#/$defs/targetType"
         },
         "targetValueOne": {
-          "description": "HR zone number (both targetValueOne and targetValueTwo set to the same value) when targetType is heart.rate.zone; null otherwise."
+          "type": ["number", "null"],
+          "description": "heart.rate.zone: HR zone number (targetValueOne and targetValueTwo set to the same value). pace.zone: the FASTER bound in m/s (numerically higher; 1000 / target_pace_zone_fast_s_per_km) \u2014 round-trips unconverted, verified live 2026-10-12. null otherwise."
         },
         "targetValueTwo": {
-          "description": "See targetValueOne."
+          "type": ["number", "null"],
+          "description": "heart.rate.zone: same zone number as targetValueOne. pace.zone: the SLOWER bound in m/s (numerically lower; 1000 / target_pace_zone_slow_s_per_km). null otherwise."
         },
         "category": {
           "description": "Exercise catalog category (e.g. \"BENCH_PRESS\") for strength steps — see internal/garmin/exercises/catalog.json. Real Garmin workouts serialize this as an explicit null when unset, not an omitted key — confirmed against a captured real workout; _build_garmin_step always emits the key."
