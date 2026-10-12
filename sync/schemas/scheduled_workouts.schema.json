@@ -130,6 +130,11 @@
           },
           "eventTimeLocal": {
             "type": ["object", "null"],
+            "properties": {
+              "startTimeHhMm": { "type": ["string", "null"], "description": "Local start time, HH:MM (e.g. \"08:00\"). Read by sync_calendar_events -> start_time_local." },
+              "timeZoneId": { "type": ["string", "null"], "description": "IANA zone (e.g. \"America/Chicago\"). Read by sync_calendar_events -> time_zone_id." }
+            },
+            "additionalProperties": true,
             "description": "null on non-event items; on an event item: {\"startTimeHhMm\": \"08:00\", \"timeZoneId\": \"America/Chicago\"} \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events."
           },
           "diveNumber": {
@@ -215,6 +220,12 @@
           },
           "completionTarget": {
             "type": ["object", "null"],
+            "properties": {
+              "value": { "type": ["number", "null"], "description": "Event distance in `unit` (e.g. 13.11). Read by sync_calendar_events -> completion_target_value." },
+              "unit": { "type": ["string", "null"], "description": "Observed: \"mile\". Only mapped units derive distance_m (_COMPLETION_TARGET_UNIT_M)." },
+              "unitType": { "type": ["string", "null"], "description": "Observed: \"distance\". distance_m is only derived when this is \"distance\"." }
+            },
+            "additionalProperties": true,
             "description": "null on non-event items; on an event item: {\"value\": 13.11, \"unit\": \"mile\", \"unitType\": \"distance\"} (a half marathon, rounded to 2dp) \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events. Only unit \"mile\" observed so far; no goal time anywhere in this response."
           },
           "workoutUuid": {

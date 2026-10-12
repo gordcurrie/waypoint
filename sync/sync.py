@@ -1037,8 +1037,10 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
 
 # Calendar events (e.g. races) are typically added months out, well past
 # sync_scheduled_workouts' current+next-month window — so they get their own,
-# longer lookahead.
-CALENDAR_EVENT_LOOKAHEAD_MONTHS = 6
+# longer lookahead. Seven calendar months (current included) always covers
+# get_calendar_events' 180-day window — six would stop short when run late in a
+# month (e.g. Oct 31 + 180d = Apr 29, past a six-month fetch ending Apr 1).
+CALENDAR_EVENT_LOOKAHEAD_MONTHS = 7
 
 # completionTarget.unit -> meters. Only units actually observed live are mapped
 # (don't guess Garmin's other unit keys); an unmapped unit still has its raw
@@ -1139,22 +1141,28 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                         .time(_day_ts(event_date))
                         .tag("event_id", str(event_id))
                     )
+                    # Every field is written on every run, with 0.0/"" sentinels for
+                    # absent values (never omitted): InfluxDB merges fields at the same
+                    # tags+timestamp, so an omitted field would leave a stale prior value
+                    # in place — e.g. a mile target changed to an unmapped unit would keep
+                    # the old distance_m. Same reason deleted_at is always cleared (#104).
+                    # The Go model's omitempty hides the sentinels from tool output.
                     p, _ = _add_fields(
                         p,
                         {
                             "name": str(item.get("title") or ""),
                             "activity_type_id": float(activity_type_id)
                             if activity_type_id is not None
-                            else None,
+                            else 0.0,
                             "is_race": 1.0 if is_race else 0.0,
                             "primary_event": 1.0 if primary else 0.0,
-                            "start_time_local": start_time.get("startTimeHhMm"),
-                            "time_zone_id": start_time.get("timeZoneId"),
-                            "completion_target_value": target_value,
-                            "completion_target_unit": str(target_unit) if target_unit else None,
-                            "distance_m": distance_m,
-                            # Clear any prior tombstone on this exact key — same
-                            # field-merge reason as sync_scheduled_workouts (#104).
+                            "start_time_local": str(start_time.get("startTimeHhMm") or ""),
+                            "time_zone_id": str(start_time.get("timeZoneId") or ""),
+                            "completion_target_value": target_value
+                            if target_value is not None
+                            else 0.0,
+                            "completion_target_unit": str(target_unit or ""),
+                            "distance_m": distance_m if distance_m is not None else 0.0,
                             "deleted_at": 0.0,
                         },
                     )

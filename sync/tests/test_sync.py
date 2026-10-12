@@ -1,6 +1,6 @@
 """Tests for sync.py — Garmin → InfluxDB sync sidecar."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -2276,7 +2276,9 @@ def test_calendar_events_unmapped_unit_keeps_raw_target(no_sleep):
     p = str(_written_points(client)[0])
     assert "completion_target_value=10" in p
     assert 'completion_target_unit="furlong"' in p
-    assert "distance_m" not in p
+    # Written as an explicit 0 sentinel, not omitted, so a previously-derived
+    # distance_m can't survive InfluxDB's field merge.
+    assert "distance_m=0," in p
 
 
 @freeze_time("2026-11-15")
@@ -2286,7 +2288,44 @@ def test_calendar_events_lookahead_spans_year_boundary(no_sleep):
     client.query.return_value.to_pylist.return_value = []
     sync.sync_calendar_events(garmin, client, {})
     calls = [c.args for c in garmin.get_scheduled_workouts.call_args_list]
-    assert calls == [(2026, 11), (2026, 12), (2027, 1), (2027, 2), (2027, 3), (2027, 4)]
+    assert calls == [(2026, 11), (2026, 12), (2027, 1), (2027, 2), (2027, 3), (2027, 4), (2027, 5)]
+
+
+@freeze_time("2026-10-31")
+def test_calendar_events_lookahead_covers_tool_window(no_sleep):
+    """get_calendar_events serves 180 days ahead; the sync must fetch every month
+    that window touches, even when run on the last day of a month."""
+    garmin = _calendar_event_garmin({})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_calendar_events(garmin, client, {})
+    last_year, last_month = garmin.get_scheduled_workouts.call_args_list[-1].args
+    horizon = date(2026, 10, 31) + timedelta(days=180)
+    assert (last_year, last_month) >= (horizon.year, horizon.month)
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_absent_optional_fields_written_as_sentinels(no_sleep):
+    """An event whose start time/target was removed in Garmin must overwrite the
+    previously-synced values, not leave them in place via InfluxDB's field merge."""
+    item = _event_item()
+    item["eventTimeLocal"] = None
+    item["completionTarget"] = None
+    item["activityTypeId"] = None
+    garmin = _calendar_event_garmin({10: [item]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_calendar_events(garmin, client, {})
+    p = str(_written_points(client)[0])
+    for sentinel in (
+        'start_time_local=""',
+        'time_zone_id=""',
+        'completion_target_unit=""',
+        "completion_target_value=0",
+        "distance_m=0",
+        "activity_type_id=0",
+    ):
+        assert sentinel in p, sentinel
 
 
 @freeze_time("2026-10-09")
