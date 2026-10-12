@@ -1539,14 +1539,28 @@ def _build_garmin_step(
         end_condition = {"conditionTypeId": 1, "conditionTypeKey": "lap.button"}
         end_value = None
 
+    target_type: dict[str, Any] | None
+    target_val1: float | None
+    target_val2: float | None
     hr_zone = step.get("target_hr_zone")
-    if hr_zone is not None:
-        target_type: dict[str, Any] | None = {
+    pace_fast = step.get("target_pace_zone_fast_s_per_km")
+    pace_slow = step.get("target_pace_zone_slow_s_per_km")
+    if pace_fast is not None and pace_slow is not None:
+        # Verified live 2026-10-12 (probe upload of 300/315 s/km + get_workout_by_id
+        # readback + delete_workout): pace.zone is workoutTargetTypeId 6, values are
+        # plain m/s stored unconverted (3.3333333/3.1746032 back), and targetValueOne
+        # holds the FASTER (higher m/s) bound — same polarity as coach-plan pace.zone
+        # steps (see _extract_workout_target).
+        target_type = {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "pace.zone"}
+        target_val1 = 1000.0 / float(pace_fast)
+        target_val2 = 1000.0 / float(pace_slow)
+    elif hr_zone is not None:
+        target_type = {
             "workoutTargetTypeId": 4,
             "workoutTargetTypeKey": "heart.rate.zone",
         }
-        target_val1: float | None = float(hr_zone)
-        target_val2: float | None = float(hr_zone)
+        target_val1 = float(hr_zone)
+        target_val2 = float(hr_zone)
     elif step["type"] == "rest":
         # Real Garmin rest steps serialize targetType as null, not the explicit
         # no.target object exercise-performing steps get (confirmed against a

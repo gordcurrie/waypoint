@@ -2004,6 +2004,27 @@ def test_build_garmin_workout_distance_step():
     assert step["endConditionValue"] == 1000.0
 
 
+def test_build_garmin_workout_pace_zone_step():
+    """Shape verified live 2026-10-12 by probe upload + readback: pace.zone is id 6,
+    values are m/s, targetValueOne is the faster bound."""
+    item = _queue_item(
+        sport="running",
+        steps=[
+            {
+                "type": "interval",
+                "distance_m": 1000,
+                "target_pace_zone_fast_s_per_km": 300,
+                "target_pace_zone_slow_s_per_km": 315,
+            }
+        ],
+    )
+    step = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"][0]
+    assert step["targetType"] == {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "pace.zone"}
+    assert step["targetValueOne"] == pytest.approx(3.3333333)
+    assert step["targetValueTwo"] == pytest.approx(3.1746032)
+    assert step["targetValueOne"] > step["targetValueTwo"]
+
+
 def test_build_garmin_workout_unknown_sport_raises():
     item = _queue_item(sport="kayaking")
     with pytest.raises(ValueError, match="unsupported workout sport"):
@@ -2510,3 +2531,72 @@ def test_calendar_events_tombstones_personal_event_without_shareable_column(no_s
     tombstones = [p for p in points if "deleted_at=0" not in p]
     assert len(tombstones) == 1
     assert tombstones[0].startswith("calendar_event,event_id=28702711 deleted_at=")
+
+
+@pytest.mark.parametrize(
+    "sport,steps",
+    [
+        ("running", [{"type": "interval", "duration_s": 1200, "target_hr_zone": 4}]),
+        (
+            "running",
+            [
+                {
+                    "type": "interval",
+                    "distance_m": 1000,
+                    "target_pace_zone_fast_s_per_km": 300,
+                    "target_pace_zone_slow_s_per_km": 315,
+                },
+                {"type": "cooldown", "duration_s": 600},
+            ],
+        ),
+        (
+            "strength_training",
+            [
+                {
+                    "type": "interval",
+                    "reps": 8,
+                    "sets": 3,
+                    "rest_s": 60,
+                    "category": "BENCH_PRESS",
+                    "exercise_name": "BARBELL_BENCH_PRESS",
+                    "weight_kg": 60,
+                }
+            ],
+        ),
+    ],
+)
+def test_build_garmin_workout_matches_upload_schema(sport, steps):
+    """workout_upload.schema.json is the documented contract for what
+    _build_garmin_workout sends — keep it enforced, so a new target type or field
+    can't silently drift from it."""
+    from jsonschema import Draft202012Validator
+
+    import schema_validate
+
+    schema = schema_validate._load_schema("workout_upload.schema.json")
+    validator = Draft202012Validator(schema, registry=schema_validate._load_registry())
+    payload = sync._build_garmin_workout(_queue_item(sport=sport, steps=steps))
+    errors = [f"{list(e.absolute_path)}: {e.message}" for e in validator.iter_errors(payload)]
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    "target_type",
+    [
+        {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "heart.rate.zone"},
+        {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "pace.zone"},
+        {"workoutTargetTypeId": 6},
+    ],
+)
+def test_upload_schema_rejects_mismatched_target_type(target_type):
+    """Garmin resolves workoutTargetTypeId and silently overrides a mismatched key,
+    so the upload schema must reject any id/key pair that isn't a verified one."""
+    from jsonschema import Draft202012Validator
+
+    import schema_validate
+
+    schema = schema_validate._load_schema("workout_upload.schema.json")
+    validator = Draft202012Validator(schema, registry=schema_validate._load_registry())
+    payload = sync._build_garmin_workout(_queue_item())
+    payload["workoutSegments"][0]["workoutSteps"][0]["targetType"] = target_type
+    assert list(validator.iter_errors(payload))

@@ -26,18 +26,27 @@ import (
 // each set and rest individually. WeightKg sets a weight target, requires Category/ExerciseName
 // (verified live 2026-08-09: Garmin resolves a bare {"unitKey":"kilogram"} weightUnit
 // with no unitId needed, and weightValue round-trips unconverted, i.e. it's already kg).
+//
+// TargetPaceZoneFastSPerKm/TargetPaceZoneSlowSPerKm set a Garmin pace.zone target (the
+// watch's pace alert range), given in seconds per km and converted to the m/s Garmin
+// stores by sync.py. Verified live 2026-10-12 (probe upload + readback + delete):
+// pace.zone (workoutTargetTypeId 6) round-trips unconverted, targetValueOne = the
+// faster (higher m/s) bound, targetValueTwo = the slower one.
 type WorkoutStep struct {
-	Type         string   `json:"type"`
-	DurationS    *int     `json:"duration_s,omitempty"`
-	DistanceM    *int     `json:"distance_m,omitempty"`
-	Reps         *int     `json:"reps,omitempty"`
-	Sets         *int     `json:"sets,omitempty"`
-	RestS        *int     `json:"rest_s,omitempty"`
-	Category     *string  `json:"category,omitempty"`
-	ExerciseName *string  `json:"exercise_name,omitempty"`
-	TargetHRZone *int     `json:"target_hr_zone,omitempty"`
-	WeightKg     *float64 `json:"weight_kg,omitempty"`
-	Description  string   `json:"description,omitempty"`
+	Type         string  `json:"type"`
+	DurationS    *int    `json:"duration_s,omitempty"`
+	DistanceM    *int    `json:"distance_m,omitempty"`
+	Reps         *int    `json:"reps,omitempty"`
+	Sets         *int    `json:"sets,omitempty"`
+	RestS        *int    `json:"rest_s,omitempty"`
+	Category     *string `json:"category,omitempty"`
+	ExerciseName *string `json:"exercise_name,omitempty"`
+	TargetHRZone *int    `json:"target_hr_zone,omitempty"`
+	// Pace alert range in s/km (e.g. 300 = 5:00/km). Set both, fast < slow; running only.
+	TargetPaceZoneFastSPerKm *float64 `json:"target_pace_zone_fast_s_per_km,omitempty"`
+	TargetPaceZoneSlowSPerKm *float64 `json:"target_pace_zone_slow_s_per_km,omitempty"`
+	WeightKg                 *float64 `json:"weight_kg,omitempty"`
+	Description              string   `json:"description,omitempty"`
 }
 
 // WorkoutQueueItem is written to the shared queue file for the Python sidecar to consume.
@@ -119,7 +128,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
 			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. Optionally set weight_kg (requires category/exercise_name) for a weight target shown on the watch. " +
-			"Optional target: target_hr_zone (1–5).",
+			"Optional target, at most one per step: target_hr_zone (1–5), or a pace zone (Garmin pace.zone, the watch's pace alert range; running only) via target_pace_zone_fast_s_per_km + target_pace_zone_slow_s_per_km in seconds per km, e.g. 300 and 315 for 5:00–5:15/km.",
 		// Queues a new item onto the shared file — additive, not destructive (nothing is
 		// overwritten or deleted), and each call creates a distinct queue entry so it's not
 		// idempotent. Explicit because the SDK defaults DestructiveHint to true when unset.
@@ -156,6 +165,21 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			}
 			if step.TargetHRZone != nil && (*step.TargetHRZone < 1 || *step.TargetHRZone > 5) {
 				return errorResult(fmt.Errorf("create_workout: step %d: target_hr_zone must be 1–5", i+1))
+			}
+			if (step.TargetPaceZoneFastSPerKm == nil) != (step.TargetPaceZoneSlowSPerKm == nil) {
+				return errorResult(fmt.Errorf("create_workout: step %d: target_pace_zone_fast_s_per_km and target_pace_zone_slow_s_per_km must be set together", i+1))
+			}
+			if step.TargetPaceZoneFastSPerKm != nil {
+				fast, slow := *step.TargetPaceZoneFastSPerKm, *step.TargetPaceZoneSlowSPerKm
+				if input.Sport != "running" {
+					return errorResult(fmt.Errorf("create_workout: step %d: a pace zone target is only supported for running", i+1))
+				}
+				if step.TargetHRZone != nil {
+					return errorResult(fmt.Errorf("create_workout: step %d: set either target_hr_zone or a pace zone, not both", i+1))
+				}
+				if fast <= 0 || slow <= fast {
+					return errorResult(fmt.Errorf("create_workout: step %d: pace zone needs 0 < target_pace_zone_fast_s_per_km < target_pace_zone_slow_s_per_km (got %v, %v)", i+1, fast, slow))
+				}
 			}
 			if (step.Category == nil) != (step.ExerciseName == nil) {
 				return errorResult(fmt.Errorf("create_workout: step %d: category and exercise_name must be set together", i+1))
