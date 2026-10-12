@@ -2578,3 +2578,25 @@ def test_build_garmin_workout_matches_upload_schema(sport, steps):
     payload = sync._build_garmin_workout(_queue_item(sport=sport, steps=steps))
     errors = [f"{list(e.absolute_path)}: {e.message}" for e in validator.iter_errors(payload)]
     assert errors == []
+
+
+@pytest.mark.parametrize(
+    "target_type",
+    [
+        {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "heart.rate.zone"},
+        {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "pace.zone"},
+        {"workoutTargetTypeId": 6},
+    ],
+)
+def test_upload_schema_rejects_mismatched_target_type(target_type):
+    """Garmin resolves workoutTargetTypeId and silently overrides a mismatched key,
+    so the upload schema must reject any id/key pair that isn't a verified one."""
+    from jsonschema import Draft202012Validator
+
+    import schema_validate
+
+    schema = schema_validate._load_schema("workout_upload.schema.json")
+    validator = Draft202012Validator(schema, registry=schema_validate._load_registry())
+    payload = sync._build_garmin_workout(_queue_item())
+    payload["workoutSegments"][0]["workoutSteps"][0]["targetType"] = target_type
+    assert list(validator.iter_errors(payload))

@@ -92,15 +92,32 @@
         },
         {
           "type": "object",
-          "description": "heart.rate.zone when a target_hr_zone is set on the source step; pace.zone (id 6 \u2014 verified live 2026-10-12 by probe upload + readback + delete) when target_pace_zone_fast_s_per_km/target_pace_zone_slow_s_per_km are set; no.target (still an explicit object, not null/omitted) for every other non-rest step.",
+          "description": "Every non-rest step with no target set \u2014 still an explicit object, not null/omitted. Each id/key pair is its own branch (not independent enums): Garmin resolves the id and silently overrides a mismatched key, so a mismatch must fail validation.",
           "properties": {
-            "workoutTargetTypeId": {
-              "enum": [1, 4, 6]
-            },
-            "workoutTargetTypeKey": {
-              "enum": ["no.target", "heart.rate.zone", "pace.zone"]
-            }
+            "workoutTargetTypeId": { "const": 1 },
+            "workoutTargetTypeKey": { "const": "no.target" }
           },
+          "required": ["workoutTargetTypeId", "workoutTargetTypeKey"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "When target_hr_zone is set on the source step.",
+          "properties": {
+            "workoutTargetTypeId": { "const": 4 },
+            "workoutTargetTypeKey": { "const": "heart.rate.zone" }
+          },
+          "required": ["workoutTargetTypeId", "workoutTargetTypeKey"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "When target_pace_zone_fast_s_per_km/target_pace_zone_slow_s_per_km are set \u2014 verified live 2026-10-12 by probe upload + readback + delete.",
+          "properties": {
+            "workoutTargetTypeId": { "const": 6 },
+            "workoutTargetTypeKey": { "const": "pace.zone" }
+          },
+          "required": ["workoutTargetTypeId", "workoutTargetTypeKey"],
           "additionalProperties": false
         }
       ]
