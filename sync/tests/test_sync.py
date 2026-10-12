@@ -2343,6 +2343,23 @@ def test_calendar_events_tombstones_moved_event(no_sleep):
     assert "name=" not in tombstone
 
 
+@freeze_time("2026-10-18")
+def test_calendar_events_tombstones_event_removed_on_its_own_day(no_sleep):
+    """get_calendar_events serves today, so an event deleted on its own day must be
+    tombstoned now — the tombstone lookup window has to include today."""
+    garmin = _calendar_event_garmin({})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-10-18 00:00:00", "event_id": "28702711"}
+    ]
+    sync.sync_calendar_events(garmin, client, {})
+    sql = client.query.call_args.args[0]
+    assert "time >= '2026-10-18T00:00:00Z'" in sql
+    points = [str(p) for p in _written_points(client)]
+    assert len(points) == 1
+    assert points[0].startswith("calendar_event,event_id=28702711 deleted_at=")
+
+
 @freeze_time("2026-10-09")
 def test_calendar_events_no_tombstone_on_fetch_error(no_sleep):
     garmin = MagicMock()

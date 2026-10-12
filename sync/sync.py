@@ -1182,12 +1182,16 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
             log.warning("calendar_events %d-%02d: %s", year, month, exc)
         time.sleep(0.3)
 
-    # Same had_error guard and tomorrow-onward window as sync_scheduled_workouts'
-    # tombstoning — an incomplete fetch must not be mistaken for a deleted event.
+    # Same had_error guard as sync_scheduled_workouts' tombstoning — an incomplete
+    # fetch must not be mistaken for a deleted event. Unlike that window, this one
+    # includes today: the tomorrow-onward exception exists because today's workout
+    # item changes once it's underway/completed, which doesn't apply to an event,
+    # and get_calendar_events serves today — an event deleted or moved on its own
+    # day would otherwise stay visible until tomorrow.
     if had_error:
         log.warning("calendar_events: fetch/parse error this run, skipping tombstoning")
     else:
-        window_start = today + timedelta(days=1)
+        window_start = today
         last_year, last_month = months[-1]
         window_end = (
             date(last_year + 1, 1, 1) if last_month == 12 else date(last_year, last_month + 1, 1)

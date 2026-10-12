@@ -47,7 +47,8 @@
             "description": "observed null in captured sample"
           },
           "title": {
-            "description": "observed null in captured sample"
+            "type": ["string", "null"],
+            "description": "String on all 20 items of the 2026-10 live capture (activity, fbtAdaptiveWorkout, event, trainingPlan) \u2014 verified 2026-10-09; the earlier \"observed null in captured sample\" note did not hold there. Read as the workout name by sync_scheduled_workouts and as the event name by sync_calendar_events."
           },
           "date": {
             "type": "string",
