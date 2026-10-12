@@ -9,9 +9,9 @@ package garmin
 // ShareableEventUUID instead (EventID is 0). The same race can appear as both.
 //
 // DistanceM is derived from Garmin's completionTarget only for units verified live
-// (currently just "mile"); CompletionTargetValue/CompletionTargetUnit always carry
-// the raw target so an unmapped unit is still visible. Garmin's calendar response
-// has no goal time.
+// ("mile" on a personal event, "meter" on a shareable event); CompletionTargetValue/
+// CompletionTargetUnit always carry the raw target so an unmapped unit is still
+// visible. Garmin's calendar response has no goal time.
 type CalendarEvent struct {
 	EventID               int64   `json:"event_id,omitempty"`
 	ShareableEventUUID    string  `json:"shareable_event_uuid,omitempty"`

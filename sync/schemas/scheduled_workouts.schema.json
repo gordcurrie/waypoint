@@ -230,7 +230,7 @@
               "unitType": { "type": ["string", "null"], "description": "Observed: \"distance\". distance_m is only derived when this is \"distance\"." }
             },
             "additionalProperties": true,
-            "description": "null on non-event items; on an event item: {\"value\": 13.11, \"unit\": \"mile\", \"unitType\": \"distance\"} (a half marathon, rounded to 2dp) \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events. Only unit \"mile\" observed so far; no goal time anywhere in this response."
+            "description": "null on non-event items; on an event item: {\"value\": 13.11, \"unit\": \"mile\", \"unitType\": \"distance\"} on a personal event (a half marathon, rounded to 2dp) \u2014 verified live 2026-10-09 against a real itemType \"event\" item with isRace: true; consumed by sync_calendar_events. Units observed: \"mile\" (personal event), \"meter\" (shareable event, e.g. {\"value\": 21100.0, \"unit\": \"meter\"}, 2026-10-12); no goal time anywhere in this response."
           },
           "workoutUuid": {
             "description": "observed null in captured sample"

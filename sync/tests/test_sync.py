@@ -2461,7 +2461,7 @@ def test_calendar_events_shareable_event_keyed_by_uuid(no_sleep):
     client = MagicMock()
     client.query.return_value.to_pylist.return_value = []
     sync.sync_calendar_events(garmin, client, {})
-    client.query.assert_called_once()  # no had_error -> tombstone lookup still ran
+    assert client.query.call_count == 2  # no had_error -> both tag lookups still ran
     points = [str(p) for p in _written_points(client)]
     assert len(points) == 2
     shared = next(p for p in points if "shareable_event_uuid=" in p)
@@ -2487,3 +2487,26 @@ def test_calendar_events_tombstones_unsubscribed_shareable_event(no_sleep):
     tombstones = [p for p in points if "deleted_at=0" not in p]
     assert len(tombstones) == 1
     assert tombstones[0].startswith("calendar_event,shareable_event_uuid=abc deleted_at=")
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_tombstones_personal_event_without_shareable_column(no_sleep):
+    """On an account that never had a shareable event, the shareable_event_uuid
+    column doesn't exist and its lookup fails — personal-event tombstoning must
+    still work off the event_id lookup."""
+    garmin = _calendar_event_garmin({10: [_event_item(date_str="2026-10-25")]})
+    client = MagicMock()
+
+    def query(sql, language):
+        if "shareable_event_uuid" in sql:
+            raise RuntimeError("Schema error: No field named shareable_event_uuid")
+        result = MagicMock()
+        result.to_pylist.return_value = [{"time": "2026-10-18 00:00:00", "event_id": "28702711"}]
+        return result
+
+    client.query.side_effect = query
+    sync.sync_calendar_events(garmin, client, {})
+    points = [str(p) for p in _written_points(client)]
+    tombstones = [p for p in points if "deleted_at=0" not in p]
+    assert len(tombstones) == 1
+    assert tombstones[0].startswith("calendar_event,event_id=28702711 deleted_at=")

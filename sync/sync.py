@@ -1099,21 +1099,32 @@ def _query_active_calendar_event_keys(
     """
     start_ts = _day_ts(start).strftime("%Y-%m-%dT%H:%M:%SZ")
     end_ts = _day_ts(end).strftime("%Y-%m-%dT%H:%M:%SZ")
-    sql = (
-        "SELECT DISTINCT time, event_id, shareable_event_uuid FROM calendar_event "
-        f"WHERE time >= '{start_ts}' AND time < '{end_ts}'"
-    )
-    try:
-        rows = client.query(sql, language="sql").to_pylist()
-        keys = set()
+    keys: set[tuple[str, str, str]] = set()
+    # One query per identifier tag, not a combined one: a tag column only exists in
+    # InfluxDB once a point carrying it has been written, so on an account that has
+    # never had a shareable event, a query naming shareable_event_uuid fails outright —
+    # and a combined query would then lose every event_id key too, silently disabling
+    # tombstoning for personal events. A failed lookup only means fewer tombstones this
+    # run (never a false one), so each tag's failure is isolated and logged at info.
+    for tag in ("event_id", "shareable_event_uuid"):
+        sql = (
+            f"SELECT DISTINCT time, {tag} FROM calendar_event "
+            f"WHERE time >= '{start_ts}' AND time < '{end_ts}' AND {tag} IS NOT NULL"
+        )
+        try:
+            rows = client.query(sql, language="sql").to_pylist()
+        except Exception as exc:
+            log.info(
+                "calendar_events: %s key lookup failed (column may not exist yet), "
+                "not tombstoning by it this run: %s",
+                tag,
+                exc,
+            )
+            continue
         for r in rows:
-            key = _calendar_event_key(r.get("event_id"), r.get("shareable_event_uuid"))
-            if key is not None:
-                keys.add((str(r["time"])[:10], *key))
-        return keys
-    except Exception as exc:
-        log.warning("calendar_events: active-key lookup failed, skipping tombstoning: %s", exc)
-        return set()
+            if r.get(tag) is not None:
+                keys.add((str(r["time"])[:10], tag, str(r[tag])))
+    return keys
 
 
 def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
