@@ -2433,3 +2433,57 @@ def test_run_sync_resets_calendar_month_cache(no_sleep):
         sync.run_sync(garmin, MagicMock())
         sync.run_sync(garmin, MagicMock())
     assert garmin.get_scheduled_workouts.call_count == 2 * sync.CALENDAR_EVENT_LOOKAHEAD_MONTHS
+
+
+def _shareable_event_item(uuid: str = "0dbcf3dd-0000-0000-0000-000000000000") -> dict:
+    # Synthetic, shaped like the live subscribed shareable event captured 2026-10-12.
+    return {
+        "id": None,
+        "itemType": "event",
+        "activityTypeId": 1,
+        "title": "Test Half | Public Listing",
+        "date": "2026-10-18",
+        "url": "https://example.com/event",
+        "isRace": True,
+        "location": "Test City",
+        "shareableEventUuid": uuid,
+        "completionTarget": {"value": 21100.0, "unit": "meter", "unitType": "distance"},
+        "shareableEvent": True,
+        "subscribed": True,
+    }
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_shareable_event_keyed_by_uuid(no_sleep):
+    """A subscribed shareable event has no id — it must be synced (keyed by
+    shareableEventUuid), not skipped as broken, and must not block tombstoning."""
+    garmin = _calendar_event_garmin({10: [_event_item(), _shareable_event_item()]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_calendar_events(garmin, client, {})
+    client.query.assert_called_once()  # no had_error -> tombstone lookup still ran
+    points = [str(p) for p in _written_points(client)]
+    assert len(points) == 2
+    shared = next(p for p in points if "shareable_event_uuid=" in p)
+    assert shared.startswith("calendar_event,shareable_event_uuid=0dbcf3dd-")
+    assert "event_id=" not in shared
+    assert "distance_m=21100" in shared
+    assert "shareable_event=1" in shared
+    assert "subscribed=1" in shared
+    assert 'location="Test City"' in shared
+    assert "primary_event=0" in shared
+
+
+@freeze_time("2026-10-09")
+def test_calendar_events_tombstones_unsubscribed_shareable_event(no_sleep):
+    garmin = _calendar_event_garmin({10: [_event_item()]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = [
+        {"time": "2026-10-18 00:00:00", "event_id": "28702711", "shareable_event_uuid": None},
+        {"time": "2026-10-18 00:00:00", "event_id": None, "shareable_event_uuid": "abc"},
+    ]
+    sync.sync_calendar_events(garmin, client, {})
+    points = [str(p) for p in _written_points(client)]
+    tombstones = [p for p in points if "deleted_at=0" not in p]
+    assert len(tombstones) == 1
+    assert tombstones[0].startswith("calendar_event,shareable_event_uuid=abc deleted_at=")

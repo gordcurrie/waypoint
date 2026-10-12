@@ -62,3 +62,30 @@ func TestCalendarEventFrom_FalseFlags(t *testing.T) {
 		t.Errorf("IsRace/PrimaryEvent: got %v/%v, want false/false", e.IsRace, e.PrimaryEvent)
 	}
 }
+
+func TestCalendarEventFrom_ShareableEvent(t *testing.T) {
+	e := garmin.CalendarEventFrom(map[string]any{
+		"shareable_event_uuid": "0dbcf3dd-0000-0000-0000-000000000000",
+		"time":                 "2026-10-18T00:00:00Z",
+		"shareable_event":      float64(1),
+		"subscribed":           float64(1),
+		"location":             "Test City",
+		"url":                  "https://example.com/event",
+		"distance_m":           21100.0,
+	})
+	if e.EventID != 0 {
+		t.Errorf("EventID: got %d, want 0", e.EventID)
+	}
+	if e.ShareableEventUUID != "0dbcf3dd-0000-0000-0000-000000000000" {
+		t.Errorf("ShareableEventUUID: got %q", e.ShareableEventUUID)
+	}
+	if !e.ShareableEvent || !e.Subscribed {
+		t.Errorf("ShareableEvent/Subscribed: got %v/%v, want true/true", e.ShareableEvent, e.Subscribed)
+	}
+	if e.Location != "Test City" || e.URL != "https://example.com/event" {
+		t.Errorf("Location/URL: got %q %q", e.Location, e.URL)
+	}
+	if e.DistanceM != 21100 {
+		t.Errorf("DistanceM: got %v, want 21100", e.DistanceM)
+	}
+}

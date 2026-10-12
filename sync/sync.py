@@ -1073,27 +1073,44 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
 CALENDAR_EVENT_LOOKAHEAD_MONTHS = 7
 
 # completionTarget.unit -> meters. Only units actually observed live are mapped
+# ("mile" on a personal event, "meter" on a subscribed shareable event — both 2026)
 # (don't guess Garmin's other unit keys); an unmapped unit still has its raw
 # completion_target_value/completion_target_unit stored, just no derived distance_m.
-_COMPLETION_TARGET_UNIT_M = {"mile": 1609.344}
+_COMPLETION_TARGET_UNIT_M = {"mile": 1609.344, "meter": 1.0}
+
+
+def _calendar_event_key(event_id: Any, shareable_event_uuid: Any) -> tuple[str, str] | None:
+    """(tag name, tag value) identifying a calendar event: Garmin's own id for a personal
+    event, shareableEventUuid for a subscribed shareable event (which has no id)."""
+    if event_id is not None:
+        return ("event_id", str(event_id))
+    if shareable_event_uuid:
+        return ("shareable_event_uuid", str(shareable_event_uuid))
+    return None
 
 
 def _query_active_calendar_event_keys(
     client: InfluxDBClient3, start: date, end: date
-) -> set[tuple[str, str]]:
-    """Return the (date, event_id) keys currently stored in calendar_event in [start, end).
+) -> set[tuple[str, str, str]]:
+    """Return the (date, tag name, tag value) keys currently stored in calendar_event in
+    [start, end) — see _calendar_event_key.
     Same tombstone-lookup role as _query_active_coach_plan_keys — used by
     sync_calendar_events to find events that were moved to a different date or deleted.
     """
     start_ts = _day_ts(start).strftime("%Y-%m-%dT%H:%M:%SZ")
     end_ts = _day_ts(end).strftime("%Y-%m-%dT%H:%M:%SZ")
     sql = (
-        "SELECT DISTINCT time, event_id FROM calendar_event "
+        "SELECT DISTINCT time, event_id, shareable_event_uuid FROM calendar_event "
         f"WHERE time >= '{start_ts}' AND time < '{end_ts}'"
     )
     try:
         rows = client.query(sql, language="sql").to_pylist()
-        return {(str(r["time"])[:10], str(r["event_id"])) for r in rows}
+        keys = set()
+        for r in rows:
+            key = _calendar_event_key(r.get("event_id"), r.get("shareable_event_uuid"))
+            if key is not None:
+                keys.add((str(r["time"])[:10], *key))
+        return keys
     except Exception as exc:
         log.warning("calendar_events: active-key lookup failed, skipping tombstoning: %s", exc)
         return set()
@@ -1119,8 +1136,26 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
     No goal time is present in this response. sportTypeKey is null on event items —
     activityTypeId is the only sport signal, stored raw rather than mapped.
 
+    A second kind of event item was found live 2026-10-12: a shareable event the
+    account subscribed to from Garmin's public event listing (here, the same race's
+    public listing), with no id at all:
+        {
+          "itemType": "event",
+          "activityTypeId": 1,
+          "title": "<public race name>",
+          "date": "2026-10-18",
+          "url": "<event listing url>",
+          "isRace": true,
+          "location": "<city>",
+          "shareableEventUuid": "<uuid>",
+          "completionTarget": {"value": 21100.0, "unit": "meter", "unitType": "distance"},
+          "shareableEvent": true,
+          "subscribed": true
+        }
+
     Tagged by event_id (Garmin's own id, stable for a real calendar event — unlike
-    coach-plan items, it isn't regenerated). An event moved to a new date writes a
+    coach-plan items, it isn't regenerated), or by shareable_event_uuid for a
+    shareable event, which has no id (see _calendar_event_key). An event moved to a new date writes a
     new point at the new time; the old-date point is tombstoned the same way
     sync_scheduled_workouts handles coach-plan renames (#104), since InfluxDB 3
     Core has no DELETE.
@@ -1133,7 +1168,7 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
         year, month = (year + 1, 1) if month == 12 else (year, month + 1)
 
     points: list[Any] = []
-    fresh_keys: set[tuple[str, str]] = set()
+    fresh_keys: set[tuple[str, str, str]] = set()
     had_error = False
     for year, month in months:
         try:
@@ -1142,10 +1177,13 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                 if item.get("itemType") != "event":
                     continue
                 try:
-                    event_id = item.get("id")
+                    key = _calendar_event_key(item.get("id"), item.get("shareableEventUuid"))
                     date_str = item.get("date")
-                    if event_id is None or not date_str:
-                        log.warning("calendar_events: event item missing id/date, skipping")
+                    if key is None or not date_str:
+                        log.warning(
+                            "calendar_events: event item missing id/shareableEventUuid/date, "
+                            "skipping"
+                        )
                         had_error = True
                         continue
                     event_date = date.fromisoformat(str(date_str)[:10])
@@ -1166,11 +1204,7 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                     primary = item.get("primaryEvent")
                     activity_type_id = item.get("activityTypeId")
 
-                    p = (
-                        Point("calendar_event")
-                        .time(_day_ts(event_date))
-                        .tag("event_id", str(event_id))
-                    )
+                    p = Point("calendar_event").time(_day_ts(event_date)).tag(*key)
                     # Every field is written on every run, with 0.0/"" sentinels for
                     # absent values (never omitted): InfluxDB merges fields at the same
                     # tags+timestamp, so an omitted field would leave a stale prior value
@@ -1193,11 +1227,15 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
                             else 0.0,
                             "completion_target_unit": str(target_unit or ""),
                             "distance_m": distance_m if distance_m is not None else 0.0,
+                            "shareable_event": 1.0 if item.get("shareableEvent") else 0.0,
+                            "subscribed": 1.0 if item.get("subscribed") else 0.0,
+                            "location": str(item.get("location") or ""),
+                            "url": str(item.get("url") or ""),
                             "deleted_at": 0.0,
                         },
                     )
                     points.append(p)
-                    fresh_keys.add((event_date.isoformat(), str(event_id)))
+                    fresh_keys.add((event_date.isoformat(), *key))
                 except Exception as exc:
                     had_error = True
                     log.warning("calendar_events: item %s: %s", item.get("id"), exc)
@@ -1227,11 +1265,11 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
         )
         stale = _query_active_calendar_event_keys(client, window_start, window_end) - fresh_keys
         deleted_at = datetime.now(UTC).timestamp()
-        for date_str, event_id in stale:
+        for date_str, tag_name, tag_value in stale:
             points.append(
                 Point("calendar_event")
                 .time(_day_ts(date.fromisoformat(date_str)))
-                .tag("event_id", event_id)
+                .tag(tag_name, tag_value)
                 .field("deleted_at", deleted_at)
             )
         if stale:
