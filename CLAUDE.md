@@ -327,6 +327,14 @@ it back, `delete_workout`'d it) — a bare `{"unitKey": "kilogram"}` is enough; 
 round-trips unconverted (60.0 in → 60.0 kg out) — it's already kilograms, no scaling needed.
 `create_workout`'s `weight_kg` step field (#86) uses this.
 
+**`pace.zone` upload shape** (confirmed 2026-10-12 via a live probe: uploaded a disposable step
+with `targetType: {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "pace.zone"}`,
+`targetValueOne: 3.3333`/`targetValueTwo: 3.1746`, read it back, `delete_workout`'d it) — values
+are plain m/s and round-trip unconverted; `targetValueOne` is the FASTER bound, same polarity as
+coach-plan pace targets below. `create_workout`'s `target_pace_zone_fast_s_per_km`/
+`target_pace_zone_slow_s_per_km` step fields take s/km and `sync._build_garmin_step` converts
+(`1000 / s_per_km`).
+
 **Coach-plan workout's real target range — `GET workout-service/fbt-adaptive/<workoutUuid>`**
 (#97, confirmed 2026-08-09 against 3 real tasks: a single-step HR-zone run, a 3-step pace-zone
 tempo run, a strength RepeatGroupDTO) — `sync_training_plan`'s flat `workoutDescription` string

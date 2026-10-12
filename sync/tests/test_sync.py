@@ -2004,6 +2004,27 @@ def test_build_garmin_workout_distance_step():
     assert step["endConditionValue"] == 1000.0
 
 
+def test_build_garmin_workout_pace_zone_step():
+    """Shape verified live 2026-10-12 by probe upload + readback: pace.zone is id 6,
+    values are m/s, targetValueOne is the faster bound."""
+    item = _queue_item(
+        sport="running",
+        steps=[
+            {
+                "type": "interval",
+                "distance_m": 1000,
+                "target_pace_zone_fast_s_per_km": 300,
+                "target_pace_zone_slow_s_per_km": 315,
+            }
+        ],
+    )
+    step = sync._build_garmin_workout(item)["workoutSegments"][0]["workoutSteps"][0]
+    assert step["targetType"] == {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "pace.zone"}
+    assert step["targetValueOne"] == pytest.approx(3.3333333)
+    assert step["targetValueTwo"] == pytest.approx(3.1746032)
+    assert step["targetValueOne"] > step["targetValueTwo"]
+
+
 def test_build_garmin_workout_unknown_sport_raises():
     item = _queue_item(sport="kayaking")
     with pytest.raises(ValueError, match="unsupported workout sport"):

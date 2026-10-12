@@ -898,3 +898,36 @@ func TestQueryCalendarEvents_QueryError(t *testing.T) {
 		t.Fatal("want error, got nil")
 	}
 }
+
+func TestCreateWorkout_PaceZone(t *testing.T) {
+	pace := func(fast, slow any) map[string]any {
+		return map[string]any{
+			"type": "interval", "distance_m": 1000,
+			"target_pace_zone_fast_s_per_km": fast, "target_pace_zone_slow_s_per_km": slow,
+		}
+	}
+	cases := []struct {
+		name    string
+		sport   string
+		step    map[string]any
+		wantErr bool
+	}{
+		{"valid", "running", pace(300, 315), false},
+		{"fast not faster than slow", "running", pace(315, 300), true},
+		{"equal bounds", "running", pace(300, 300), true},
+		{"zero fast", "running", pace(0, 300), true},
+		{"not running", "cycling", pace(300, 315), true},
+		{"only fast set", "running", map[string]any{"type": "interval", "distance_m": 1000, "target_pace_zone_fast_s_per_km": 300}, true},
+		{"with hr zone", "running", func() map[string]any { m := pace(300, 315); m["target_hr_zone"] = 3; return m }(), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := callCreateWorkout(t, map[string]any{
+				"name": "Race pace", "sport": tc.sport, "steps": []map[string]any{tc.step},
+			})
+			if result.IsError != tc.wantErr {
+				t.Fatalf("IsError = %v, want %v: %v", result.IsError, tc.wantErr, result.Content)
+			}
+		})
+	}
+}
