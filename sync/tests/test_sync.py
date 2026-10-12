@@ -2379,3 +2379,57 @@ def test_calendar_events_propagates_connection_error(no_sleep):
     garmin.get_scheduled_workouts.side_effect = GarminConnectConnectionError("down")
     with pytest.raises(GarminConnectConnectionError):
         sync.sync_calendar_events(garmin, MagicMock(), {})
+
+
+# ── shared calendar month fetch ────────────────────────────────────────────────
+
+
+@freeze_time("2026-10-09")
+def test_calendar_months_fetched_once_across_both_syncs(no_sleep):
+    """sync_calendar_events must reuse the months sync_scheduled_workouts already
+    fetched this run instead of calling Garmin for them again."""
+    garmin = _calendar_event_garmin({10: [_event_item()]})
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_scheduled_workouts(garmin, client, {})
+    sync.sync_calendar_events(garmin, client, {})
+    calls = [c.args for c in garmin.get_scheduled_workouts.call_args_list]
+    assert len(calls) == len(set(calls)) == sync.CALENDAR_EVENT_LOOKAHEAD_MONTHS
+
+
+@freeze_time("2026-10-09")
+def test_calendar_month_failure_not_cached(no_sleep):
+    """A month that failed for sync_scheduled_workouts is retried by
+    sync_calendar_events rather than served as a cached failure."""
+    garmin = MagicMock()
+    responses = {(2026, 10): [ValueError("boom"), {"calendarItems": [_event_item()]}]}
+
+    def fake(year, month):
+        queue = responses.get((year, month))
+        result = queue.pop(0) if queue else {"calendarItems": []}
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    garmin.get_scheduled_workouts.side_effect = fake
+    client = MagicMock()
+    client.query.return_value.to_pylist.return_value = []
+    sync.sync_scheduled_workouts(garmin, client, {})
+    sync.sync_calendar_events(garmin, client, {})
+    oct_calls = [c for c in garmin.get_scheduled_workouts.call_args_list if c.args == (2026, 10)]
+    assert len(oct_calls) == 2
+    assert any("calendar_event," in str(p) for p in _written_points(client))
+
+
+def test_run_sync_resets_calendar_month_cache(no_sleep):
+    """The same Garmin client is reused across sync runs in the main loop — each run
+    must refetch the calendar, not serve the previous run's responses."""
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
+    with (
+        patch.object(sync, "SYNC_FUNCS", [sync.sync_calendar_events]),
+        patch.object(sync, "_load_state", return_value={}),
+    ):
+        sync.run_sync(garmin, MagicMock())
+        sync.run_sync(garmin, MagicMock())
+    assert garmin.get_scheduled_workouts.call_count == 2 * sync.CALENDAR_EVENT_LOOKAHEAD_MONTHS

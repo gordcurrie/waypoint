@@ -870,6 +870,37 @@ def _query_active_coach_plan_keys(
         return set()
 
 
+# Per-run cache of calendar month responses, shared by sync_scheduled_workouts and
+# sync_calendar_events: both read the same calendar-service month endpoint, and the
+# second would otherwise refetch the current+next months the first just fetched
+# (2 extra Garmin calls every sync run). Reset at the start of every run_sync, and
+# also whenever a different Garmin client is passed in, so one run's responses never
+# leak into the next run, or between tests calling a sync function directly.
+_calendar_month_cache: dict[str, Any] = {"garmin": None, "months": {}}
+
+
+def _reset_calendar_month_cache() -> None:
+    _calendar_month_cache["garmin"] = None
+    _calendar_month_cache["months"] = {}
+
+
+def _get_calendar_month(garmin: Garmin, year: int, month: int) -> dict[str, Any]:
+    """Return garmin.get_scheduled_workouts(year, month), fetching each month at most
+    once per run. Only successful responses are cached, so a month that failed for
+    one caller is retried by the next. Sleeps only on a real fetch."""
+    if _calendar_month_cache["garmin"] is not garmin:
+        _calendar_month_cache["garmin"] = garmin
+        _calendar_month_cache["months"] = {}
+    months: dict[tuple[int, int], dict[str, Any]] = _calendar_month_cache["months"]
+    key = (year, month)
+    if key not in months:
+        try:
+            months[key] = garmin.get_scheduled_workouts(year, month) or {}
+        finally:
+            time.sleep(0.3)
+    return months[key]
+
+
 def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """Sync Garmin calendar workouts for the current and next month into InfluxDB."""
     today = date.today()
@@ -885,7 +916,7 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     had_error = False
     for year, month in months:
         try:
-            raw = garmin.get_scheduled_workouts(year, month) or {}
+            raw = _get_calendar_month(garmin, year, month)
             items: list[Any] = raw.get("calendarItems") or []
             for item in items:
                 # Calendar items include more than workouts (e.g. completed activities,
@@ -976,7 +1007,6 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         except Exception as exc:
             had_error = True
             log.warning("scheduled_workouts %d-%02d: %s", year, month, exc)
-        time.sleep(0.3)
 
     # Tombstone coach-plan entries the fresh fetch no longer contains (#104): the
     # adaptive plan can rename a task for the same day/sport between sync runs
@@ -1107,7 +1137,7 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
     had_error = False
     for year, month in months:
         try:
-            raw = garmin.get_scheduled_workouts(year, month) or {}
+            raw = _get_calendar_month(garmin, year, month)
             for item in raw.get("calendarItems") or []:
                 if item.get("itemType") != "event":
                     continue
@@ -1180,7 +1210,6 @@ def sync_calendar_events(garmin: Garmin, client: InfluxDBClient3, state: dict[st
         except Exception as exc:
             had_error = True
             log.warning("calendar_events %d-%02d: %s", year, month, exc)
-        time.sleep(0.3)
 
     # Same had_error guard as sync_scheduled_workouts' tombstoning — an incomplete
     # fetch must not be mistaken for a deleted event. Unlike that window, this one
@@ -1748,6 +1777,7 @@ SYNC_FUNCS = [
 
 def run_sync(garmin: Garmin, client: InfluxDBClient3) -> None:
     state = _load_state()
+    _reset_calendar_month_cache()
     for fn in SYNC_FUNCS:
         try:
             fn(garmin, client, state)

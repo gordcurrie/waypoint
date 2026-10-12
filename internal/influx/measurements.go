@@ -21,5 +21,5 @@ const (
 	MeasurementTrainingPlanTask    = "training_plan_task"
 	MeasurementWorkoutDetail       = "workout_detail"
 	MeasurementActivityExerciseSet = "activity_exercise_set"
-	MeasurementCalendarEvent           = "calendar_event"
+	MeasurementCalendarEvent       = "calendar_event"
 )
