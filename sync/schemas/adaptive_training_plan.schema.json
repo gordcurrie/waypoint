@@ -127,6 +127,9 @@
           "longWkt": {
             "type": "boolean"
           },
+          "keyWorkout": {
+            "type": "boolean"
+          },
           "priority": {
             "type": "integer"
           },
