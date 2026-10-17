@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -597,7 +598,7 @@ func TestMergeTrainingPlanDetail_SortedByDate(t *testing.T) {
 
 func TestLoadQueue_EmptyWhenFileAbsent(t *testing.T) {
 	dir := t.TempDir()
-	items, err := loadQueue(dir)
+	items, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +618,7 @@ func TestSaveAndLoadQueue_RoundTrip(t *testing.T) {
 	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadQueue(dir)
+	got, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +648,7 @@ func TestSaveAndLoadQueue_RoundTrip_StrengthFields(t *testing.T) {
 	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadQueue(dir)
+	got, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -688,7 +689,7 @@ func TestSaveAndLoadQueue_RoundTrip_WeightKg(t *testing.T) {
 	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadQueue(dir)
+	got, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -712,7 +713,7 @@ func TestAppendToQueue_AccumulatesItems(t *testing.T) {
 	if err := appendToQueue(dir, &b); err != nil {
 		t.Fatal(err)
 	}
-	items, err := loadQueue(dir)
+	items, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -975,7 +976,7 @@ func TestAppendToQueue_ScheduleDateRoundTrips(t *testing.T) {
 	if n := strings.Count(string(raw), "schedule_date"); n != 1 {
 		t.Fatalf("want schedule_date once in queue file, got %d: %s", n, raw)
 	}
-	items, err := loadQueue(dir)
+	items, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1042,5 +1043,34 @@ func TestAppendToQueue_PreservesSyncBookkeepingFields(t *testing.T) {
 	}
 	if len(items) != 2 || items[0]["uploaded_workout_id"] != float64(555) || items[0]["schedule_attempts"] != float64(2) {
 		t.Fatalf("sync.py fields lost: %s", raw)
+	}
+}
+
+// loadQueueItems decodes the queue into WorkoutQueueItem for assertions. Tests only:
+// production code keeps entries raw (see loadQueue).
+func loadQueueItems(t *testing.T, dir string) ([]WorkoutQueueItem, error) {
+	t.Helper()
+	raw, err := loadQueue(dir)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]WorkoutQueueItem, len(raw))
+	for i, r := range raw {
+		if err := json.Unmarshal(r, &items[i]); err != nil {
+			return nil, fmt.Errorf("decode queue item %d: %w", i, err)
+		}
+	}
+	return items, nil
+}
+
+func TestValidateScheduleDate_UpperBound(t *testing.T) {
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC) // 2026-10-17 in UTC-12
+	if err := validateScheduleDate("2027-10-17", now); err != nil {
+		t.Fatalf("365 days ahead: want ok, got %v", err)
+	}
+	for _, d := range []string{"2027-10-18", "2062-10-17", "9999-12-31"} {
+		if err := validateScheduleDate(d, now); err == nil {
+			t.Errorf("validateScheduleDate(%q): want error", d)
+		}
 	}
 }
