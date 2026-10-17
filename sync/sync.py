@@ -1778,8 +1778,13 @@ def _write_workout_detail(client: InfluxDBClient3, resp: dict[str, Any]) -> None
         _write(client, [p])
 
 
-def _schedule_uploaded_workout(garmin: Garmin, item: dict[str, Any], workout_id: Any) -> None:
-    """Put an uploaded workout on the Garmin calendar on its queue item's schedule_date.
+# A schedule_workout retry gives up after this many failed attempts — a deleted workout or a
+# date Garmin rejects would otherwise retry every sync run forever.
+_MAX_SCHEDULE_ATTEMPTS = 5
+
+
+def _schedule_uploaded_workout(garmin: Garmin, workout_id: Any, sched_date: str, name: Any) -> None:
+    """Put an uploaded workout on the Garmin calendar on sched_date.
 
     garminconnect's schedule_workout POSTs {"date": "YYYY-MM-DD"} to
     workout-service/schedule/<workoutId>. Response confirmed live 2026-10-17 (scheduled a real
@@ -1793,22 +1798,42 @@ def _schedule_uploaded_workout(garmin: Garmin, item: dict[str, Any], workout_id:
           "ownerId": ..., "race": false, "protected": false, ...
         }
     """
-    sched_date = item["schedule_date"]
     sched = garmin.schedule_workout(workout_id, sched_date)
     log.info(
         "pending_workouts: scheduled %r for %s (schedule id %s)",
-        item.get("name"),
+        name,
         sched_date,
         sched.get("workoutScheduleId") if isinstance(sched, dict) else None,
+    )
+
+
+def _already_scheduled(garmin: Garmin, workout_id: Any, sched_date: str) -> bool:
+    """Whether workout_id is already on the calendar on sched_date.
+
+    schedule_workout isn't idempotent: a retry after a call Garmin applied but whose
+    response was lost (timeout), or whose queue removal then failed to persist, would add
+    a second calendar entry. The calendar month's items carry the scheduled workout's
+    workoutId and date — confirmed live 2026-10-17:
+        {"id": 1811236098, "itemType": "workout", "workoutId": 1732218826,
+         "date": "2026-10-17", "trainingPlanId": 0, ...}
+    (id == schedule_workout's workoutScheduleId).
+    """
+    d = date.fromisoformat(sched_date)
+    raw = garmin.get_scheduled_workouts(d.year, d.month) or {}
+    return any(
+        it.get("workoutId") == workout_id and str(it.get("date", ""))[:10] == sched_date
+        for it in raw.get("calendarItems") or []
     )
 
 
 def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
     """Upload queued workouts to Garmin Connect, scheduling any that carry schedule_date.
 
-    Items stay in queue on failure (retry next run). Once an item with schedule_date has
+    Upload failures stay in queue (retry next run). Once an item with schedule_date has
     uploaded, it's kept with uploaded_workout_id set until scheduling succeeds, so a retry
-    only re-attempts schedule_workout — never a second upload_workout (a duplicate workout).
+    only re-attempts schedule_workout — never a second upload_workout (a duplicate
+    workout). A retry first checks the calendar, so a schedule Garmin already applied isn't
+    added twice, and gives up after _MAX_SCHEDULE_ATTEMPTS.
     """
     queue_file = DATA_DIR / "workout_queue.json"
     if not queue_file.exists():
@@ -1828,65 +1853,125 @@ def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[s
     for item in items:
         item_id = item.get("id")
         sched_date = item.get("schedule_date")
-        try:
-            workout_id = item.get("uploaded_workout_id")
-            if workout_id is None:
+        workout_id = item.get("uploaded_workout_id")
+        if workout_id is None:
+            try:
                 resp = garmin.upload_workout(_build_garmin_workout(item))
-                uploaded += 1
-                log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item_id)
-                try:
-                    _write_workout_detail(client, resp)
-                except Exception as exc:
-                    log.warning(
-                        "pending_workouts: failed to write workout_detail for %s: %s",
-                        item_id,
-                        exc,
-                    )
-                workout_id = resp.get("workoutId") if isinstance(resp, dict) else None
-                if sched_date and workout_id is not None:
-                    # Recorded before scheduling, so if schedule_workout fails (or this
-                    # process dies) the retry schedules this upload rather than re-uploading.
-                    item = {**item, "uploaded_workout_id": workout_id}
-                    _commit_queue_item(item_id, item)
-            if sched_date:
-                if workout_id is None:
-                    log.warning(
-                        "pending_workouts: %s uploaded but response has no workoutId — "
-                        "can't schedule it for %s",
-                        item_id,
-                        sched_date,
-                    )
-                else:
-                    _schedule_uploaded_workout(garmin, item, workout_id)
-                    scheduled += 1
-            _commit_queue_item(item_id, None)
-        except (
-            GarminConnectAuthenticationError,
-            GarminConnectTooManyRequestsError,
-            GarminConnectConnectionError,
-            _QueueWriteError,
-        ) as exc:
-            # This item and every later one stay queued as last committed.
-            if item.get("uploaded_workout_id"):
+            except (
+                GarminConnectAuthenticationError,
+                GarminConnectTooManyRequestsError,
+                GarminConnectConnectionError,
+            ):
+                raise  # this item and every later one stay queued
+            except Exception as exc:
+                failed += 1
                 log.warning(
-                    "pending_workouts: %s uploaded but not yet scheduled for %s: %s — will retry",
-                    item_id,
-                    sched_date,
-                    exc,
+                    "pending_workouts: failed to upload %s: %s — keeping in queue", item_id, exc
                 )
-            raise
-        except Exception as exc:
+                continue
+            uploaded += 1
+            log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item_id)
+            try:
+                _write_workout_detail(client, resp)
+            except Exception as exc:
+                log.warning(
+                    "pending_workouts: failed to write workout_detail for %s: %s", item_id, exc
+                )
+            workout_id = resp.get("workoutId") if isinstance(resp, dict) else None
+            if not sched_date:
+                _commit_queue_item(item_id, None)
+                continue
+            if workout_id is None:
+                # Can't schedule, and re-queueing would re-upload a duplicate.
+                log.error(
+                    "pending_workouts: %r uploaded but the response has no workoutId — it is "
+                    "in the Garmin workout library but NOT scheduled for %s; schedule it by hand",
+                    item.get("name"),
+                    sched_date,
+                )
+                _commit_queue_item(item_id, None)
+                continue
+            # Persisted before scheduling, so if schedule_workout fails (or this process
+            # dies) the retry schedules this upload rather than re-uploading. A
+            # _QueueWriteError here propagates: the upload isn't recorded, and the next
+            # run will upload again.
+            item = {**item, "uploaded_workout_id": workout_id}
+            _commit_queue_item(item_id, item)
+            if _try_schedule(garmin, item, workout_id, check_calendar=False):
+                scheduled += 1
+            else:
+                failed += 1
+            continue
+        if _try_schedule(garmin, item, workout_id, check_calendar=True):
+            scheduled += 1
+        else:
             failed += 1
-            step = f"schedule (for {sched_date})" if item.get("uploaded_workout_id") else "upload"
-            log.warning(
-                "pending_workouts: failed to %s %s: %s — keeping in queue", step, item_id, exc
-            )
     log.info(
-        "pending_workouts: uploaded %d, scheduled %d, %d failed and kept in queue",
+        "pending_workouts: uploaded %d, scheduled %d, %d failed (see warnings)",
         uploaded,
         scheduled,
         failed,
     )
+
+
+def _try_schedule(
+    garmin: Garmin, item: dict[str, Any], workout_id: Any, check_calendar: bool
+) -> bool:
+    """Schedule an uploaded queue item and record the outcome. Returns True once it's on the
+    calendar (removed from the queue); False if it's kept for a retry or given up on.
+
+    Only auth/rate-limit errors propagate (no further Garmin calls this run). Any other
+    failure — including GarminConnectConnectionError, which garminconnect also raises for
+    HTTP errors like a 404 on a since-deleted workout — counts as one attempt rather than
+    aborting the run, so one unschedulable item can't block the rest of the queue or the
+    other sync functions.
+    """
+    item_id = item.get("id")
+    sched_date: str = item["schedule_date"]
+    try:
+        if check_calendar and _already_scheduled(garmin, workout_id, sched_date):
+            log.info(
+                "pending_workouts: %r already on the calendar for %s — not scheduling again",
+                item.get("name"),
+                sched_date,
+            )
+        else:
+            _schedule_uploaded_workout(garmin, workout_id, sched_date, item.get("name"))
+    except (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError) as exc:
+        log.warning(
+            "pending_workouts: %s uploaded but not yet scheduled for %s: %s — will retry",
+            item_id,
+            sched_date,
+            exc,
+        )
+        raise
+    except Exception as exc:
+        attempts = int(item.get("schedule_attempts", 0)) + 1
+        if attempts >= _MAX_SCHEDULE_ATTEMPTS:
+            log.error(
+                "pending_workouts: giving up scheduling %r (workout %s) for %s after %d "
+                "attempts: %s — it is in the Garmin workout library but NOT scheduled",
+                item.get("name"),
+                workout_id,
+                sched_date,
+                attempts,
+                exc,
+            )
+            _commit_queue_item(item_id, None)
+        else:
+            log.warning(
+                "pending_workouts: %s uploaded but scheduling for %s failed (attempt %d/%d): "
+                "%s — will retry",
+                item_id,
+                sched_date,
+                attempts,
+                _MAX_SCHEDULE_ATTEMPTS,
+                exc,
+            )
+            _commit_queue_item(item_id, {**item, "schedule_attempts": attempts})
+        return False
+    _commit_queue_item(item_id, None)
+    return True
 
 
 def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:

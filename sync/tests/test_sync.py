@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from freezegun import freeze_time
-from garminconnect import GarminConnectConnectionError
+from garminconnect import GarminConnectConnectionError, GarminConnectTooManyRequestsError
 
 import sync
 
@@ -2029,28 +2029,78 @@ def test_pending_workouts_schedule_failure_keeps_item_with_workout_id(tmp_path, 
     remaining = _read_queue(tmp_path)
     assert len(remaining) == 1
     assert remaining[0]["uploaded_workout_id"] == 555
+    assert remaining[0]["schedule_attempts"] == 1
+
+
+def _uploaded_item(attempts: int = 1) -> dict:
+    item = _scheduled_item()
+    item["uploaded_workout_id"] = 555
+    item["schedule_attempts"] = attempts
+    return item
 
 
 def test_pending_workouts_retry_schedules_without_reuploading(tmp_path, monkeypatch):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    item = _scheduled_item()
-    item["uploaded_workout_id"] = 555
-    _write_queue(tmp_path, [item])
+    _write_queue(tmp_path, [_uploaded_item()])
     garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
     garmin.schedule_workout.return_value = {"workoutScheduleId": 1}
     sync.sync_pending_workouts(garmin, MagicMock(), {})
     garmin.upload_workout.assert_not_called()
+    garmin.get_scheduled_workouts.assert_called_once_with(2026, 10)
     garmin.schedule_workout.assert_called_once_with(555, "2026-10-17")
     assert _read_queue(tmp_path) == []
 
 
-def test_pending_workouts_schedule_connection_error_keeps_upload_and_rest(tmp_path, monkeypatch):
+def test_pending_workouts_retry_skips_schedule_already_applied(tmp_path, monkeypatch):
+    """A previous schedule_workout that Garmin applied but whose response was lost
+    must not add a second calendar entry on retry."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_uploaded_item()])
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = {
+        "calendarItems": [
+            {"id": 1, "itemType": "workout", "workoutId": 555, "date": "2026-10-17"},
+        ]
+    }
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.schedule_workout.assert_not_called()
+    assert _read_queue(tmp_path) == []
+
+
+def test_pending_workouts_gives_up_after_max_schedule_attempts(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_uploaded_item(attempts=sync._MAX_SCHEDULE_ATTEMPTS - 1)])
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
+    garmin.schedule_workout.side_effect = Exception("404 workout not found")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path) == []
+    garmin.upload_workout.assert_not_called()
+
+
+def test_pending_workouts_schedule_connection_error_does_not_block_queue(tmp_path, monkeypatch):
+    """garminconnect raises GarminConnectConnectionError for HTTP errors too (e.g. a 404
+    on a deleted workout), so one unschedulable item must not stop the rest."""
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     _write_queue(tmp_path, [_scheduled_item(id="first"), _queue_item(id="second")])
     garmin = MagicMock()
     garmin.upload_workout.return_value = _upload_response(workout_id=555)
-    garmin.schedule_workout.side_effect = GarminConnectConnectionError("timeout")
-    with pytest.raises(GarminConnectConnectionError):
+    garmin.schedule_workout.side_effect = GarminConnectConnectionError("404")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    remaining = _read_queue(tmp_path)
+    assert [r["id"] for r in remaining] == ["first"]
+    assert remaining[0]["uploaded_workout_id"] == 555
+    assert garmin.upload_workout.call_count == 2
+
+
+def test_pending_workouts_schedule_rate_limit_stops_and_keeps_upload(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_scheduled_item(id="first"), _queue_item(id="second")])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response(workout_id=555)
+    garmin.schedule_workout.side_effect = GarminConnectTooManyRequestsError("429")
+    with pytest.raises(GarminConnectTooManyRequestsError):
         sync.sync_pending_workouts(garmin, MagicMock(), {})
     remaining = _read_queue(tmp_path)
     assert [r["id"] for r in remaining] == ["first", "second"]

@@ -329,13 +329,20 @@ the watch until it's on the calendar. `garmin.schedule_workout(workoutId, "YYYY-
 response (schema: `sync/schemas/workout_schedule.schema.json`, drift-checked). `create_workout`'s
 optional `schedule_date` uses this. Once a scheduled item uploads, `sync_pending_workouts` records
 `uploaded_workout_id` on its queue entry *before* calling `schedule_workout`, so a failed schedule
-is retried next run without re-uploading (a re-upload would be a duplicate workout).
+is retried next run without re-uploading (a re-upload would be a duplicate workout). A retry first
+checks the calendar month for an item with that `workoutId` + `date` (shape verified live
+2026-10-17: `itemType: "workout"`, `id` == `workoutScheduleId`) so a schedule Garmin applied but
+whose response was lost isn't added twice, and gives up after `_MAX_SCHEDULE_ATTEMPTS` (5).
+`GarminConnectConnectionError` counts as an attempt rather than aborting the run —
+`garminconnect` raises it for HTTP errors too (e.g. a 404 on a workout deleted in the app).
 
 **Workout queue file is shared across two processes** — the Go MCP server appends
 (`appendToQueue`), the sync sidecar consumes (`sync_pending_workouts`). Both flock
 `<data-dir>/workout_queue.lock`, and the sidecar commits each item's outcome by re-reading the
 queue under that lock rather than writing back a snapshot, so a `create_workout` mid-sync isn't
-lost. Any new writer of `workout_queue.json` must take the same lock.
+lost. Any new writer of `workout_queue.json` must take the same lock, and must carry existing
+entries over as raw JSON — sync.py adds bookkeeping fields (`uploaded_workout_id`,
+`schedule_attempts`) that decoding into `WorkoutQueueItem` would silently drop.
 
 **`weightValue`/`weightUnit` shape** (confirmed 2026-08-09 via a live probe: uploaded a
 disposable strength step with `weightValue: 60.0, weightUnit: {"unitKey": "kilogram"}`, read

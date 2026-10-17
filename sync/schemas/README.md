@@ -79,7 +79,6 @@ re-derive it with a probe schedule + `unschedule_workout`, not `inspect_api.py`.
 
 - Sleep data on a night with no recording at all
 - HRV on a day with no reading (device not worn)
-- A scheduled-workout calendar item with `workoutId` actually set
 - `get_lactate_threshold` for an account with no LT test ever taken
 - Non-running activity types (cycling, swimming, strength_training)
 

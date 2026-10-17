@@ -76,7 +76,10 @@ var validSports = map[string]bool{
 
 var queueMu sync.Mutex
 
-// queueLockFile is flocked by both appendToQueue and sync.py's _queue_lock.
+// queueLockFile is flocked by both appendToQueue and sync.py's _queue_lock. queueMu
+// serializes appendToQueue within this process; on unix the flock alone would too
+// (separate opens conflict even in one process), but queueMu is what covers the
+// non-unix build, where lockQueueFile is a no-op.
 const queueLockFile = "workout_queue.lock"
 
 func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
@@ -134,7 +137,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		Name:  "create_workout",
 		Title: "Create Workout",
 		Description: "Queue a structured workout for upload to Garmin Connect. The Python sidecar uploads it on the next sync run (every 30 minutes by default; set via SYNC_SCHEDULE). Requires --data-dir pointing to the shared sync volume. Returns the queue ID. " +
-			"Set schedule_date (YYYY-MM-DD, today or later) to also put it on that day of the Garmin calendar so it shows up on the watch; without it the workout only lands in the Garmin Connect workout library. get_scheduled_workouts only sees 60 days ahead, so a workout scheduled further out won't appear there (or be conflict-checkable) until it's within that window. " +
+			"Set schedule_date (YYYY-MM-DD, the user's today or later; a date already past in every time zone is rejected) to also put it on that day of the Garmin calendar so it shows up on the watch; without it the workout only lands in the Garmin Connect workout library. get_scheduled_workouts only sees 60 days ahead, so a workout scheduled further out won't appear there (or be conflict-checkable) until it's within that window. " +
 			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
 			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. Optionally set weight_kg (requires category/exercise_name) for a weight target shown on the watch. " +
@@ -259,10 +262,13 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	})
 }
 
+// earliestZone is the furthest-behind time zone in use (UTC-12): a date before today
+// there is already over everywhere on Earth.
+var earliestZone = time.FixedZone("UTC-12", -12*60*60)
+
 // validateScheduleDate rejects a malformed or past schedule_date ("" means unscheduled).
-// "Past" is before yesterday in the server's clock, not before today: the MCP server
-// may run in UTC while the user is hours behind, so the user's today can already be
-// the server's yesterday.
+// The MCP server doesn't know the user's time zone, so "past" means before today in
+// UTC-12 — past for every user, regardless of the server's own clock or zone.
 func validateScheduleDate(s string, now time.Time) error {
 	if s == "" {
 		return nil
@@ -271,7 +277,7 @@ func validateScheduleDate(s string, now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("create_workout: schedule_date must be YYYY-MM-DD, got %q", s)
 	}
-	y, m, day := now.AddDate(0, 0, -1).Date()
+	y, m, day := now.In(earliestZone).Date()
 	if d.Before(time.Date(y, m, day, 0, 0, 0, 0, time.UTC)) {
 		return fmt.Errorf("create_workout: schedule_date %s is in the past", s)
 	}
@@ -297,13 +303,10 @@ func loadQueue(dataDir string) ([]WorkoutQueueItem, error) {
 	return items, nil
 }
 
-func saveQueue(dataDir string, items []WorkoutQueueItem) error {
+func saveQueue(dataDir string, items []json.RawMessage) error {
 	data, err := json.Marshal(items)
 	if err != nil {
 		return fmt.Errorf("marshal queue: %w", err)
-	}
-	if err := os.MkdirAll(dataDir, 0o750); err != nil {
-		return fmt.Errorf("create data dir: %w", err)
 	}
 	tmp := queuePath(dataDir) + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
@@ -315,19 +318,38 @@ func saveQueue(dataDir string, items []WorkoutQueueItem) error {
 	return nil
 }
 
+// appendToQueue adds item to the queue. Existing entries are carried over as raw JSON,
+// not decoded into WorkoutQueueItem: sync.py adds its own bookkeeping fields to items
+// it's partway through (uploaded_workout_id, schedule_attempts), and round-tripping them
+// through the struct would silently drop those — making sync.py re-upload a duplicate.
 func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
 	queueMu.Lock()
 	defer queueMu.Unlock()
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
 	unlock, err := lockQueueFile(dataDir)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	items, err := loadQueue(dataDir)
-	if err != nil {
-		return err
+
+	var items []json.RawMessage
+	data, err := os.ReadFile(queuePath(dataDir))
+	switch {
+	case os.IsNotExist(err):
+	case err != nil:
+		return fmt.Errorf("read queue: %w", err)
+	default:
+		if err := json.Unmarshal(data, &items); err != nil {
+			return fmt.Errorf("parse queue: %w", err)
+		}
 	}
-	return saveQueue(dataDir, append(items, *item))
+	raw, err := json.Marshal(item)
+	if err != nil {
+		return fmt.Errorf("marshal queue item: %w", err)
+	}
+	return saveQueue(dataDir, append(items, raw))
 }
 
 func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) ([]garmin.ScheduledWorkout, error) {

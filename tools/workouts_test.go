@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -613,7 +614,7 @@ func TestSaveAndLoadQueue_RoundTrip(t *testing.T) {
 			{Type: "warmup", DurationS: &dur, Description: "easy"},
 		}},
 	}
-	if err := saveQueue(dir, want); err != nil {
+	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
 	got, err := loadQueue(dir)
@@ -643,7 +644,7 @@ func TestSaveAndLoadQueue_RoundTrip_StrengthFields(t *testing.T) {
 			},
 		}},
 	}
-	if err := saveQueue(dir, want); err != nil {
+	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
 	got, err := loadQueue(dir)
@@ -684,7 +685,7 @@ func TestSaveAndLoadQueue_RoundTrip_WeightKg(t *testing.T) {
 			},
 		}},
 	}
-	if err := saveQueue(dir, want); err != nil {
+	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
 	got, err := loadQueue(dir)
@@ -984,14 +985,14 @@ func TestAppendToQueue_ScheduleDateRoundTrips(t *testing.T) {
 }
 
 func TestValidateScheduleDate(t *testing.T) {
-	now := time.Date(2026, 10, 17, 3, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 10, 17, 3, 0, 0, 0, time.UTC) // 2026-10-16 15:00 in UTC-12
 	cases := []struct {
 		date    string
 		wantErr bool
 	}{
 		{"", false},
 		{"2026-10-17", false},
-		{"2026-10-16", false}, // user's today when the server's clock is ahead (UTC)
+		{"2026-10-16", false}, // still today in UTC-12, so someone's today
 		{"2026-10-15", true},
 		{"2027-01-05", false},
 		{"2026-13-01", true},
@@ -1010,5 +1011,36 @@ func TestAppendToQueue_CreatesLockFile(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, queueLockFile)); err != nil {
 		t.Fatalf("want lock file shared with sync.py: %v", err)
+	}
+}
+
+func TestValidateScheduleDate_LateUTCDay(t *testing.T) {
+	// 23:00 UTC on Oct 17 is 11:00 Oct 17 in UTC-12: Oct 16 is past everywhere.
+	now := time.Date(2026, 10, 17, 23, 0, 0, 0, time.UTC)
+	if err := validateScheduleDate("2026-10-16", now); err == nil {
+		t.Fatal("want error: 2026-10-16 is over in every time zone")
+	}
+}
+
+func TestAppendToQueue_PreservesSyncBookkeepingFields(t *testing.T) {
+	dir := t.TempDir()
+	// An item sync.py is partway through: uploaded, not yet scheduled.
+	existing := `[{"id":"1","name":"a","sport":"running","schedule_date":"2026-10-20","steps":[],"uploaded_workout_id":555,"schedule_attempts":2}]`
+	if err := os.WriteFile(queuePath(dir), []byte(existing), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "2", Name: "b", Sport: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(queuePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var items []map[string]any
+	if err := json.Unmarshal(raw, &items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0]["uploaded_workout_id"] != float64(555) || items[0]["schedule_attempts"] != float64(2) {
+		t.Fatalf("sync.py fields lost: %s", raw)
 	}
 }

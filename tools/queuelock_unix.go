@@ -11,8 +11,7 @@ import (
 
 // lockQueueFile takes an exclusive flock on the queue's lock file — the same file
 // sync.py's _queue_lock flocks — so an append here can't be lost to the sync
-// sidecar rewriting the queue from a stale read. queueMu still guards goroutines
-// within this process; flock is what reaches across to the other process.
+// sidecar rewriting the queue from a stale read.
 func lockQueueFile(dataDir string) (unlock func(), err error) {
 	f, err := os.OpenFile(filepath.Clean(filepath.Join(dataDir, queueLockFile)), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {

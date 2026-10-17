@@ -164,7 +164,7 @@
             "description": "observed null in captured sample"
           },
           "workoutId": {
-            "description": "One of two filter keys (see itemType) sync_scheduled_workouts uses to decide whether an item is a real scheduled workout. Always null for coach/training-plan items (itemType==fbtAdaptiveWorkout) \u2014 populated only for workouts created via create_workout/the Garmin workout builder. No positive (non-null) example captured yet in this account; fbtAdaptiveWorkout items are matched via trainingPlanId instead."
+            "description": "One of two filter keys (see itemType) sync_scheduled_workouts uses to decide whether an item is a real scheduled workout. Always null for coach/training-plan items (itemType==fbtAdaptiveWorkout) \u2014 populated only for workouts created via create_workout/the Garmin workout builder. Positive example captured live 2026-10-17 (a create_workout upload scheduled via schedule_workout): itemType \"workout\", workoutId an integer, id == schedule_workout's workoutScheduleId, trainingPlanId 0 (not null), workoutUuid null. sync_pending_workouts' _already_scheduled matches on workoutId + date."
           },
           "protectedWorkoutSchedule": {
             "type": "boolean"
