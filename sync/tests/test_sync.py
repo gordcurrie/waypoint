@@ -3508,3 +3508,29 @@ def test_pending_workouts_creates_spool_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     sync.sync_pending_workouts(MagicMock(), MagicMock(), {})
     assert (tmp_path / "workout_queue").is_dir()
+
+
+@freeze_time("2026-10-17")
+def test_quarantined_uploaded_item_says_it_needs_scheduling(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    item = _uploaded_item(date_str="2099-01-01")
+    item["other_failures"] = sync._MAX_OTHER_FAILURES - 1
+    _write_queue(tmp_path, [item])
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
+    garmin.schedule_workout.side_effect = ValueError("bad id")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert (tmp_path / "workout_queue" / "abc123.json.invalid").exists()
+    assert "workout 555 is in the Garmin workout library but NOT on the calendar" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("created", "want"),
+    [
+        ("2026-10-17T15:47:43.0", datetime(2026, 10, 17, 15, 47, 43, tzinfo=UTC)),
+        ("2026-10-17T10:47:43-05:00", datetime(2026, 10, 17, 15, 47, 43, tzinfo=UTC)),
+        ("garbage", None),
+    ],
+)
+def test_created_at_converts_offsets(created, want):
+    assert sync._created_at({"createdDate": created}) == want

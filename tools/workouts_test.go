@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1151,5 +1152,18 @@ func TestValidateScheduleDate_UpperBoundFromFurthestAheadZone(t *testing.T) {
 	}
 	if err := validateScheduleDate("2027-10-19", now); err == nil {
 		t.Fatal("want error beyond anyone's today+365")
+	}
+}
+
+func TestLinkUnsupported(t *testing.T) {
+	for _, err := range []error{syscall.EPERM, syscall.ENOTSUP, syscall.EXDEV} {
+		if !linkUnsupported(&os.LinkError{Op: "link", Err: err}) {
+			t.Errorf("%v: want unsupported (fall back to rename)", err)
+		}
+	}
+	for _, err := range []error{syscall.EACCES, syscall.ENOSPC} {
+		if linkUnsupported(&os.LinkError{Op: "link", Err: err}) {
+			t.Errorf("%v: must be returned as a real error, not hidden by a rename", err)
+		}
 	}
 }

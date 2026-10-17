@@ -17,10 +17,12 @@ DEPLOY_PATH="${DEPLOY_PATH:-/opt/waypoint}"
 echo "Deploying to ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}"
 
 ssh -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${DEPLOY_HOST}" \
-    bash -s -- "${DEPLOY_PATH}" "${SKIP_LEGACY_QUEUE_CHECK:-}" <<'REMOTE'
+    bash -s -- "${DEPLOY_PATH}" "${SKIP_LEGACY_QUEUE_CHECK:-0}" <<'REMOTE'
 set -euo pipefail
 cd "$1"
-SKIP_LEGACY_QUEUE_CHECK="$2"
+# Always passed non-empty: ssh re-joins its arguments into one remote command line, so an
+# empty "" argument would vanish and leave $2 unbound under set -u.
+SKIP_LEGACY_QUEUE_CHECK="${2:-0}"
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.homelab.yml)
 
 # The sync sidecar no longer reads the old single-file workout queue (it moved to the

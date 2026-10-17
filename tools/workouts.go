@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -351,13 +352,40 @@ func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
 	// suffix already makes a collision vanishingly unlikely.
 	final := filepath.Join(dir, item.ID+".json")
 	err = os.Link(tmp, final)
-	if errors.Is(err, fs.ErrExist) {
+	switch {
+	case err == nil:
+	case errors.Is(err, fs.ErrExist):
 		return fmt.Errorf("queue item %s already exists", item.ID)
-	}
-	if err != nil {
+	case linkUnsupported(err):
 		if err := os.Rename(tmp, final); err != nil {
 			return fmt.Errorf("queue item %s: %w", item.ID, err)
 		}
+	default:
+		return fmt.Errorf("queue item %s: %w", item.ID, err)
+	}
+	// fsync the directory too, so the new entry itself survives a crash right after
+	// create_workout reports "queued" (sync.py's _write_queue_item does the same).
+	return syncDir(dir)
+}
+
+// linkUnsupported reports whether a Link error means the filesystem can't hard-link at
+// all (EPERM/ENOTSUP/EXDEV, e.g. some SMB/FUSE mounts) — the only case where falling back
+// to an overwriting Rename is acceptable. Any other error (EACCES, ENOSPC, …) is real.
+func linkUnsupported(err error) bool {
+	return errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.ENOTSUP) ||
+		errors.Is(err, syscall.EXDEV)
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(filepath.Clean(dir))
+	if err != nil {
+		return fmt.Errorf("open queue dir: %w", err)
+	}
+	defer func() { _ = d.Close() }()
+	// Directory fsync isn't supported everywhere (e.g. Windows); the file itself was
+	// already synced, so that's not worth failing the call over.
+	if err := d.Sync(); err != nil && !errors.Is(err, syscall.EINVAL) && !errors.Is(err, os.ErrPermission) {
+		return fmt.Errorf("sync queue dir: %w", err)
 	}
 	return nil
 }
