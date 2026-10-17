@@ -80,6 +80,10 @@ Add to Claude's MCP config (stdio, local dev):
 > is not accessible to the sync container. Use the HTTP transport (`docker-compose.mcp.yml`)
 > for `create_workout` — the MCP container and sync container share the `sync_data` volume
 > and both use `/data`.
+>
+> `create_workout` uploads to the Garmin Connect workout library. Pass `schedule_date`
+> (YYYY-MM-DD) to also put it on that day of the Garmin calendar, so it syncs to the watch
+> without a manual "schedule" step in the Garmin Connect app.
 
 For homelab HTTP deployment: `./waypoint-mcp --transport=http --addr=0.0.0.0:8080 --data-dir=/data`
 
