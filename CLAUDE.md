@@ -343,11 +343,14 @@ in Garmin Connect as the workout's description — unavoidable: the fields that 
 (`workoutSourceId`/`workoutProvider`) are rejected by `upload_workout` with a 500
 `DataIntegrityViolationException` (probed 2026-10-17). Editing that description in the app before a
 timed-out upload's retry runs would defeat the match (a ~30-minute window, only after a timeout).
-Per-item failure limits (a `failures` counter on the queue item, reset when it uploads): bad item
-data ("other") is quarantined to `<id>.json.invalid` after 5 runs in a row; a transient 5xx/network
-failure holds up the rest of the queue for its first 3 runs (Garmin is probably down), then stops
-blocking (probably this item — e.g. a body Garmin always 500s on), and is quarantined after 96 runs
-(~2 days). Failed *reads* never count against an item. Nothing is scheduled onto a date that has passed (with a
+Per-item failure limits (reset when the item uploads). Bad item data ("other") is quarantined to
+`<id>.json.invalid` after 5 runs in a row. A transient 5xx/403/network failure holds up the rest of
+the queue for its first 3 runs (Garmin is probably down), then stops blocking (probably this item —
+e.g. a body Garmin always 500s on). Any item still failing 7 days after its failure streak began
+(`first_failure_at` — time-based, so an outage can't quarantine everything early however short
+`SYNC_SCHEDULE` is) is quarantined; failed *reads* extend that streak but never count as item
+failures. A permanent 4xx is quarantined too, never deleted — a Garmin-wide 4xx (moved endpoint)
+would otherwise wipe the whole queue in one run. Quarantine never deletes a workout definition. Nothing is scheduled onto a date that has passed (with a
 day's slack for time zones): an expired item uploads unscheduled, or is dropped if already uploaded.
 
 **`upload_workout`/`schedule_workout` errors are all `GarminConnectConnectionError`** (garminconnect
@@ -355,7 +358,7 @@ day's slack for time zones): an expired item uploads unscheduled, or is dropped 
 read methods get, so 401/429/404/5xx all arrive as `GarminConnectConnectionError("API Error NNN - ...")`
 with no typed rate-limit/auth exception. `sync._garmin_write_error_kind` parses the status back out:
 401/429 stop the run (re-raised as the typed `GarminConnectAuthenticationError`/
-`TooManyRequestsError` so the main loop re-logs-in or backs off); 400/404/410/422 drop the item
+`TooManyRequestsError` so the main loop re-logs-in or backs off); 400/404/410/422 quarantine the item
 (ERROR log — retrying the same request can't succeed); every other 4xx (403 is Cloudflare's bot
 wall, 408/409 can clear), 5xx and network errors (`requests.Timeout` etc. surface raw — all
 `OSError`s) leave the item *and the rest of the queue* for the next run; a non-Garmin exception
@@ -380,8 +383,9 @@ review found it needed a cross-language flock plus field-preservation rules on e
 there is deliberately no automatic migration from it (making one safe against an old MCP server
 writing mid-migration took more machinery than it was worth): `sync._check_legacy_queue` deletes an
 empty one and logs an ERROR every run for a non-empty one, to be moved into the spool by hand —
-and `scripts/deploy.sh` refuses to deploy while the running sidecar's `/data/workout_queue.json`
-still holds workouts, so in practice nothing is ever stranded there. **Deploy the MCP
+and `scripts/deploy.sh` stops the old MCP server (so it can't write mid-deploy), then refuses to
+deploy while the running sidecar's `/data/workout_queue.json` still holds workouts, so in practice
+nothing is ever stranded there. **Deploy the MCP
 server and sync sidecar together** (`make deploy` does): a new MCP server with an old sidecar
 writes to a spool dir nothing reads. Queue ids are `<UnixNano>-<8 hex>` — the random suffix keeps
 concurrent `create_workout` calls unique where the clock is only µs-resolution (macOS), and

@@ -25,8 +25,12 @@ COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.homelab.yml)
 # workout_queue/ spool dir, and deliberately doesn't auto-migrate — see
 # sync._check_legacy_queue). Refuse to deploy over workouts still waiting in the old file:
 # let the running sidecar upload them first (one sync interval), then retry.
+# The old MCP server is stopped first, so it can't append to the file between this check
+# and the rebuild (`up -d --build` below starts the new one); restarted if we bail out.
+"${COMPOSE[@]}" stop mcp-server
 legacy="$("${COMPOSE[@]}" exec -T sync cat /data/workout_queue.json 2>/dev/null || true)"
 if [[ -n "${legacy//[[:space:]]/}" && "${legacy//[[:space:]]/}" != "[]" ]]; then
+    "${COMPOSE[@]}" start mcp-server
     echo "Refusing to deploy: /data/workout_queue.json still holds queued workouts:" >&2
     echo "${legacy}" >&2
     echo "Wait for the next sync run to upload them (or restart the sync container), then retry." >&2

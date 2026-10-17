@@ -3275,13 +3275,14 @@ def test_pending_workouts_read_failure_never_counts_against_item(tmp_path, monke
         sync.sync_pending_workouts(garmin, MagicMock(), {})
     remaining = _read_queue(tmp_path)
     assert len(remaining) == 1
-    assert "failures" not in remaining[0]
+    assert "failures" not in remaining[0]  # streak tracked via first_failure_at only
 
 
 def test_pending_workouts_persistent_5xx_stops_blocking_then_quarantines(
     tmp_path, monkeypatch, no_sleep
 ):
-    """A body Garmin always 500s on must not hold up the queue forever."""
+    """A body Garmin always 500s on must not hold up the queue forever, and is quarantined
+    (kept, not deleted) once it has been failing for _FAILURE_GIVE_UP."""
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     _write_queue(tmp_path, [_queue_item(id="1"), _queue_item(id="2")])
     garmin = MagicMock()
@@ -3292,13 +3293,29 @@ def test_pending_workouts_persistent_5xx_stops_blocking_then_quarantines(
         return _upload_response()
 
     garmin.upload_workout.side_effect = upload
-    for _ in range(sync._BLOCKING_TRANSIENT_FAILURES):
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]  # "2" got through
-    for _ in range(sync._MAX_TRANSIENT_FAILURES - sync._BLOCKING_TRANSIENT_FAILURES):
+    with freeze_time("2026-10-17T00:00:00") as frozen:
+        for _ in range(sync._BLOCKING_TRANSIENT_FAILURES):
+            sync.sync_pending_workouts(garmin, MagicMock(), {})
+            frozen.tick(timedelta(minutes=30))
+        assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]  # "2" got through
+        frozen.tick(sync._FAILURE_GIVE_UP)
         sync.sync_pending_workouts(garmin, MagicMock(), {})
     assert _read_queue(tmp_path) == []
     assert (tmp_path / "workout_queue" / "1.json.invalid").exists()
+
+
+def test_pending_workouts_outage_does_not_quarantine_early(tmp_path, monkeypatch, no_sleep):
+    """Many runs inside _FAILURE_GIVE_UP (a short SYNC_SCHEDULE during an outage) must not
+    quarantine anything — the give-up is time-based, not run-based."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item(id="1")])
+    garmin = MagicMock()
+    garmin.upload_workout.side_effect = GarminConnectConnectionError("API Error 503")
+    with freeze_time("2026-10-17T00:00:00") as frozen:
+        for _ in range(200):
+            sync.sync_pending_workouts(garmin, MagicMock(), {})
+            frozen.tick(timedelta(minutes=5))
+    assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]
 
 
 def test_pending_workouts_progress_resets_failure_count(tmp_path, monkeypatch, no_sleep):
@@ -3311,3 +3328,76 @@ def test_pending_workouts_progress_resets_failure_count(tmp_path, monkeypatch, n
     garmin.schedule_workout.side_effect = ValueError("bad")
     sync.sync_pending_workouts(garmin, MagicMock(), {})
     assert _read_queue(tmp_path)[0]["failures"] == 1  # counted afresh after the upload
+
+
+@freeze_time("2026-10-17")
+def test_pending_workouts_permanent_4xx_quarantines_not_deletes(tmp_path, monkeypatch):
+    """A Garmin-wide 4xx (moved endpoint) must not delete every queued workout."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item(id="1"), _queue_item(id="2")])
+    garmin = MagicMock()
+    garmin.upload_workout.side_effect = GarminConnectConnectionError("API Error 404")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path) == []
+    assert (tmp_path / "workout_queue" / "1.json.invalid").exists()
+    assert (tmp_path / "workout_queue" / "2.json.invalid").exists()
+
+
+def test_pending_workouts_quarantines_item_without_id(tmp_path, monkeypatch):
+    import json as _json
+
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [])
+    item = _queue_item()
+    del item["id"]
+    (tmp_path / "workout_queue" / "x.json").write_text(_json.dumps(item))
+    garmin = MagicMock()
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.upload_workout.assert_not_called()
+    assert (tmp_path / "workout_queue" / "x.json.invalid").exists()
+
+
+@freeze_time("2026-10-20")
+def test_pending_workouts_expired_but_scheduled_item_is_not_reported_missing(
+    tmp_path, monkeypatch, no_sleep, caplog
+):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_uploaded_item(date_str="2026-10-17")])
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = {
+        "calendarItems": [{"workoutId": 555, "date": "2026-10-17"}]
+    }
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path) == []
+    assert "NOT on the calendar" not in caplog.text
+    garmin.schedule_workout.assert_not_called()
+
+
+@freeze_time("2026-10-17T13:00:00")
+def test_pending_workouts_non_list_library_is_a_read_failure(tmp_path, monkeypatch, no_sleep):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_attempted_item()])
+    garmin = MagicMock()
+    garmin.get_workouts.return_value = {"unexpected": "shape"}
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.upload_workout.assert_not_called()
+    assert len(_read_queue(tmp_path)) == 1
+
+
+def test_pending_workouts_read_failure_streak_eventually_quarantines(
+    tmp_path, monkeypatch, no_sleep
+):
+    """A lookup that fails forever ends in quarantine, not a Garmin read every run forever."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    item = _attempted_item()
+    item["schedule_date"] = "2099-01-01"
+    _write_queue(tmp_path, [item])
+    garmin = MagicMock()
+    garmin.get_workouts.return_value = {"unexpected": "shape"}
+    with freeze_time("2026-10-17T13:00:00") as frozen:
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+        assert "failures" not in _read_queue(tmp_path)[0]  # reads don't count failures
+        frozen.tick(sync._FAILURE_GIVE_UP)
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path) == []
+    assert (tmp_path / "workout_queue" / "abc123.json.invalid").exists()

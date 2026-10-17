@@ -347,9 +347,10 @@ func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
 	return nil
 }
 
-// newQueueID is a UnixNano timestamp plus a random suffix. The timestamp keeps sync.py's
-// (len, name) sort in creation order; the suffix keeps concurrent create_workout calls
-// unique even where the clock is only microsecond-resolution (macOS).
+// newQueueID is a UnixNano timestamp plus a random suffix. It's fixed length, so sync.py's
+// plain name sort (_queued_item_paths) is creation order — keep it fixed-length. The
+// suffix keeps concurrent create_workout calls unique even where the clock is only
+// microsecond-resolution (macOS).
 func newQueueID(now time.Time) string {
 	var b [4]byte
 	_, _ = rand.Read(b[:]) // crypto/rand.Read never returns an error (Go 1.24+)
