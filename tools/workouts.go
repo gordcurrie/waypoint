@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -49,7 +48,7 @@ type WorkoutStep struct {
 	Description              string   `json:"description,omitempty"`
 }
 
-// WorkoutQueueItem is written to the shared queue file for the Python sidecar to consume.
+// WorkoutQueueItem is written to the queue spool dir (see queueDirName) for the Python sidecar to consume.
 //
 // ScheduleDate (YYYY-MM-DD, optional) also puts the uploaded workout on that day of the
 // Garmin calendar via garminconnect's schedule_workout — verified live 2026-10-17 (scheduled
@@ -73,14 +72,6 @@ var validSports = map[string]bool{
 	"running": true, "cycling": true,
 	"swimming": true, "strength_training": true,
 }
-
-var queueMu sync.Mutex
-
-// queueLockFile is flocked by both appendToQueue and sync.py's _queue_lock. queueMu
-// serializes appendToQueue within this process; on unix the flock alone would too
-// (separate opens conflict even in one process), but queueMu is what covers the
-// builds where lockQueueFile is a no-op (see queuelock_other.go).
-const queueLockFile = "workout_queue.lock"
 
 func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	type scheduledWorkoutsInput struct {
@@ -298,66 +289,43 @@ func validateScheduleDate(s string, now time.Time) error {
 	return nil
 }
 
-func queuePath(dataDir string) string {
-	return filepath.Join(dataDir, "workout_queue.json")
+// queueDirName is the spool directory, under the data dir shared with the sync sidecar,
+// holding one <id>.json file per queued workout. Go only ever creates new files there
+// (write a dotfile, then rename it in); sync.py only rewrites or removes files it has
+// read. Neither side ever rewrites a file the other might be writing, so no lock and no
+// field-preservation rule is needed — unlike the single shared workout_queue.json this
+// replaced, which sync.py migrates on its first run (see sync._migrate_legacy_queue).
+const queueDirName = "workout_queue"
+
+func queueDir(dataDir string) string {
+	return filepath.Join(dataDir, queueDirName)
 }
 
-// loadQueue returns the queue's entries as raw JSON, not WorkoutQueueItem: sync.py adds
-// its own bookkeeping fields to items it's partway through (uploaded_workout_id), and
-// decoding into the struct would silently drop them — so anything that rewrites the
-// queue from this would make sync.py re-upload a duplicate workout.
-func loadQueue(dataDir string) ([]json.RawMessage, error) {
-	data, err := os.ReadFile(queuePath(dataDir))
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read queue: %w", err)
-	}
-	var items []json.RawMessage
-	if err := json.Unmarshal(data, &items); err != nil {
-		return nil, fmt.Errorf("parse queue: %w", err)
-	}
-	return items, nil
-}
-
-func saveQueue(dataDir string, items []json.RawMessage) error {
-	data, err := json.Marshal(items)
-	if err != nil {
-		return fmt.Errorf("marshal queue: %w", err)
-	}
-	tmp := queuePath(dataDir) + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("write queue tmp: %w", err)
-	}
-	if err := os.Rename(tmp, queuePath(dataDir)); err != nil {
-		return fmt.Errorf("rename queue: %w", err)
-	}
-	return nil
-}
-
-// appendToQueue adds item to the queue, carrying existing entries over untouched (see loadQueue).
+// appendToQueue adds item to the queue as its own spool file.
 func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
-	queueMu.Lock()
-	defer queueMu.Unlock()
-	if err := os.MkdirAll(dataDir, 0o750); err != nil {
-		return fmt.Errorf("create data dir: %w", err)
+	dir := queueDir(dataDir)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("create queue dir: %w", err)
 	}
-	unlock, err := lockQueueFile(dataDir)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	items, err := loadQueue(dataDir)
-	if err != nil {
-		return err
-	}
-	raw, err := json.Marshal(item)
+	data, err := json.Marshal(item)
 	if err != nil {
 		return fmt.Errorf("marshal queue item: %w", err)
 	}
-	return saveQueue(dataDir, append(items, raw))
+	final := filepath.Join(dir, item.ID+".json")
+	if _, err := os.Stat(final); err == nil {
+		return fmt.Errorf("queue item %s already exists", item.ID)
+	}
+	// Dotfile tmp name: sync.py only picks up *.json files not starting with ".",
+	// so it never reads a half-written item.
+	tmp := filepath.Join(dir, "."+item.ID+".json.tmp")
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("write queue tmp: %w", err)
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("rename queue item: %w", err)
+	}
+	return nil
 }
 
 func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) ([]garmin.ScheduledWorkout, error) {

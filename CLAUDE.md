@@ -343,14 +343,15 @@ retries next run (a schedule retry gives up once its date has passed), and a non
 keeps the item without blocking the rest of the queue. Don't catch `GarminConnectConnectionError` as
 "transient" on these two calls without checking the status.
 
-**Workout queue file is shared across two processes** — the Go MCP server appends
-(`appendToQueue`), the sync sidecar consumes (`sync_pending_workouts`). Both flock
-`<data-dir>/workout_queue.lock`, and the sidecar commits each item's outcome by re-reading the
-queue under that lock rather than writing back a snapshot, so a `create_workout` mid-sync isn't
-lost. Any new writer of `workout_queue.json` must take the same lock, and must carry existing
-entries over as raw JSON (Go's `loadQueue` returns `[]json.RawMessage` for this reason) — sync.py
-adds bookkeeping fields (`uploaded_workout_id`) that decoding into `WorkoutQueueItem` would
-silently drop.
+**Workout queue is a spool directory, one file per workout** — `<data-dir>/workout_queue/<id>.json`,
+shared by two processes. The Go MCP server only ever *creates* files (`appendToQueue`: write a
+`.<id>.json.tmp` dotfile, then rename it in); the sync sidecar only rewrites (adding
+`uploaded_workout_id`) or removes files it has read, and ignores dotfiles. Neither side ever writes
+a file the other might be writing, so there's no lock. Keep it that way: a new Go feature that
+edits or cancels a queued workout would break that invariant — it needs a design change, not a
+read-modify-write of someone else's file. Replaced a single shared `workout_queue.json` (#111's
+review found it needed a cross-language flock plus field-preservation rules on every writer);
+`sync._migrate_legacy_queue` drains an old one into the spool on first run.
 
 **`weightValue`/`weightUnit` shape** (confirmed 2026-08-09 via a live probe: uploaded a
 disposable strength step with `weightValue: 60.0, weightUnit: {"unitKey": "kilogram"}`, read

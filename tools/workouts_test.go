@@ -1,12 +1,14 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -860,8 +862,12 @@ func TestAppendToQueue_WritesToTmpThenRenames(t *testing.T) {
 		t.Fatal(err)
 	}
 	// tmp file must be gone after atomic rename
-	if _, err := os.Stat(queuePath(dir) + ".tmp"); !os.IsNotExist(err) {
-		t.Error("tmp file still present after append")
+	entries, err := os.ReadDir(queueDir(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "x.json" {
+		t.Errorf("want only x.json in queue dir, got %v", entries)
 	}
 }
 
@@ -968,13 +974,13 @@ func TestAppendToQueue_ScheduleDateRoundTrips(t *testing.T) {
 	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "2", Name: "b", Sport: "running"}); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(queuePath(dir))
+	raw, err := os.ReadFile(filepath.Join(queueDir(dir), "2.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Unscheduled items must omit the key entirely so sync.py's item.get("schedule_date") is falsy.
-	if n := strings.Count(string(raw), "schedule_date"); n != 1 {
-		t.Fatalf("want schedule_date once in queue file, got %d: %s", n, raw)
+	if strings.Contains(string(raw), "schedule_date") {
+		t.Fatalf("want no schedule_date key on unscheduled item: %s", raw)
 	}
 	items, err := loadQueueItems(t, dir)
 	if err != nil {
@@ -1005,13 +1011,13 @@ func TestValidateScheduleDate(t *testing.T) {
 	}
 }
 
-func TestAppendToQueue_CreatesLockFile(t *testing.T) {
+func TestAppendToQueue_RejectsDuplicateID(t *testing.T) {
 	dir := t.TempDir()
 	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "a", Sport: "running"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, queueLockFile)); err != nil {
-		t.Fatalf("want lock file shared with sync.py: %v", err)
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "b", Sport: "running"}); err == nil {
+		t.Fatal("want error: would overwrite a queued item")
 	}
 }
 
@@ -1023,41 +1029,60 @@ func TestValidateScheduleDate_LateUTCDay(t *testing.T) {
 	}
 }
 
-func TestAppendToQueue_PreservesSyncBookkeepingFields(t *testing.T) {
+func TestAppendToQueue_LeavesOtherItemsUntouched(t *testing.T) {
 	dir := t.TempDir()
+	if err := os.MkdirAll(queueDir(dir), 0o750); err != nil {
+		t.Fatal(err)
+	}
 	// An item sync.py is partway through: uploaded, not yet scheduled.
-	existing := `[{"id":"1","name":"a","sport":"running","schedule_date":"2026-10-20","steps":[],"uploaded_workout_id":555,"schedule_attempts":2}]`
-	if err := os.WriteFile(queuePath(dir), []byte(existing), 0o600); err != nil {
+	existing := []byte(`{"id":"1","name":"a","sport":"running","schedule_date":"2026-10-20","steps":[],"uploaded_workout_id":555}`)
+	path := filepath.Join(queueDir(dir), "1.json")
+	if err := os.WriteFile(path, existing, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "2", Name: "b", Sport: "running"}); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(queuePath(dir))
+	got, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var items []map[string]any
-	if err := json.Unmarshal(raw, &items); err != nil {
-		t.Fatal(err)
-	}
-	if len(items) != 2 || items[0]["uploaded_workout_id"] != float64(555) || items[0]["schedule_attempts"] != float64(2) {
-		t.Fatalf("sync.py fields lost: %s", raw)
+	if !bytes.Equal(got, existing) {
+		t.Fatalf("existing item modified: %s", got)
 	}
 }
 
-// loadQueueItems decodes the queue into WorkoutQueueItem for assertions. Tests only:
-// production code keeps entries raw (see loadQueue).
+// loadQueueItems reads the spool dir the way sync.py does (*.json, not dotfiles, in
+// (len, name) order — ids are UnixNano digit strings) and decodes each item. Tests only.
 func loadQueueItems(t *testing.T, dir string) ([]WorkoutQueueItem, error) {
 	t.Helper()
-	raw, err := loadQueue(dir)
-	if err != nil {
-		return nil, err
+	entries, err := os.ReadDir(queueDir(dir))
+	if os.IsNotExist(err) {
+		return nil, nil
 	}
-	items := make([]WorkoutQueueItem, len(raw))
-	for i, r := range raw {
-		if err := json.Unmarshal(r, &items[i]); err != nil {
-			return nil, fmt.Errorf("decode queue item %d: %w", i, err)
+	if err != nil {
+		return nil, fmt.Errorf("read queue dir: %w", err)
+	}
+	var names []string
+	for _, e := range entries {
+		if n := e.Name(); strings.HasSuffix(n, ".json") && !strings.HasPrefix(n, ".") {
+			names = append(names, n)
+		}
+	}
+	sort.Slice(names, func(i, j int) bool {
+		if len(names[i]) != len(names[j]) {
+			return len(names[i]) < len(names[j])
+		}
+		return names[i] < names[j]
+	})
+	items := make([]WorkoutQueueItem, len(names))
+	for i, n := range names {
+		data, err := os.ReadFile(filepath.Clean(filepath.Join(queueDir(dir), n)))
+		if err != nil {
+			return nil, fmt.Errorf("read queue item: %w", err)
+		}
+		if err := json.Unmarshal(data, &items[i]); err != nil {
+			return nil, fmt.Errorf("decode queue item %s: %w", n, err)
 		}
 	}
 	return items, nil
