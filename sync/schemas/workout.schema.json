@@ -2,14 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/workout.schema.json",
   "title": "Workout (get_workout_by_id)",
-  "description": "Returned by garminconnect's get_workout_by_id(workout_id) — confirmed 2026-08-07 to be the same shape as upload_workout's response (see CLAUDE.md). Called by sync_pending_workouts only when it recovers an earlier timed-out upload from the library, to write the workout_detail measurement the upload response would have supplied. workoutSteps items are the ExecutableStepDTO/RepeatGroupDTO tree documented by workout_upload.schema.json, not re-enumerated here.\n\nVerified against: 2026-10-17, a real single-segment running workout (all top-level and segment fields enumerated from it) plus a probe workout (deleted after). A deleted workout 404s. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
+  "description": "Returned by garminconnect's get_workout_by_id(workout_id) — confirmed 2026-08-07 to be the same shape as upload_workout's response (see CLAUDE.md). Called by sync_pending_workouts only when it recovers an earlier timed-out upload from the library, to write the workout_detail measurement the upload response would have supplied. workoutSteps items are the ExecutableStepDTO/RepeatGroupDTO tree documented by workout_upload.schema.json, not re-enumerated here.\n\nVerified against: 2026-10-17, a real single-segment running workout (all top-level and segment fields enumerated from it) plus a probe workout (deleted after). A deleted workout 404s. Every field's observed type is allowed to be null too (except ids/names/createdDate), since types came from a small sample and Garmin nulls fields that don't apply (e.g. estimatedDistanceInMeters on a duration-only workout). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
   "type": "object",
   "properties": {
     "atpPlanId": {
       "description": "observed null"
     },
     "author": {
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "displayName": {},
         "fullName": {},
@@ -24,7 +27,10 @@
       "description": "Real account PII (name, profile image) — never stored."
     },
     "avgTrainingSpeed": {
-      "type": "number"
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "consumer": {
       "description": "observed null"
@@ -56,10 +62,16 @@
       "description": "observed null on this sample; may be populated on others"
     },
     "estimatedDistanceInMeters": {
-      "type": "number"
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "estimatedDistanceUnit": {
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "factor": {},
         "unitId": {},
@@ -87,13 +99,19 @@
       "description": "observed null on this sample; may be populated on others"
     },
     "shared": {
-      "type": "boolean"
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "sharedWithUsers": {
       "description": "observed null"
     },
     "sportType": {
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "displayOrder": {},
         "sportTypeId": {},
@@ -108,7 +126,10 @@
       "description": "observed null"
     },
     "updatedDate": {
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "uploadTimestamp": {
       "description": "observed null"
@@ -158,7 +179,10 @@
             "type": "integer"
           },
           "sportType": {
-            "type": "object",
+            "type": [
+              "object",
+              "null"
+            ],
             "properties": {
               "displayOrder": {},
               "sportTypeId": {},
@@ -177,7 +201,10 @@
       "description": "observed null"
     },
     "workoutThumbnailUrl": {
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [

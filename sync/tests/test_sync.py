@@ -3275,7 +3275,7 @@ def test_pending_workouts_read_failure_never_counts_against_item(tmp_path, monke
         sync.sync_pending_workouts(garmin, MagicMock(), {})
     remaining = _read_queue(tmp_path)
     assert len(remaining) == 1
-    assert "failures" not in remaining[0]  # streak tracked via first_failure_at only
+    assert remaining[0].get("other_failures", 0) == 0  # reads never count as item failures
 
 
 def test_pending_workouts_persistent_5xx_stops_blocking_then_quarantines(
@@ -3321,13 +3321,16 @@ def test_pending_workouts_outage_does_not_quarantine_early(tmp_path, monkeypatch
 def test_pending_workouts_progress_resets_failure_count(tmp_path, monkeypatch, no_sleep):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     item = _scheduled_item(date_str="2099-01-01")
-    item["failures"] = 2
+    item["other_failures"] = 2
+    item["first_failure_at"] = "2026-01-01T00:00:00+00:00"
     _write_queue(tmp_path, [item])
     garmin = MagicMock()
     garmin.upload_workout.return_value = _upload_response(workout_id=555)
     garmin.schedule_workout.side_effect = ValueError("bad")
     sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert _read_queue(tmp_path)[0]["failures"] == 1  # counted afresh after the upload
+    after = _read_queue(tmp_path)[0]
+    assert after["other_failures"] == 1  # counted afresh after the upload
+    assert after["first_failure_at"] > "2026-10"  # and a new streak started
 
 
 @freeze_time("2026-10-17")
@@ -3396,8 +3399,59 @@ def test_pending_workouts_read_failure_streak_eventually_quarantines(
     garmin.get_workouts.return_value = {"unexpected": "shape"}
     with freeze_time("2026-10-17T13:00:00") as frozen:
         sync.sync_pending_workouts(garmin, MagicMock(), {})
-        assert "failures" not in _read_queue(tmp_path)[0]  # reads don't count failures
+        assert _read_queue(tmp_path)[0].get("other_failures", 0) == 0
         frozen.tick(sync._FAILURE_GIVE_UP)
         sync.sync_pending_workouts(garmin, MagicMock(), {})
     assert _read_queue(tmp_path) == []
     assert (tmp_path / "workout_queue" / "abc123.json.invalid").exists()
+
+
+@freeze_time("2026-10-17T13:00:00")
+def test_pending_workouts_transient_read_failure_stops_blocking(tmp_path, monkeypatch, no_sleep):
+    """A library endpoint that keeps failing must not hold the queue for up to 7 days."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_attempted_item(id="1"), _queue_item(id="2")])
+    garmin = MagicMock()
+    garmin.get_workouts.side_effect = GarminConnectConnectionError("API Error 503")
+    garmin.upload_workout.return_value = _upload_response()
+    for _ in range(sync._BLOCKING_TRANSIENT_FAILURES):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]  # "2" got through
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"first_failure_at": "2026-10-17T00:00:00"},  # naive timestamp
+        {"first_failure_at": 12345},
+        {"other_failures": "lots"},
+        {"transient_failures": None},
+    ],
+)
+def test_pending_workouts_hand_edited_failure_fields_dont_crash(tmp_path, monkeypatch, fields):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    item = {**_queue_item(id="1"), **fields}
+    _write_queue(tmp_path, [item, _queue_item(id="2")])
+    garmin = MagicMock()
+    garmin.upload_workout.side_effect = [
+        GarminConnectConnectionError("API Error 503"),
+        _upload_response(),
+    ]
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path)[0]["id"] == "1"
+
+
+def test_query_active_keys_log_level_depends_on_column(caplog):
+    client = MagicMock()
+    client.query.side_effect = Exception("boom")
+    with caplog.at_level("INFO"):
+        sync._query_active_keys(client, date(2026, 10, 1), date(2026, 11, 1), ("workout_name",))
+        sync._query_active_keys(
+            client,
+            date(2026, 10, 1),
+            date(2026, 11, 1),
+            ("scheduled_id",),
+            missing_column_expected=True,
+        )
+    levels = {r.getMessage().split()[1]: r.levelname for r in caplog.records}
+    assert levels == {"workout_name": "WARNING", "scheduled_id": "INFO"}

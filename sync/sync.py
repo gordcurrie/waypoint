@@ -843,7 +843,11 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
 
 
 def _query_active_keys(
-    client: InfluxDBClient3, start: date, end: date, tags: tuple[str, ...]
+    client: InfluxDBClient3,
+    start: date,
+    end: date,
+    tags: tuple[str, ...],
+    missing_column_expected: bool = False,
 ) -> set[tuple[str, ...]]:
     """Return the (date, *tags) keys currently stored for scheduled_workout points in
     [start, end) whose first tag is set. Used by sync_scheduled_workouts to find stale
@@ -875,14 +879,16 @@ def _query_active_keys(
             for r in rows
         }
     except Exception as exc:
-        # Same as _query_active_calendar_event_keys: a tag column only exists once a point
-        # carrying it was written (an account with only coach-plan workouts has no
-        # scheduled_id column), and a failed lookup only means fewer tombstones this run,
-        # never a false one.
-        log.info(
-            "scheduled_workouts: %s key lookup failed (column may not exist yet), "
-            "not tombstoning by it this run: %s",
+        # A failed lookup only means fewer tombstones this run, never a false one. With
+        # missing_column_expected (scheduled_id: like _query_active_calendar_event_keys, a
+        # tag column only exists once a point carrying it was written, and an account with
+        # only coach-plan workouts has none) it's routine, so info; otherwise (workout_name
+        # always exists on a coach-plan account) it's a real query failure, so warning.
+        log.log(
+            logging.INFO if missing_column_expected else logging.WARNING,
+            "scheduled_workouts: %s key lookup failed%s, not tombstoning by it this run: %s",
             tags[0],
+            " (column may not exist yet)" if missing_column_expected else "",
             exc,
         )
         return set()
@@ -1107,7 +1113,10 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         # linger at its old date. Keyed by Garmin's own scheduled_id (stable for these).
         self_tags = ("scheduled_id", "sport")
         stale_self = (
-            _query_active_keys(client, window_start, window_end, self_tags) - fresh_self_keys
+            _query_active_keys(
+                client, window_start, window_end, self_tags, missing_column_expected=True
+            )
+            - fresh_self_keys
         )
         points.extend(_tombstones(stale_self, self_tags, deleted_at))
         if stale_self:
@@ -2036,6 +2045,11 @@ def _find_prior_upload(item: dict[str, Any], library: list[Any]) -> Any:
     upload since the attempt. library is that page, fetched at most once per run (see
     _library_page).
     """
+    # get_workouts response (verified 2026-10-17; schemas/workouts.schema.json), newest first:
+    #   [{"workoutId": 1732218826, "workoutName": "Pre-race shakeout + strides",
+    #     "description": "Queued by Waypoint · ref 1760...-ab12cd34",
+    #     "createdDate": "2026-10-17T15:47:43.0", "updateDate": "...",
+    #     "sportType": {"sportTypeId": 1, "sportTypeKey": "running", ...}, ...}, ...]
     ref = _queue_ref(item.get("id"))
     if not isinstance(library, list):
         raise TypeError(f"get_workouts returned {type(library).__name__}, not a list")
@@ -2046,64 +2060,79 @@ def _find_prior_upload(item: dict[str, Any], library: list[Any]) -> Any:
 
 
 def _library_page(garmin: Garmin, cache: dict[str, Any]) -> list[Any]:
-    """get_workouts' newest page, fetched at most once per sync_pending_workouts run."""
+    """get_workouts' newest page, fetched at most once per sync_pending_workouts run. Shape:
+    see _find_prior_upload."""
     library: list[Any] = _fetch_once(cache, "library", lambda: garmin.get_workouts(0, 50) or [])
     return library
 
 
 # Per-item failure bookkeeping, cleared when the item makes progress (uploads):
-# - "failures": consecutive failed write runs. An "other" failure (bad item data, a bug
-#   building its request) repeats identically every run: quarantined after
-#   _MAX_OTHER_FAILURES. A transient one (5xx/403/network) normally means Garmin is down,
-#   so it holds up the rest of the queue — but after _BLOCKING_TRANSIENT_FAILURES runs it's
-#   more likely this item (e.g. a body Garmin always 500s on, the
-#   DataIntegrityViolationException seen live), so it stops blocking the others.
-# - "first_failure_at": when the current failure streak began, for any failure — write or
-#   read. An item still failing _FAILURE_GIVE_UP after that is quarantined. Time-based, not
-#   run-based, so a long Garmin outage can't quarantine every queued workout early, however
-#   short SYNC_SCHEDULE is. Quarantine (<id>.json.invalid) never deletes a workout.
+# - "other_failures": consecutive item-specific failures (bad item data, a bug building its
+#   request) — these repeat identically every run, so quarantined after _MAX_OTHER_FAILURES.
+# - "transient_failures": consecutive transient failures (5xx/403/network), on a write *or*
+#   a read made for the item. Normally Garmin is down, so the rest of the queue waits — but
+#   after _BLOCKING_TRANSIENT_FAILURES runs it's more likely something about this item (e.g.
+#   a body Garmin always 500s on, the DataIntegrityViolationException seen live), so it
+#   stops holding up the others.
+# - "first_failure_at": when the current failure streak began, any kind. An item still
+#   failing _FAILURE_GIVE_UP after that is quarantined. Time-based, not run-based, so a long
+#   Garmin outage can't quarantine every queued workout early however short SYNC_SCHEDULE
+#   is. Quarantine (<id>.json.invalid) never deletes a workout.
 _MAX_OTHER_FAILURES = 5
 _BLOCKING_TRANSIENT_FAILURES = 3
 _FAILURE_GIVE_UP = timedelta(days=7)
+_FAILURE_FIELDS = ("other_failures", "transient_failures", "first_failure_at")
 
 
 def _without_failures(item: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in item.items() if k not in ("failures", "first_failure_at")}
+    return {k: v for k, v in item.items() if k not in _FAILURE_FIELDS}
 
 
-def _note_failure(path: Path, item: dict[str, Any], exc: Exception, count: bool) -> bool:
-    """Record a failed run on item (count=True also bumps "failures"). Returns False if the
-    item was quarantined instead — it's been failing for _FAILURE_GIVE_UP."""
-    now = datetime.now(UTC)
-    first = item.get("first_failure_at") or now.isoformat()
+def _count_field(item: dict[str, Any], key: str) -> int:
+    """item[key] as a count; anything unparseable (a hand-edited file) counts as 0."""
     try:
-        expired = now - datetime.fromisoformat(first) >= _FAILURE_GIVE_UP
-    except ValueError:
-        first, expired = now.isoformat(), False
-    if expired:
-        _quarantine(path, f"has been failing since {first} ({exc})")
-        return False
-    updated = {**item, "first_failure_at": first}
-    if count:
-        updated["failures"] = int(item.get("failures") or 0) + 1
-    _write_queue_item(path, updated)
-    return True
+        return max(0, int(item.get(key) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _failing_since(item: dict[str, Any], now: datetime) -> datetime:
+    """When item's failure streak began; now if none, or if the stored value is unusable.
+    A naive timestamp (hand-edited) is taken as UTC."""
+    try:
+        first = datetime.fromisoformat(str(item["first_failure_at"]))
+    except (KeyError, TypeError, ValueError):
+        return now
+    return first if first.tzinfo else first.replace(tzinfo=UTC)
 
 
 def _record_failure(path: Path, item: dict[str, Any], exc: Exception, kind: str) -> str:
-    """Record an "other" or "transient" write failure; returns "stop" if the rest of the
+    """Record one failed run for item — kind "other", "transient" (write or read), or
+    "read" (a non-transient read failure: streak only). Returns "stop" if the rest of the
     queue should wait for the next run, else "continue"."""
-    failures = int(item.get("failures") or 0) + 1
-    if kind == "other" and failures >= _MAX_OTHER_FAILURES:
-        _quarantine(path, f"failed {failures} runs in a row ({exc})")
+    now = datetime.now(UTC)
+    first = _failing_since(item, now)
+    other = _count_field(item, "other_failures") + (kind == "other")
+    transient = _count_field(item, "transient_failures") + (kind == "transient")
+    if other >= _MAX_OTHER_FAILURES:
+        _quarantine(path, f"failed {other} runs in a row ({exc})")
         return "continue"
-    if not _note_failure(path, item, exc, count=True):
+    if now - first >= _FAILURE_GIVE_UP:
+        _quarantine(path, f"has been failing since {first.isoformat()} ({exc})")
         return "continue"
-    blocking = kind == "transient" and failures < _BLOCKING_TRANSIENT_FAILURES
+    _write_queue_item(
+        path,
+        {
+            **item,
+            "other_failures": other,
+            "transient_failures": transient,
+            "first_failure_at": first.isoformat(),
+        },
+    )
+    blocking = kind == "transient" and transient < _BLOCKING_TRANSIENT_FAILURES
     log.warning(
-        "pending_workouts: %s failed (%d in a row): %s — keeping it%s",
+        "pending_workouts: %s failed: %s — keeping it%s",
         item.get("id"),
-        failures,
         exc,
         " and the rest of the queue for the next run" if blocking else " in queue",
     )
@@ -2120,26 +2149,26 @@ def _read_failure(
 ) -> str:
     """Outcome of a failed Garmin *read* made on an item's behalf (library or calendar lookup).
 
-    Not counted against the item's "failures" — a failed read says nothing about the item
-    itself — but it does keep its first_failure_at streak going, so a lookup that fails
-    forever ends in quarantine after _FAILURE_GIVE_UP rather than a Garmin read every run
-    indefinitely. "stop" kinds raise the typed error; a transient one (Garmin down) leaves
-    the rest of the queue for the next run; anything else just skips this item this run.
+    Never grounds for quarantining the item outright — a failed read says nothing about the
+    item itself — and never an "other" failure against it. A transient one is counted like
+    a transient write (so a lookup endpoint that keeps failing stops blocking the queue
+    after _BLOCKING_TRANSIENT_FAILURES runs); any other kind (an unexpected response shape,
+    a 4xx) just skips this item this run. Either way the failure streak continues, so a
+    lookup that fails forever ends in quarantine after _FAILURE_GIVE_UP rather than a
+    Garmin read every run indefinitely.
     """
     counts["failed"] += 1
     kind = _garmin_write_error_kind(exc)
     if kind == "stop":
         raise _stop_error(exc) from exc
     log.warning(
-        "pending_workouts: can't check the %s for %s (%s): %s — will retry",
+        "pending_workouts: can't check the %s for %s (%s): %s",
         what,
         item.get("id"),
         sched_date or "unscheduled",
         exc,
     )
-    if not _note_failure(path, item, exc, count=False):
-        return "continue"
-    return "stop" if kind == "transient" else "continue"
+    return _record_failure(path, item, exc, "transient" if kind == "transient" else "read")
 
 
 def _write_failure(
@@ -2308,6 +2337,9 @@ def _process_queue_item(
                 workout_id,
             )
             try:
+                # Same shape as upload_workout's response (verified 2026-08-07; schemas/
+                # workout.schema.json): {"workoutId": ..., "workoutName": ..., "sportType":
+                # {"sportTypeKey": ...}, "workoutSegments": [{"workoutSteps": [...]}], ...}
                 resp = garmin.get_workout_by_id(workout_id)  # for the workout_detail write
             except Exception as exc:
                 if _garmin_write_error_kind(exc) == "stop":

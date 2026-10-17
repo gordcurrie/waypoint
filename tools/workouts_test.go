@@ -1089,11 +1089,11 @@ func loadQueueItems(t *testing.T, dir string) ([]WorkoutQueueItem, error) {
 }
 
 func TestValidateScheduleDate_UpperBound(t *testing.T) {
-	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC) // 2026-10-17 in UTC-12
-	if err := validateScheduleDate("2027-10-17", now); err != nil {
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC) // already 2026-10-18 in UTC+14
+	if err := validateScheduleDate("2027-10-18", now); err != nil {
 		t.Fatalf("365 days ahead: want ok, got %v", err)
 	}
-	for _, d := range []string{"2027-10-18", "2062-10-17", "9999-12-31"} {
+	for _, d := range []string{"2027-10-19", "2062-10-17", "9999-12-31"} {
 		if err := validateScheduleDate(d, now); err == nil {
 			t.Errorf("validateScheduleDate(%q): want error", d)
 		}
@@ -1139,5 +1139,17 @@ func TestAppendToQueue_ConcurrentCallsAllLand(t *testing.T) {
 		if strings.HasPrefix(e.Name(), ".") {
 			t.Errorf("leftover tmp file %s", e.Name())
 		}
+	}
+}
+
+func TestValidateScheduleDate_UpperBoundFromFurthestAheadZone(t *testing.T) {
+	// 11:00 UTC Oct 17 is already Oct 18 in UTC+14: a user there may schedule their own
+	// today + 365 = 2027-10-18.
+	now := time.Date(2026, 10, 17, 11, 0, 0, 0, time.UTC)
+	if err := validateScheduleDate("2027-10-18", now); err != nil {
+		t.Fatalf("UTC+14 user's today+365: want ok, got %v", err)
+	}
+	if err := validateScheduleDate("2027-10-19", now); err == nil {
+		t.Fatal("want error beyond anyone's today+365")
 	}
 }

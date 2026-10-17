@@ -265,13 +265,24 @@ const maxScheduleAheadDays = 365
 // so the tool would silently return nothing there (test_sync.py checks the two agree).
 const maxScheduledWorkoutsDays = 60
 
-// earliestZone is the furthest-behind time zone in use (UTC-12): a date before today
-// there is already over everywhere on Earth.
-var earliestZone = time.FixedZone("UTC-12", -12*60*60)
+// earliestZone/latestZone are the furthest-behind (UTC-12) and furthest-ahead (UTC+14)
+// time zones in use. A date before today in earliestZone is already over everywhere on
+// Earth; today in latestZone is the latest date that's anyone's "today".
+var (
+	earliestZone = time.FixedZone("UTC-12", -12*60*60)
+	latestZone   = time.FixedZone("UTC+14", 14*60*60)
+)
+
+func dateIn(now time.Time, zone *time.Location) time.Time {
+	y, m, d := now.In(zone).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
 
 // validateScheduleDate rejects a malformed or past schedule_date ("" means unscheduled).
-// The MCP server doesn't know the user's time zone, so "past" means before today in
-// UTC-12 — past for every user, regardless of the server's own clock or zone.
+// The MCP server doesn't know the user's time zone, so both bounds are taken in whichever
+// zone is most permissive: "past" means before today in UTC-12 (past for every user), and
+// "too far ahead" means past maxScheduleAheadDays from today in UTC+14 (so every user,
+// wherever they are, can schedule up to their own today + maxScheduleAheadDays).
 func validateScheduleDate(s string, now time.Time) error {
 	if s == "" {
 		return nil
@@ -280,14 +291,12 @@ func validateScheduleDate(s string, now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("create_workout: schedule_date must be YYYY-MM-DD, got %q", s)
 	}
-	y, m, day := now.In(earliestZone).Date()
-	earliest := time.Date(y, m, day, 0, 0, 0, 0, time.UTC)
-	if d.Before(earliest) {
+	if d.Before(dateIn(now, earliestZone)) {
 		return fmt.Errorf("create_workout: schedule_date %s is in the past", s)
 	}
 	// Upper bound catches typo'd years (2062 for 2026) before they're queued and fail
 	// only later, out of sight, in the sync sidecar.
-	if latest := earliest.AddDate(0, 0, maxScheduleAheadDays+1); !d.Before(latest) {
+	if latest := dateIn(now, latestZone).AddDate(0, 0, maxScheduleAheadDays); d.After(latest) {
 		return fmt.Errorf("create_workout: schedule_date %s is more than %d days ahead", s, maxScheduleAheadDays)
 	}
 	return nil

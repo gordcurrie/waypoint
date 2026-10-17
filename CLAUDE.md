@@ -343,13 +343,14 @@ in Garmin Connect as the workout's description — unavoidable: the fields that 
 (`workoutSourceId`/`workoutProvider`) are rejected by `upload_workout` with a 500
 `DataIntegrityViolationException` (probed 2026-10-17). Editing that description in the app before a
 timed-out upload's retry runs would defeat the match (a ~30-minute window, only after a timeout).
-Per-item failure limits (reset when the item uploads). Bad item data ("other") is quarantined to
-`<id>.json.invalid` after 5 runs in a row. A transient 5xx/403/network failure holds up the rest of
-the queue for its first 3 runs (Garmin is probably down), then stops blocking (probably this item —
-e.g. a body Garmin always 500s on). Any item still failing 7 days after its failure streak began
-(`first_failure_at` — time-based, so an outage can't quarantine everything early however short
-`SYNC_SCHEDULE` is) is quarantined; failed *reads* extend that streak but never count as item
-failures. A permanent 4xx is quarantined too, never deleted — a Garmin-wide 4xx (moved endpoint)
+Per-item failure limits (fields on the queue item, reset when it uploads). Bad item data
+(`other_failures`) is quarantined to `<id>.json.invalid` after 5 runs in a row. A transient
+5xx/403/network failure (`transient_failures`, on a write or a read made for the item) holds up the
+rest of the queue for its first 3 runs (Garmin is probably down), then stops blocking (probably this
+item — e.g. a body Garmin always 500s on). Any item still failing 7 days after its failure streak
+began (`first_failure_at` — time-based, so an outage can't quarantine everything early however short
+`SYNC_SCHEDULE` is) is quarantined; failed *reads* extend that streak but never count as
+`other_failures`. A permanent 4xx is quarantined too, never deleted — a Garmin-wide 4xx (moved endpoint)
 would otherwise wipe the whole queue in one run. Quarantine never deletes a workout definition. Nothing is scheduled onto a date that has passed (with a
 day's slack for time zones): an expired item uploads unscheduled, or is dropped if already uploaded.
 
@@ -383,9 +384,10 @@ review found it needed a cross-language flock plus field-preservation rules on e
 there is deliberately no automatic migration from it (making one safe against an old MCP server
 writing mid-migration took more machinery than it was worth): `sync._check_legacy_queue` deletes an
 empty one and logs an ERROR every run for a non-empty one, to be moved into the spool by hand —
-and `scripts/deploy.sh` stops the old MCP server (so it can't write mid-deploy), then refuses to
-deploy while the running sidecar's `/data/workout_queue.json` still holds workouts, so in practice
-nothing is ever stranded there. **Deploy the MCP
+and `scripts/deploy.sh` refuses to deploy while the running sidecar's `/data/workout_queue.json`
+still holds workouts (or can't be read — `SKIP_LEGACY_QUEUE_CHECK=1` overrides that). While the file
+exists it also stops the old MCP server first, so nothing can be appended mid-deploy (restarted on
+any early exit); once the new sidecar has removed it, deploys skip all of this. **Deploy the MCP
 server and sync sidecar together** (`make deploy` does): a new MCP server with an old sidecar
 writes to a spool dir nothing reads. Queue ids are `<UnixNano>-<8 hex>` — the random suffix keeps
 concurrent `create_workout` calls unique where the clock is only µs-resolution (macOS), and
