@@ -704,10 +704,10 @@ func TestAppendToQueue_AccumulatesItems(t *testing.T) {
 	dur := 1200
 	a := WorkoutQueueItem{ID: "a", Name: "First", Sport: "running", Steps: []WorkoutStep{{Type: "interval", DurationS: &dur}}}
 	b := WorkoutQueueItem{ID: "b", Name: "Second", Sport: "cycling", Steps: []WorkoutStep{{Type: "steady", DurationS: &dur}}}
-	if err := appendToQueue(dir, a); err != nil {
+	if err := appendToQueue(dir, &a); err != nil {
 		t.Fatal(err)
 	}
-	if err := appendToQueue(dir, b); err != nil {
+	if err := appendToQueue(dir, &b); err != nil {
 		t.Fatal(err)
 	}
 	items, err := loadQueue(dir)
@@ -853,7 +853,7 @@ func TestAppendToQueue_WritesToTmpThenRenames(t *testing.T) {
 	dir := t.TempDir()
 	dur := 300
 	item := WorkoutQueueItem{ID: "x", Name: "Test", Sport: "running", Steps: []WorkoutStep{{Type: "cooldown", DurationS: &dur}}}
-	if err := appendToQueue(dir, item); err != nil {
+	if err := appendToQueue(dir, &item); err != nil {
 		t.Fatal(err)
 	}
 	// tmp file must be gone after atomic rename
@@ -929,5 +929,54 @@ func TestCreateWorkout_PaceZone(t *testing.T) {
 				t.Fatalf("IsError = %v, want %v: %v", result.IsError, tc.wantErr, result.Content)
 			}
 		})
+	}
+}
+
+func TestCreateWorkout_ScheduleDate(t *testing.T) {
+	cases := []struct {
+		name    string
+		date    string
+		wantErr bool
+	}{
+		{"valid", "2026-10-17", false},
+		{"not a date", "tomorrow", true},
+		{"wrong format", "10/17/2026", true},
+		{"impossible date", "2026-02-30", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := callCreateWorkout(t, map[string]any{
+				"name": "Shakeout", "sport": "running", "schedule_date": tc.date,
+				"steps": []map[string]any{{"type": "steady", "duration_s": 1200}},
+			})
+			if result.IsError != tc.wantErr {
+				t.Fatalf("IsError = %v, want %v: %v", result.IsError, tc.wantErr, result.Content)
+			}
+		})
+	}
+}
+
+func TestAppendToQueue_ScheduleDateRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "a", Sport: "running", ScheduleDate: "2026-10-17"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "2", Name: "b", Sport: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(queuePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Unscheduled items must omit the key entirely so sync.py's item.get("schedule_date") is falsy.
+	if n := strings.Count(string(raw), "schedule_date"); n != 1 {
+		t.Fatalf("want schedule_date once in queue file, got %d: %s", n, raw)
+	}
+	items, err := loadQueue(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].ScheduleDate != "2026-10-17" || items[1].ScheduleDate != "" {
+		t.Fatalf("got %+v", items)
 	}
 }

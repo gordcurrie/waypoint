@@ -1972,6 +1972,69 @@ def test_pending_workouts_connection_error_propagates(tmp_path, monkeypatch):
         sync.sync_pending_workouts(garmin, MagicMock(), {})
 
 
+def test_pending_workouts_schedules_when_schedule_date_set(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    item = _queue_item()
+    item["schedule_date"] = "2026-10-17"
+    _write_queue(tmp_path, [item])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response(workout_id=555)
+    garmin.schedule_workout.return_value = {"workoutScheduleId": 1, "calendarDate": "2026-10-17"}
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.schedule_workout.assert_called_once_with(555, "2026-10-17")
+
+
+def test_pending_workouts_no_schedule_without_schedule_date(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item()])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response()
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.schedule_workout.assert_not_called()
+
+
+def test_pending_workouts_schedule_failure_does_not_requeue(tmp_path, monkeypatch):
+    """Upload succeeded, so a failed schedule must not re-upload a duplicate next run."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    item = _queue_item()
+    item["schedule_date"] = "2026-10-17"
+    _write_queue(tmp_path, [item])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response()
+    garmin.schedule_workout.side_effect = Exception("API error")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    import json as _json
+
+    assert _json.loads((tmp_path / "workout_queue.json").read_text()) == []
+
+
+def test_pending_workouts_schedule_connection_error_keeps_only_unprocessed(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    first = _queue_item(id="first")
+    first["schedule_date"] = "2026-10-17"
+    _write_queue(tmp_path, [first, _queue_item(id="second")])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response()
+    garmin.schedule_workout.side_effect = GarminConnectConnectionError("timeout")
+    with pytest.raises(GarminConnectConnectionError):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    import json as _json
+
+    remaining = _json.loads((tmp_path / "workout_queue.json").read_text())
+    assert [r["id"] for r in remaining] == ["second"]
+
+
+def test_pending_workouts_no_schedule_when_workout_id_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    item = _queue_item()
+    item["schedule_date"] = "2026-10-17"
+    _write_queue(tmp_path, [item])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = {"workoutId": None}
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.schedule_workout.assert_not_called()
+
+
 def test_build_garmin_workout_running_structure():
     item = _queue_item(
         sport="running",

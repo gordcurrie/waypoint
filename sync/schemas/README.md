@@ -66,6 +66,11 @@ removed for containing real account PII — see CLAUDE.md's "RepeatGroupDTO stru
 Validated against `_build_garmin_workout`'s actual output (a warmup + 3-set bench-press
 repeat group + cooldown) with zero schema violations.
 
+`schedule_workout` (called by `sync_pending_workouts` when a queue item has `schedule_date`)
+has no schema file — it's a write endpoint like `upload_workout`, and the only field sync.py
+reads back is `workoutScheduleId` (for logging). Its response shape, confirmed live 2026-10-17,
+is documented in `_schedule_uploaded_workout`'s docstring.
+
 ## Known gaps (not covered — see per-field notes in the schemas themselves)
 
 - Sleep data on a night with no recording at all

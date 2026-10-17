@@ -50,11 +50,16 @@ type WorkoutStep struct {
 }
 
 // WorkoutQueueItem is written to the shared queue file for the Python sidecar to consume.
+//
+// ScheduleDate (YYYY-MM-DD, optional) also puts the uploaded workout on that day of the
+// Garmin calendar via garminconnect's schedule_workout — verified live 2026-10-17 (scheduled
+// a real uploaded workout, read it back via get_scheduled_workout_by_id: calendarDate matched).
 type WorkoutQueueItem struct {
-	ID    string        `json:"id"`
-	Name  string        `json:"name"`
-	Sport string        `json:"sport"`
-	Steps []WorkoutStep `json:"steps"`
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	Sport        string        `json:"sport"`
+	ScheduleDate string        `json:"schedule_date,omitempty"`
+	Steps        []WorkoutStep `json:"steps"`
 }
 
 var validStepTypes = map[string]bool{
@@ -116,15 +121,17 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	})
 
 	type createWorkoutInput struct {
-		Name  string        `json:"name"  jsonschema:"workout name e.g. Tuesday tempo run"`
-		Sport string        `json:"sport" jsonschema:"sport type: running cycling swimming strength_training"`
-		Steps []WorkoutStep `json:"steps" jsonschema:"ordered list of workout steps"`
+		Name         string        `json:"name"  jsonschema:"workout name e.g. Tuesday tempo run"`
+		Sport        string        `json:"sport" jsonschema:"sport type: running cycling swimming strength_training"`
+		ScheduleDate string        `json:"schedule_date,omitempty" jsonschema:"optional YYYY-MM-DD: also schedule the workout on this day of the Garmin calendar; omit to only add it to the workout library"`
+		Steps        []WorkoutStep `json:"steps" jsonschema:"ordered list of workout steps"`
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "create_workout",
 		Title: "Create Workout",
 		Description: "Queue a structured workout for upload to Garmin Connect. The Python sidecar uploads it on the next sync run (every 30 minutes by default; set via SYNC_SCHEDULE). Requires --data-dir pointing to the shared sync volume. Returns the queue ID. " +
+			"Set schedule_date (YYYY-MM-DD) to also put it on that day of the Garmin calendar so it shows up on the watch; without it the workout only lands in the Garmin Connect workout library. " +
 			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
 			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. Optionally set weight_kg (requires category/exercise_name) for a weight target shown on the watch. " +
@@ -142,6 +149,11 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		}
 		if len(input.Steps) == 0 {
 			return errorResult(fmt.Errorf("steps must not be empty"))
+		}
+		if input.ScheduleDate != "" {
+			if _, err := time.Parse(time.DateOnly, input.ScheduleDate); err != nil {
+				return errorResult(fmt.Errorf("create_workout: schedule_date must be YYYY-MM-DD, got %q", input.ScheduleDate))
+			}
 		}
 		for i, step := range input.Steps {
 			if !validStepTypes[step.Type] {
@@ -204,15 +216,20 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			}
 		}
 		item := WorkoutQueueItem{
-			ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
-			Name:  input.Name,
-			Sport: input.Sport,
-			Steps: input.Steps,
+			ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
+			Name:         input.Name,
+			Sport:        input.Sport,
+			ScheduleDate: input.ScheduleDate,
+			Steps:        input.Steps,
 		}
-		if err := appendToQueue(dataDir, item); err != nil {
+		if err := appendToQueue(dataDir, &item); err != nil {
 			return errorResult(fmt.Errorf("create_workout: queue write: %w", err))
 		}
-		return jsonResult(map[string]string{"id": item.ID, "name": item.Name, "status": "queued"})
+		resp := map[string]string{"id": item.ID, "name": item.Name, "status": "queued"}
+		if item.ScheduleDate != "" {
+			resp["schedule_date"] = item.ScheduleDate
+		}
+		return jsonResult(resp)
 	})
 
 	type workoutDetailInput struct {
@@ -278,14 +295,14 @@ func saveQueue(dataDir string, items []WorkoutQueueItem) error {
 	return nil
 }
 
-func appendToQueue(dataDir string, item WorkoutQueueItem) error {
+func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
 	queueMu.Lock()
 	defer queueMu.Unlock()
 	items, err := loadQueue(dataDir)
 	if err != nil {
 		return err
 	}
-	return saveQueue(dataDir, append(items, item))
+	return saveQueue(dataDir, append(items, *item))
 }
 
 func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) ([]garmin.ScheduledWorkout, error) {
