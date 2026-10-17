@@ -1719,8 +1719,9 @@ def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
     sport = item.get("sport", "running")
     # No silent fallback: an unrecognized sport previously defaulted to sportTypeId 1
     # ("running") while keeping the wrong key, which Garmin resolves by ID — silently
-    # mislabeling the workout as a run. Fail loudly instead; the item stays queued for
-    # retry (see sync_pending_workouts) rather than uploading with a wrong sport.
+    # mislabeling the workout as a run. Fail loudly instead: sync_pending_workouts counts it
+    # as an item-specific failure and quarantines the item (<id>.json.invalid) after
+    # _MAX_OTHER_FAILURES runs, rather than uploading it with a wrong sport.
     if sport not in _SPORT_TYPES:
         raise ValueError(f"unsupported workout sport {sport!r} — no verified Garmin sportTypeId")
     sport_type = _SPORT_TYPES[sport]
@@ -1817,12 +1818,16 @@ def _remove_queue_item(path: Path) -> None:
 
 def _quarantine(path: Path, reason: str) -> None:
     """Rename a queue file that can never be processed to <name>.invalid: out of the *.json
-    glob so it isn't re-logged every run, but kept for a human to look at."""
-    log.error("pending_workouts: %s %s — moved aside as %s.invalid", path.name, reason, path.name)
+    glob so it isn't re-logged every run, but kept for a human to look at. Raises
+    _QueueWriteError if the rename fails: the item would otherwise stay live with nothing
+    recorded, re-sending the same failing request every run with no give-up."""
+    log.error(
+        "pending_workouts: %s %s — moving it aside as %s.invalid", path.name, reason, path.name
+    )
     try:
         path.replace(path.with_name(f"{path.name}.invalid"))
     except OSError as exc:
-        log.warning("pending_workouts: cannot move %s aside: %s", path.name, exc)
+        raise _QueueWriteError(f"cannot move {path.name} aside: {exc}") from exc
 
 
 def _check_legacy_queue() -> None:
@@ -2131,8 +2136,17 @@ def _library_since(garmin: Garmin, cache: dict[Any, Any], since: datetime) -> li
         if not isinstance(page, list):
             raise TypeError(f"get_workouts returned {type(page).__name__}, not a list")
         workouts.extend(page)
-        oldest = _created_at(page[-1]) if page else None
-        if len(page) < _LIBRARY_PAGE or (oldest is not None and oldest < since):
+        dates = [d for d in map(_created_at, page) if d is not None]
+        if len(page) < _LIBRARY_PAGE or (dates and min(dates) < since):
+            return workouts
+        if not dates:
+            # No usable createdDate on a whole page: there's no way to tell how far back to
+            # go, so stop rather than page through the library on every run.
+            log.warning(
+                "pending_workouts: no parseable createdDate in get_workouts page at %d — "
+                "library search stopped there",
+                start,
+            )
             return workouts
     log.warning(
         "pending_workouts: library search stopped at %d workouts before reaching %s",
@@ -2266,7 +2280,7 @@ def _write_failure(
         log.warning(
             "pending_workouts: %s %s stopped by %s — will retry", doing, item.get("id"), exc
         )
-        raise _stop_error(exc) from exc
+    _raise_if_stop(exc)
     if kind == "permanent":
         # Quarantined, not deleted: if the 4xx is really Garmin-wide (a moved endpoint, an
         # edge rejecting every POST), every queued workout would be lost in one run.
@@ -2358,6 +2372,12 @@ def _process_queue_item(
     typed garminconnect error for the main loop; _QueueWriteError propagates too."""
     item_id = item.get("id")
     sched_date = _valid_schedule_date(item)
+    if item.get("schedule_date") and sched_date is None:
+        # Logged once (by _valid_schedule_date) and then moved aside on the item itself, so
+        # a retrying item doesn't repeat the same ERROR every run.
+        item = {**item, "invalid_schedule_date": item["schedule_date"]}
+        del item["schedule_date"]
+        _write_queue_item(path, item)
     workout_id = item.get("uploaded_workout_id")
 
     if sched_date is not None and _schedule_expired(sched_date):
@@ -2439,8 +2459,11 @@ def _process_queue_item(
             try:
                 # Recorded before the call, so if it times out after Garmin stored the
                 # workout, the next run finds that upload instead of repeating it.
-                item = {**item, "upload_attempted_at": datetime.now(UTC).isoformat()}
-                _write_queue_item(path, item)
+                # Only the *first* attempt's time: the library search must reach back to
+                # the earliest upload that may have landed, not just the latest retry.
+                if not item.get("upload_attempted_at"):
+                    item = {**item, "upload_attempted_at": datetime.now(UTC).isoformat()}
+                    _write_queue_item(path, item)
                 resp = garmin.upload_workout(payload)
             except _QueueWriteError:
                 raise

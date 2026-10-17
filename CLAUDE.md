@@ -334,8 +334,9 @@ checks the calendar month for an item with that `workoutId` + `date` (shape veri
 2026-10-17: `itemType: "workout"`, `id` == `workoutScheduleId`) so a schedule Garmin applied but
 whose response was lost isn't added twice. `upload_workout` gets the same protection: the item
 records `upload_attempted_at` *before* the call, and a later run that finds it without
-`uploaded_workout_id` first looks for that upload in `get_workouts`' newest page (newest-first by
-`createdDate` — verified 2026-10-17; `orderBy`/`orderSeq` params are ignored), matching the
+`uploaded_workout_id` first looks for that upload in `get_workouts` (newest-first by `createdDate` —
+verified 2026-10-17; `orderBy`/`orderSeq` params are ignored), paging back to before the *first*
+attempt (`_library_since`, at most 1000 workouts), matching the
 `description` every upload is tagged with (`"Queued by Waypoint · ref <queue id>"`, `sync._queue_ref`
 — verified to round-trip unchanged), so a timeout after Garmin stored the workout doesn't upload a
 duplicate. A name match alone isn't enough: two queued workouts can share a name. The tag shows

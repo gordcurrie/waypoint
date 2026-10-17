@@ -1167,3 +1167,15 @@ func TestLinkUnsupported(t *testing.T) {
 		}
 	}
 }
+
+func TestAppendToQueue_ReportsSuccessOnceLinked(t *testing.T) {
+	// The item must be reported queued once it's linked in, whatever happens after: an
+	// error would make the caller retry and queue a duplicate.
+	dir := t.TempDir()
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "a", Sport: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(queueDir(dir), "1.json")); err != nil {
+		t.Fatal(err)
+	}
+}

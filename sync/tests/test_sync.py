@@ -3534,3 +3534,67 @@ def test_quarantined_uploaded_item_says_it_needs_scheduling(tmp_path, monkeypatc
 )
 def test_created_at_converts_offsets(created, want):
     assert sync._created_at({"createdDate": created}) == want
+
+
+def test_non_json_2xx_response_is_transient():
+    """A maintenance page served as 200 makes resp.json() raise requests' JSONDecodeError,
+    which is an OSError — transient, not an item-specific failure that would quarantine
+    every queued workout."""
+    import requests
+
+    r = requests.models.Response()
+    r._content = b"<html>maintenance</html>"
+    r.status_code = 200
+    with pytest.raises(Exception) as excinfo:
+        r.json()
+    assert sync._garmin_write_error_kind(excinfo.value) == "transient"
+
+
+def test_pending_workouts_keeps_first_upload_attempt_time(tmp_path, monkeypatch, no_sleep):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item()])
+    garmin = MagicMock()
+    garmin.get_workouts.return_value = []
+    garmin.upload_workout.side_effect = GarminConnectConnectionError("API Error 503")
+    with freeze_time("2026-10-17T12:00:00") as frozen:
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+        frozen.tick(timedelta(days=2))
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path)[0]["upload_attempted_at"].startswith("2026-10-17T12:00")
+
+
+def test_quarantine_rename_failure_stops_processing(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item(id="1"), _queue_item(id="2")])
+    garmin = MagicMock()
+    garmin.upload_workout.side_effect = GarminConnectConnectionError("API Error 400")
+    real_replace = sync.Path.replace
+
+    def replace(self, target):
+        if str(target).endswith(".invalid"):
+            raise OSError("read-only")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(sync.Path, "replace", replace)
+    with pytest.raises(sync._QueueWriteError):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.upload_workout.assert_called_once()
+
+
+def test_library_search_stops_on_page_without_dates(no_sleep):
+    garmin = MagicMock()
+    garmin.get_workouts.return_value = [{"workoutId": i} for i in range(sync._LIBRARY_PAGE)]
+    since = datetime(2026, 10, 1, tzinfo=UTC)
+    assert len(sync._library_since(garmin, {}, since)) == sync._LIBRARY_PAGE
+    garmin.get_workouts.assert_called_once()
+
+
+def test_invalid_schedule_date_logged_once(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_scheduled_item(date_str="2026/10/20")])
+    garmin = MagicMock()
+    garmin.upload_workout.side_effect = ValueError("bad")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert caplog.text.count("invalid schedule_date") == 1
+    assert _read_queue(tmp_path)[0]["invalid_schedule_date"] == "2026/10/20"

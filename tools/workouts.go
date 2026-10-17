@@ -364,8 +364,11 @@ func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
 		return fmt.Errorf("queue item %s: %w", item.ID, err)
 	}
 	// fsync the directory too, so the new entry itself survives a crash right after
-	// create_workout reports "queued" (sync.py's _write_queue_item does the same).
-	return syncDir(dir)
+	// create_workout reports "queued" (sync.py's _write_queue_item does the same). Best
+	// effort only: the item is already linked in, so reporting a failure here would make
+	// the caller retry create_workout and queue a duplicate workout.
+	_ = syncDir(dir)
+	return nil
 }
 
 // linkUnsupported reports whether a Link error means the filesystem can't hard-link at
