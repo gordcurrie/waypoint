@@ -2,34 +2,136 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/workouts.schema.json",
   "title": "Workout library list (get_workouts)",
-  "description": "Returned by garminconnect's get_workouts(start, limit) — the account's workout library, newest first by createdDate (orderBy/orderSeq params are accepted but don't change the order). Consumed by sync_pending_workouts' _find_prior_upload, which looks for a workout an earlier timed-out upload_workout created, matching the description tag _queue_ref puts on every upload. Each item is the same workout object get_workout_by_id returns, minus workoutSegments.\n\nVerified against: 2026-10-17, a 7-workout library (a deleted workout is absent here and 404s from get_workout_by_id). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
+  "description": "Returned by garminconnect's get_workouts(start, limit) — the account's workout library, newest first by createdDate (orderBy/orderSeq params are accepted but don't change the order). Consumed by sync_pending_workouts' _find_prior_upload, which looks for a workout an earlier timed-out upload_workout created by the description tag _queue_ref puts on every upload. Note the list item's timestamp is updateDate, while get_workout_by_id's is updatedDate.\n\nVerified against: 2026-10-17, the full 7-workout library (all fields enumerated from it; a deleted workout is absent here and 404s from get_workout_by_id). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
   "type": "array",
   "items": {
     "type": "object",
     "properties": {
+      "atpPlanId": {
+        "description": "observed null"
+      },
+      "author": {
+        "type": "object",
+        "properties": {
+          "displayName": {},
+          "fullName": {},
+          "profileImgNameLarge": {},
+          "profileImgNameMedium": {},
+          "profileImgNameSmall": {},
+          "userPro": {},
+          "userProfilePk": {},
+          "vivokidUser": {}
+        },
+        "additionalProperties": true,
+        "description": "Real account PII (name, profile image) — never stored."
+      },
+      "consumer": {
+        "description": "observed null"
+      },
+      "createdDate": {
+        "type": "string",
+        "description": "UTC, no offset, e.g. \"2026-10-17T15:47:43.0\"; the list is ordered newest-first by this."
+      },
+      "description": {
+        "type": [
+          "null",
+          "string"
+        ],
+        "description": "For a create_workout upload, \"Queued by Waypoint · ref <queue item id>\" (sync._queue_ref) — what _find_prior_upload matches on (verified 2026-10-17 to round-trip unchanged). Null for workouts built elsewhere."
+      },
+      "descriptionI18nKey": {
+        "description": "observed null"
+      },
+      "estimateType": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "estimated": {
+        "type": "boolean"
+      },
+      "estimatedDistanceInMeters": {
+        "type": [
+          "null",
+          "number"
+        ]
+      },
+      "estimatedDistanceUnit": {
+        "type": "object",
+        "properties": {
+          "factor": {},
+          "unitId": {},
+          "unitKey": {}
+        },
+        "additionalProperties": true
+      },
+      "estimatedDurationInSecs": {
+        "type": [
+          "null",
+          "integer"
+        ]
+      },
+      "ownerId": {
+        "type": "integer",
+        "description": "Real account id — never stored."
+      },
+      "poolLength": {
+        "type": "number"
+      },
+      "poolLengthUnit": {
+        "type": "object",
+        "properties": {
+          "factor": {},
+          "unitId": {},
+          "unitKey": {}
+        },
+        "additionalProperties": true
+      },
+      "shared": {
+        "type": "boolean"
+      },
+      "sportType": {
+        "type": "object",
+        "properties": {
+          "displayOrder": {},
+          "sportTypeId": {},
+          "sportTypeKey": {}
+        },
+        "additionalProperties": true
+      },
+      "trainingPlanId": {
+        "description": "observed null"
+      },
+      "updateDate": {
+        "type": "string"
+      },
       "workoutId": {
         "type": "integer"
       },
       "workoutName": {
         "type": "string"
       },
-      "createdDate": {
-        "type": "string",
-        "description": "UTC, no offset, e.g. \"2026-10-17T15:47:43.0\" — verified against a workout uploaded at 15:47:42 container UTC."
+      "workoutNameI18nKey": {
+        "description": "observed null"
       },
-      "updatedDate": {
+      "workoutProvider": {
         "type": [
-          "string",
-          "null"
-        ],
-        "description": "observed null on every item"
+          "null",
+          "string"
+        ]
       },
-      "description": {
+      "workoutSourceId": {
         "type": [
-          "string",
-          "null"
-        ],
-        "description": "For a create_workout upload, \"Queued by Waypoint · ref <queue item id>\" — what _find_prior_upload matches on (verified 2026-10-17 to appear here unchanged). Null/absent for workouts built elsewhere."
+          "null",
+          "string"
+        ]
+      },
+      "workoutThumbnailUrl": {
+        "type": [
+          "null",
+          "string"
+        ]
       }
     },
     "required": [

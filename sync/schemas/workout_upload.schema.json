@@ -77,20 +77,10 @@
       "description": "Selected by which of duration_s/distance_m/reps is present on the source step, in that priority order. Falls back to lap.button (manual) if none are set.",
       "properties": {
         "conditionTypeId": {
-          "enum": [
-            1,
-            2,
-            3,
-            10
-          ]
+          "enum": [1, 2, 3, 10]
         },
         "conditionTypeKey": {
-          "enum": [
-            "lap.button",
-            "time",
-            "distance",
-            "reps"
-          ]
+          "enum": ["lap.button", "time", "distance", "reps"]
         }
       },
       "additionalProperties": false
@@ -103,53 +93,32 @@
         },
         {
           "type": "object",
-          "description": "Every non-rest step with no target set — still an explicit object, not null/omitted. Each id/key pair is its own branch (not independent enums): Garmin resolves the id and silently overrides a mismatched key, so a mismatch must fail validation.",
+          "description": "Every non-rest step with no target set \u2014 still an explicit object, not null/omitted. Each id/key pair is its own branch (not independent enums): Garmin resolves the id and silently overrides a mismatched key, so a mismatch must fail validation.",
           "properties": {
-            "workoutTargetTypeId": {
-              "const": 1
-            },
-            "workoutTargetTypeKey": {
-              "const": "no.target"
-            }
+            "workoutTargetTypeId": { "const": 1 },
+            "workoutTargetTypeKey": { "const": "no.target" }
           },
-          "required": [
-            "workoutTargetTypeId",
-            "workoutTargetTypeKey"
-          ],
+          "required": ["workoutTargetTypeId", "workoutTargetTypeKey"],
           "additionalProperties": false
         },
         {
           "type": "object",
           "description": "When target_hr_zone is set on the source step.",
           "properties": {
-            "workoutTargetTypeId": {
-              "const": 4
-            },
-            "workoutTargetTypeKey": {
-              "const": "heart.rate.zone"
-            }
+            "workoutTargetTypeId": { "const": 4 },
+            "workoutTargetTypeKey": { "const": "heart.rate.zone" }
           },
-          "required": [
-            "workoutTargetTypeId",
-            "workoutTargetTypeKey"
-          ],
+          "required": ["workoutTargetTypeId", "workoutTargetTypeKey"],
           "additionalProperties": false
         },
         {
           "type": "object",
-          "description": "When target_pace_zone_fast_s_per_km/target_pace_zone_slow_s_per_km are set — verified live 2026-10-12 by probe upload + readback + delete.",
+          "description": "When target_pace_zone_fast_s_per_km/target_pace_zone_slow_s_per_km are set \u2014 verified live 2026-10-12 by probe upload + readback + delete.",
           "properties": {
-            "workoutTargetTypeId": {
-              "const": 6
-            },
-            "workoutTargetTypeKey": {
-              "const": "pace.zone"
-            }
+            "workoutTargetTypeId": { "const": 6 },
+            "workoutTargetTypeKey": { "const": "pace.zone" }
           },
-          "required": [
-            "workoutTargetTypeId",
-            "workoutTargetTypeKey"
-          ],
+          "required": ["workoutTargetTypeId", "workoutTargetTypeKey"],
           "additionalProperties": false
         }
       ]
@@ -181,17 +150,11 @@
           "$ref": "#/$defs/targetType"
         },
         "targetValueOne": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "description": "heart.rate.zone: HR zone number (targetValueOne and targetValueTwo set to the same value). pace.zone: the FASTER bound in m/s (numerically higher; 1000 / target_pace_zone_fast_s_per_km) — round-trips unconverted, verified live 2026-10-12. null otherwise."
+          "type": ["number", "null"],
+          "description": "heart.rate.zone: HR zone number (targetValueOne and targetValueTwo set to the same value). pace.zone: the FASTER bound in m/s (numerically higher; 1000 / target_pace_zone_fast_s_per_km) \u2014 round-trips unconverted, verified live 2026-10-12. null otherwise."
         },
         "targetValueTwo": {
-          "type": [
-            "number",
-            "null"
-          ],
+          "type": ["number", "null"],
           "description": "heart.rate.zone: same zone number as targetValueOne. pace.zone: the SLOWER bound in m/s (numerically lower; 1000 / target_pace_zone_slow_s_per_km). null otherwise."
         },
         "category": {

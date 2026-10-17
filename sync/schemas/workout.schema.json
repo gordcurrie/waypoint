@@ -2,41 +2,182 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/workout.schema.json",
   "title": "Workout (get_workout_by_id)",
-  "description": "Returned by garminconnect's get_workout_by_id(workout_id) — confirmed 2026-08-07 to be the same shape as upload_workout's response (see CLAUDE.md). Called by sync_pending_workouts only when it recovers an earlier timed-out upload from the library, to write the workout_detail measurement the upload response would have supplied. Only the fields _write_workout_detail reads are listed.\n\nVerified against: 2026-10-17 (probe workout, then deleted). A deleted workout 404s. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
+  "description": "Returned by garminconnect's get_workout_by_id(workout_id) — confirmed 2026-08-07 to be the same shape as upload_workout's response (see CLAUDE.md). Called by sync_pending_workouts only when it recovers an earlier timed-out upload from the library, to write the workout_detail measurement the upload response would have supplied. workoutSteps items are the ExecutableStepDTO/RepeatGroupDTO tree documented by workout_upload.schema.json, not re-enumerated here.\n\nVerified against: 2026-10-17, a real single-segment running workout (all top-level and segment fields enumerated from it) plus a probe workout (deleted after). A deleted workout 404s. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
   "type": "object",
   "properties": {
+    "atpPlanId": {
+      "description": "observed null"
+    },
+    "author": {
+      "type": "object",
+      "properties": {
+        "displayName": {},
+        "fullName": {},
+        "profileImgNameLarge": {},
+        "profileImgNameMedium": {},
+        "profileImgNameSmall": {},
+        "userPro": {},
+        "userProfilePk": {},
+        "vivokidUser": {}
+      },
+      "additionalProperties": true,
+      "description": "Real account PII (name, profile image) — never stored."
+    },
+    "avgTrainingSpeed": {
+      "type": "number"
+    },
+    "consumer": {
+      "description": "observed null"
+    },
+    "consumerImageURL": {
+      "description": "observed null"
+    },
+    "consumerName": {
+      "description": "observed null"
+    },
+    "consumerWebsiteURL": {
+      "description": "observed null"
+    },
+    "createdDate": {
+      "type": "string",
+      "description": "UTC, no offset, e.g. \"2026-10-17T15:47:43.0\"; the list is ordered newest-first by this."
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "For a create_workout upload, \"Queued by Waypoint · ref <queue item id>\" (sync._queue_ref) — what _find_prior_upload matches on (verified 2026-10-17 to round-trip unchanged). Null for workouts built elsewhere."
+    },
+    "descriptionI18nKey": {
+      "description": "observed null"
+    },
+    "estimateType": {
+      "description": "observed null on this sample; may be populated on others"
+    },
+    "estimatedDistanceInMeters": {
+      "type": "number"
+    },
+    "estimatedDistanceUnit": {
+      "type": "object",
+      "properties": {
+        "factor": {},
+        "unitId": {},
+        "unitKey": {}
+      },
+      "additionalProperties": true
+    },
+    "estimatedDurationInSecs": {
+      "description": "observed null on this sample; may be populated on others"
+    },
+    "isSessionTransitionEnabled": {
+      "description": "observed null"
+    },
+    "locale": {
+      "description": "observed null"
+    },
+    "ownerId": {
+      "type": "integer",
+      "description": "Real account id — never stored."
+    },
+    "poolLength": {
+      "description": "observed null on this sample; may be populated on others"
+    },
+    "poolLengthUnit": {
+      "description": "observed null on this sample; may be populated on others"
+    },
+    "shared": {
+      "type": "boolean"
+    },
+    "sharedWithUsers": {
+      "description": "observed null"
+    },
+    "sportType": {
+      "type": "object",
+      "properties": {
+        "displayOrder": {},
+        "sportTypeId": {},
+        "sportTypeKey": {}
+      },
+      "additionalProperties": true
+    },
+    "subSportType": {
+      "description": "observed null"
+    },
+    "trainingPlanId": {
+      "description": "observed null"
+    },
+    "updatedDate": {
+      "type": "string"
+    },
+    "uploadTimestamp": {
+      "description": "observed null"
+    },
     "workoutId": {
       "type": "integer"
     },
     "workoutName": {
       "type": "string"
     },
-    "description": {
-      "type": [
-        "string",
-        "null"
-      ]
+    "workoutNameI18nKey": {
+      "description": "observed null"
     },
-    "sportType": {
-      "type": "object",
-      "properties": {
-        "sportTypeKey": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": true
+    "workoutProvider": {
+      "description": "observed null"
     },
     "workoutSegments": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
+          "avgTrainingSpeed": {
+            "description": "observed null"
+          },
+          "description": {
+            "description": "For a create_workout upload, \"Queued by Waypoint · ref <queue item id>\" (sync._queue_ref) — what _find_prior_upload matches on (verified 2026-10-17 to round-trip unchanged). Null for workouts built elsewhere."
+          },
+          "estimateType": {
+            "description": "observed null"
+          },
+          "estimatedDistanceInMeters": {
+            "description": "observed null"
+          },
+          "estimatedDistanceUnit": {
+            "description": "observed null"
+          },
+          "estimatedDurationInSecs": {
+            "description": "observed null"
+          },
+          "poolLength": {
+            "description": "observed null"
+          },
+          "poolLengthUnit": {
+            "description": "observed null"
+          },
+          "segmentOrder": {
+            "type": "integer"
+          },
+          "sportType": {
+            "type": "object",
+            "properties": {
+              "displayOrder": {},
+              "sportTypeId": {},
+              "sportTypeKey": {}
+            },
+            "additionalProperties": true
+          },
           "workoutSteps": {
             "type": "array"
           }
         },
         "additionalProperties": true
       }
+    },
+    "workoutSourceId": {
+      "description": "observed null"
+    },
+    "workoutThumbnailUrl": {
+      "type": "string"
     }
   },
   "required": [

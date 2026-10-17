@@ -1344,6 +1344,26 @@ def test_scheduled_workouts_fbt_adaptive_without_training_plan_id_skipped(no_sle
     assert not client.write.called
 
 
+def _tombstone_query_client(coach_rows: list | None = None, self_rows: list | None = None):
+    """Client whose active-key lookups return coach_rows for the coach-plan query (filtered
+    on workout_name) and self_rows for the self-created one (filtered on scheduled_id) — as
+    the real WHERE ... IS NOT NULL clauses would."""
+    client = MagicMock()
+
+    def query(sql, language):
+        res = MagicMock()
+        if "workout_name IS NOT NULL" in sql:
+            res.to_pylist.return_value = coach_rows or []
+        elif "scheduled_id IS NOT NULL" in sql:
+            res.to_pylist.return_value = self_rows or []
+        else:
+            res.to_pylist.return_value = []
+        return res
+
+    client.query.side_effect = query
+    return client
+
+
 @freeze_time("2026-07-06")
 def test_scheduled_workouts_tombstones_renamed_coach_plan_entry(no_sleep):
     """#104: the adaptive plan can rename a same-day/sport coach-plan slot between
@@ -1355,10 +1375,9 @@ def test_scheduled_workouts_tombstones_renamed_coach_plan_entry(no_sleep):
     garmin = _sched_garmin(
         [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
     )
-    client = MagicMock()
-    client.query.return_value.to_pylist.return_value = [
-        {"time": "2026-07-10 00:00:00", "sport": "running", "workout_name": "Recovery"}
-    ]
+    client = _tombstone_query_client(
+        coach_rows=[{"time": "2026-07-10 00:00:00", "sport": "running", "workout_name": "Recovery"}]
+    )
     sync.sync_scheduled_workouts(garmin, client, {})
     points = [str(p) for p in client.write.call_args[1]["record"]]
     assert len(points) == 2
@@ -1384,10 +1403,9 @@ def test_scheduled_workouts_no_tombstone_when_name_unchanged(no_sleep):
     garmin = _sched_garmin(
         [_coach_plan_item(scheduled_id=111, date_str="2026-07-10", title="Base", sport="running")]
     )
-    client = MagicMock()
-    client.query.return_value.to_pylist.return_value = [
-        {"time": "2026-07-10 00:00:00", "sport": "running", "workout_name": "Base"}
-    ]
+    client = _tombstone_query_client(
+        coach_rows=[{"time": "2026-07-10 00:00:00", "sport": "running", "workout_name": "Base"}]
+    )
     sync.sync_scheduled_workouts(garmin, client, {})
     points = [str(p) for p in client.write.call_args[1]["record"]]
     assert len(points) == 1
@@ -3219,19 +3237,9 @@ def test_scheduled_workouts_tombstones_moved_self_created_workout(no_sleep):
     """A create_workout entry moved from Oct 20 to Oct 22 in Garmin Connect must not linger
     at Oct 20."""
     garmin = _sched_garmin([_self_created_item(42, "2026-10-22")])
-    client = MagicMock()
-
-    def query(sql, language):
-        rows = (
-            [{"time": "2026-10-20T00:00:00", "scheduled_id": "42", "sport": "running"}]
-            if "scheduled_id IS NOT NULL" in sql
-            else []
-        )
-        res = MagicMock()
-        res.to_pylist.return_value = rows
-        return res
-
-    client.query.side_effect = query
+    client = _tombstone_query_client(
+        self_rows=[{"time": "2026-10-20T00:00:00", "scheduled_id": "42", "sport": "running"}]
+    )
     sync.sync_scheduled_workouts(garmin, client, {})
     lines = [str(p) for p in _written_points(client)]
     tomb = [ln for ln in lines if "deleted_at=" in ln and "deleted_at=0" not in ln]
@@ -3240,3 +3248,66 @@ def test_scheduled_workouts_tombstones_moved_self_created_workout(no_sleep):
     assert "workout_name" not in tomb[0]
     fresh = [ln for ln in lines if "deleted_at=0" in ln]
     assert any("scheduled_id=42" in ln for ln in fresh)  # the Oct 22 row, live
+
+
+@freeze_time("2026-10-17")
+def test_scheduled_workouts_self_created_without_sport_not_falsely_tombstoned(no_sleep):
+    """An item with no sportTypeKey is stored with no sport tag (influxdb_client_3 drops an
+    empty-string tag), which reads back as None — that must still match its fresh key."""
+    item = _self_created_item(42, "2026-10-22")
+    item["sportTypeKey"] = None
+    garmin = _sched_garmin([item])
+    client = _tombstone_query_client(
+        self_rows=[{"time": "2026-10-22T00:00:00", "scheduled_id": "42", "sport": None}]
+    )
+    sync.sync_scheduled_workouts(garmin, client, {})
+    lines = [str(p) for p in _written_points(client)]
+    assert not [ln for ln in lines if "deleted_at=" in ln and "deleted_at=0" not in ln]
+
+
+def test_pending_workouts_read_failure_never_counts_against_item(tmp_path, monkeypatch, no_sleep):
+    """A malformed Garmin response on a read must not quarantine a valid uploaded item."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_uploaded_item(date_str="2099-01-01")])
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = "not a dict"
+    for _ in range(sync._MAX_OTHER_FAILURES + 1):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    remaining = _read_queue(tmp_path)
+    assert len(remaining) == 1
+    assert "failures" not in remaining[0]
+
+
+def test_pending_workouts_persistent_5xx_stops_blocking_then_quarantines(
+    tmp_path, monkeypatch, no_sleep
+):
+    """A body Garmin always 500s on must not hold up the queue forever."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item(id="1"), _queue_item(id="2")])
+    garmin = MagicMock()
+
+    def upload(workout):
+        if workout["description"].endswith("ref 1"):
+            raise GarminConnectConnectionError("API Error 500 - DataIntegrityViolationException")
+        return _upload_response()
+
+    garmin.upload_workout.side_effect = upload
+    for _ in range(sync._BLOCKING_TRANSIENT_FAILURES):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]  # "2" got through
+    for _ in range(sync._MAX_TRANSIENT_FAILURES - sync._BLOCKING_TRANSIENT_FAILURES):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path) == []
+    assert (tmp_path / "workout_queue" / "1.json.invalid").exists()
+
+
+def test_pending_workouts_progress_resets_failure_count(tmp_path, monkeypatch, no_sleep):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    item = _scheduled_item(date_str="2099-01-01")
+    item["failures"] = 2
+    _write_queue(tmp_path, [item])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response(workout_id=555)
+    garmin.schedule_workout.side_effect = ValueError("bad")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path)[0]["failures"] == 1  # counted afresh after the upload
