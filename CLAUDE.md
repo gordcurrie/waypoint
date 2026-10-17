@@ -334,10 +334,12 @@ checks the calendar month for an item with that `workoutId` + `date` (shape veri
 2026-10-17: `itemType: "workout"`, `id` == `workoutScheduleId`) so a schedule Garmin applied but
 whose response was lost isn't added twice. `upload_workout` gets the same protection: the item
 records `upload_attempted_at` *before* the call, and a later run that finds it without
-`uploaded_workout_id` first looks for that upload via `get_workouts` (newest-first by `createdDate`,
-which is UTC — both verified 2026-10-17; `orderBy`/`orderSeq` params are ignored) matching
-`workoutName` and `createdDate >= upload_attempted_at - 5min`, so a timeout after Garmin stored
-the workout doesn't upload a duplicate. Nothing is scheduled onto a date that has passed (with a
+`uploaded_workout_id` first looks for that upload in `get_workouts`' newest page (newest-first by
+`createdDate` — verified 2026-10-17; `orderBy`/`orderSeq` params are ignored), matching the
+`description` every upload is tagged with (`"Queued by Waypoint · ref <queue id>"`, `sync._queue_ref`
+— verified to round-trip unchanged), so a timeout after Garmin stored the workout doesn't upload a
+duplicate. A name match alone isn't enough: two queued workouts can share a name. The tag shows
+in Garmin Connect as the workout's description. Nothing is scheduled onto a date that has passed (with a
 day's slack for time zones): an expired item uploads unscheduled, or is dropped if already uploaded.
 
 **`upload_workout`/`schedule_workout` errors are all `GarminConnectConnectionError`** (garminconnect
@@ -355,7 +357,8 @@ classify `GarminConnectConnectionError` on these two calls without checking the 
 
 **Workout queue is a spool directory, one file per workout** — `<data-dir>/workout_queue/<id>.json`,
 shared by two processes. The Go MCP server only ever *creates* files (`appendToQueue`: write a
-`.<id>.json.tmp` dotfile, then rename it in); the sync sidecar only rewrites (adding
+`.item-*.tmp` dotfile, then `os.Link` it into place as `<id>.json` — fails rather than overwrites —
+falling back to rename where hard links aren't supported); the sync sidecar only rewrites (adding
 `uploaded_workout_id`) or removes files it has read, and ignores dotfiles. Neither side ever writes
 a file the other might be writing, so there's no lock. Keep it that way: a new Go feature that
 edits or cancels a queued workout would break that invariant — it needs a design change, not a

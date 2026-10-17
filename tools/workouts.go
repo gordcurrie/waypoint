@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -293,7 +295,7 @@ func validateScheduleDate(s string, now time.Time) error {
 
 // queueDirName is the spool directory, under the data dir shared with the sync sidecar,
 // holding one <id>.json file per queued workout. Go only ever creates new files there
-// (write a dotfile, then rename it in); sync.py only rewrites or removes files it has
+// (a ".item-*.tmp" dotfile, then linked — or renamed — into place; see appendToQueue); sync.py only rewrites or removes files it has
 // read. Neither side ever rewrites a file the other might be writing, so no lock and no
 // field-preservation rule is needed — unlike the single shared workout_queue.json this
 // replaced, which sync.py migrates on its first run (see sync._migrate_legacy_queue).
@@ -329,9 +331,18 @@ func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
 		return fmt.Errorf("close queue tmp: %w", err)
 	}
 	// Link, not Rename: it fails if the target exists, so an id collision is an error
-	// rather than one queued workout silently replacing another.
-	if err := os.Link(tmp, filepath.Join(dir, item.ID+".json")); err != nil {
-		return fmt.Errorf("queue item %s: %w", item.ID, err)
+	// rather than one queued workout silently replacing another. Where hard links aren't
+	// supported (e.g. some SMB/FUSE mounts), fall back to Rename — newQueueID's random
+	// suffix already makes a collision vanishingly unlikely.
+	final := filepath.Join(dir, item.ID+".json")
+	err = os.Link(tmp, final)
+	if errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("queue item %s already exists", item.ID)
+	}
+	if err != nil {
+		if err := os.Rename(tmp, final); err != nil {
+			return fmt.Errorf("queue item %s: %w", item.ID, err)
+		}
 	}
 	return nil
 }

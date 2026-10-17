@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/workout.schema.json",
+  "title": "Workout (get_workout_by_id)",
+  "description": "Returned by garminconnect's get_workout_by_id(workout_id) — confirmed 2026-08-07 to be the same shape as upload_workout's response (see CLAUDE.md). Called by sync_pending_workouts only when it recovers an earlier timed-out upload from the library, to write the workout_detail measurement the upload response would have supplied. Only the fields _write_workout_detail reads are listed.\n\nVerified against: 2026-10-17 (probe workout, then deleted). A deleted workout 404s. Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
+  "type": "object",
+  "properties": {
+    "workoutId": {
+      "type": "integer"
+    },
+    "workoutName": {
+      "type": "string"
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sportType": {
+      "type": "object",
+      "properties": {
+        "sportTypeKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "workoutSegments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "workoutSteps": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "workoutId",
+    "workoutSegments"
+  ],
+  "additionalProperties": true
+}

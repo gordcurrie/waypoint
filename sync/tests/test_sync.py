@@ -3047,9 +3047,19 @@ def test_pending_workouts_adopts_upload_from_timed_out_attempt(tmp_path, monkeyp
     _write_queue(tmp_path, [_attempted_item()])
     garmin = MagicMock()
     garmin.get_workouts.return_value = [
-        {"workoutId": 777, "workoutName": "Tempo Run", "createdDate": "2026-10-17T12:00:03.0"},
-        {"workoutId": 1, "workoutName": "Tempo Run", "createdDate": "2026-09-01T10:00:00.0"},
+        # Same name, different queue item: must not be adopted.
+        {
+            "workoutId": 1,
+            "workoutName": "Tempo Run",
+            "description": "Queued by Waypoint · ref other",
+        },
+        {
+            "workoutId": 777,
+            "workoutName": "Tempo Run",
+            "description": "Queued by Waypoint · ref abc123",
+        },
     ]
+    garmin.get_workout_by_id.return_value = _upload_response(workout_id=777)
     garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
     garmin.schedule_workout.return_value = {"workoutScheduleId": 9}
     sync.sync_pending_workouts(garmin, MagicMock(), {})
@@ -3059,13 +3069,13 @@ def test_pending_workouts_adopts_upload_from_timed_out_attempt(tmp_path, monkeyp
 
 
 @freeze_time("2026-10-17T13:00:00")
-def test_pending_workouts_reuploads_when_no_prior_upload_found(tmp_path, monkeypatch):
-    """A same-named workout created before the attempt is someone else's, not ours."""
+def test_pending_workouts_reuploads_when_no_prior_upload_found(tmp_path, monkeypatch, no_sleep):
+    """A same-named workout without this item's ref tag is someone else's, not ours."""
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     _write_queue(tmp_path, [_attempted_item()])
     garmin = MagicMock()
     garmin.get_workouts.return_value = [
-        {"workoutId": 1, "workoutName": "Tempo Run", "createdDate": "2026-09-01T10:00:00.0"},
+        {"workoutId": 1, "workoutName": "Tempo Run", "description": None},
     ]
     garmin.upload_workout.return_value = _upload_response(workout_id=555)
     garmin.schedule_workout.return_value = {"workoutScheduleId": 9}
@@ -3075,16 +3085,23 @@ def test_pending_workouts_reuploads_when_no_prior_upload_found(tmp_path, monkeyp
 
 
 @freeze_time("2026-10-17T13:00:00")
-def test_pending_workouts_library_read_failure_waits(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("message", "rest_of_queue_runs"),
+    [("API Error 503", False), ("API call client error (404): API Error 404", True)],
+)
+def test_pending_workouts_library_read_failure_keeps_item(
+    tmp_path, monkeypatch, no_sleep, message, rest_of_queue_runs
+):
+    """A failed library read never drops or blindly re-uploads the item; only a transient
+    one (Garmin down) holds up the rest of the queue."""
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     _write_queue(tmp_path, [_attempted_item(id="1"), _queue_item(id="2")])
     garmin = MagicMock()
-    garmin.get_workouts.side_effect = GarminConnectConnectionError(
-        "API call client error (404): API Error 404"
-    )
+    garmin.get_workouts.side_effect = GarminConnectConnectionError(message)
+    garmin.upload_workout.return_value = _upload_response()
     sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.upload_workout.assert_not_called()
-    assert [r["id"] for r in _read_queue(tmp_path)] == ["1", "2"]
+    assert garmin.upload_workout.call_count == (1 if rest_of_queue_runs else 0)
+    assert _read_queue(tmp_path)[0]["id"] == "1"
 
 
 @freeze_time("2026-10-17")
@@ -3144,3 +3161,62 @@ def test_pending_workouts_resumes_interrupted_legacy_migration(tmp_path, monkeyp
 @pytest.mark.parametrize("bad", ["20261017", "2026-W42-6", "2026-10-17T00:00"])
 def test_valid_schedule_date_is_strict(bad):
     assert sync._valid_schedule_date({"id": "x", "schedule_date": bad}) is None
+
+
+@freeze_time("2026-10-17T13:00:00")
+def test_pending_workouts_fetches_library_once_per_run(tmp_path, monkeypatch, no_sleep):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_attempted_item(id="1"), _attempted_item(id="2")])
+    garmin = MagicMock()
+    garmin.get_workouts.return_value = []
+    garmin.upload_workout.return_value = _upload_response()
+    garmin.schedule_workout.return_value = {"workoutScheduleId": 9}
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.get_workouts.assert_called_once()
+
+
+def test_pending_workouts_build_failure_records_no_attempt(tmp_path, monkeypatch):
+    """A bad item fails before an attempt is recorded or Garmin is called."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item(id="1", sport="walking"), _queue_item(id="2")])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response()
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    remaining = _read_queue(tmp_path)
+    assert [r["id"] for r in remaining] == ["1"]
+    assert "upload_attempted_at" not in remaining[0]
+    garmin.get_workouts.assert_not_called()
+    garmin.upload_workout.assert_called_once()  # only "2"
+
+
+def test_build_garmin_workout_tags_description_with_queue_ref():
+    w = sync._build_garmin_workout(_queue_item(id="42-ab"))
+    assert w["description"] == "Queued by Waypoint · ref 42-ab"
+
+
+def test_pending_workouts_incomplete_migration_skips_spool(tmp_path, monkeypatch):
+    """Processing the spool mid-migration could upload an item that's then copied again."""
+    import json as _json
+
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    (tmp_path / "workout_queue.json").write_text(_json.dumps([_queue_item(id="1")]))
+    monkeypatch.setattr(
+        sync,
+        "_write_queue_item",
+        lambda path, item: (_ for _ in ()).throw(sync._QueueWriteError("disk full")),
+    )
+    garmin = MagicMock()
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.upload_workout.assert_not_called()
+    assert (tmp_path / "workout_queue.json.migrating").exists()
+
+
+def test_pending_workouts_remigration_never_overwrites_progress(tmp_path, monkeypatch):
+    import json as _json
+
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    progressed = _uploaded_item(id="1")
+    _write_queue(tmp_path, [progressed])
+    (tmp_path / "workout_queue.json.migrating").write_text(_json.dumps([_queue_item(id="1")]))
+    assert sync._migrate_legacy_queue()
+    assert _read_queue(tmp_path)[0]["uploaded_workout_id"] == 555

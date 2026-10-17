@@ -1684,7 +1684,7 @@ def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
         "workoutId": None,
         "ownerId": None,
         "workoutName": item.get("name", ""),
-        "description": None,
+        "description": _queue_ref(item.get("id")),
         "sportType": sport_type,
         "workoutSegments": [
             {
@@ -1697,10 +1697,22 @@ def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
 
 
 # Spool directory of one <id>.json file per queued workout, shared with the Go MCP server
-# (tools/workouts.go appendToQueue). Go only ever creates new files (dotfile tmp, then
-# rename); this sidecar only rewrites or removes files it has read. Neither side ever
+# (tools/workouts.go appendToQueue). Go only ever creates new files (a ".item-*.tmp" dotfile,
+# then linked — or, where hard links aren't supported, renamed — into place as <id>.json);
+# this sidecar only rewrites or removes files it has read. Neither side ever
 # writes a file the other could be writing, so no lock is needed.
 _QUEUE_DIR_NAME = "workout_queue"
+
+
+def _queue_ref(item_id: Any) -> str:
+    """The workout description an upload is tagged with, so _find_prior_upload can recognise
+    this exact queue item's upload in the library (a name match alone can't tell apart two
+    queued workouts with the same name, or one the user built by hand). Verified 2026-10-17
+    (probe upload + delete): description round-trips unchanged through upload_workout,
+    get_workout_by_id and get_workouts."""
+    return f"Queued by Waypoint · ref {item_id}"
+
+
 # The single shared file the spool replaced — migrated by _migrate_legacy_queue.
 _LEGACY_QUEUE_FILE = "workout_queue.json"
 
@@ -1741,13 +1753,17 @@ def _quarantine(path: Path, reason: str) -> None:
         log.warning("pending_workouts: cannot move %s aside: %s", path.name, exc)
 
 
-def _migrate_legacy_queue() -> None:
-    """Move items from the pre-spool workout_queue.json into the spool dir.
+def _migrate_legacy_queue() -> bool:
+    """Move items from the pre-spool workout_queue.json into the spool dir. Returns False if
+    a migration is still incomplete, in which case the spool must not be processed this run:
+    an item already copied over could be uploaded now and then copied over again next run.
 
     The file is renamed away *before* it's read, so a not-yet-upgraded MCP server writing a
     new legacy file mid-migration creates a fresh one (migrated next run) instead of having
     its item deleted by our unlink. A leftover .migrating file (a crash mid-migration) is
-    picked up again. Never raises: a bad legacy file must not block the spool queue.
+    picked up again; items already in the spool are never overwritten, so progress recorded
+    on them (upload_attempted_at, uploaded_workout_id) survives. Never raises: a bad legacy
+    file must not block the spool queue forever.
     """
     legacy = DATA_DIR / _LEGACY_QUEUE_FILE
     migrating = legacy.with_name(f"{legacy.name}.migrating")
@@ -1755,11 +1771,14 @@ def _migrate_legacy_queue() -> None:
         if legacy.exists() and not migrating.exists():
             legacy.replace(migrating)
         if not migrating.exists():
-            return
+            return True
         raw = json.loads(migrating.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
+    except OSError as exc:
         log.warning("pending_workouts: cannot read legacy queue: %s", exc)
-        return
+        return False
+    except json.JSONDecodeError as exc:
+        _quarantine(migrating, f"is not valid JSON ({exc})")
+        return True
     qdir = _queue_dir()
     qdir.mkdir(parents=True, exist_ok=True)
     items = raw if isinstance(raw, list) else [raw]
@@ -1768,22 +1787,29 @@ def _migrate_legacy_queue() -> None:
             path = qdir / f"{item['id']}.json"
         else:
             path = qdir / f"legacy-{n}.json"
+        if path.exists() or path.with_name(f"{path.name}.invalid").exists():
+            continue  # copied over by an earlier, interrupted run
         try:
             _write_queue_item(path, item)
         except _QueueWriteError as exc:
             log.warning("pending_workouts: legacy queue migration incomplete: %s", exc)
-            return  # keep .migrating; retried next run (rewrites are idempotent)
+            return False
     try:
         migrating.unlink()
     except OSError as exc:
         log.warning("pending_workouts: cannot remove %s: %s", migrating.name, exc)
+        return False
     if items:
         log.info("pending_workouts: migrated %d item(s) from %s", len(items), legacy.name)
+    return True
 
 
 def _queued_item_paths() -> list[Path]:
-    """Queue files in creation order: ids are UnixNano digit strings, so (len, name) sorts
-    numerically. Dotfiles are the Go side's in-progress writes (and our own tmp files)."""
+    """Queue files in creation order. Go's ids are "<UnixNano>-<8 hex>" — fixed length, so the
+    name sorts by creation time; the length key puts the shorter legacy ids (plain UnixNano
+    digits, "legacy-N") first, since they predate every spool id. If the id format ever gets
+    a variable-length part, this ordering must change with it. Dotfiles are in-progress
+    writes (Go's and our own)."""
     if not _queue_dir().is_dir():
         return []
     paths = [p for p in _queue_dir().glob("*.json") if not p.name.startswith(".")]
@@ -1912,7 +1938,7 @@ def _already_scheduled(
     garmin: Garmin,
     workout_id: Any,
     sched_date: str,
-    month_cache: dict[tuple[int, int], dict[str, Any]],
+    cache: dict[Any, Any],
 ) -> bool:
     """Whether workout_id is already on the calendar on sched_date.
 
@@ -1924,29 +1950,24 @@ def _already_scheduled(
          "date": "2026-10-17", "trainingPlanId": 0, ...}
     (id == schedule_workout's workoutScheduleId).
 
-    month_cache is per sync_pending_workouts call, not the shared _get_calendar_month cache:
-    a month fetched there before this run's scheduling would be stale here.
+    cache is sync_pending_workouts' per-run cache (months keyed by (year, month)), not the
+    shared _get_calendar_month cache: a month fetched there before this run's scheduling
+    would be stale here.
     """
     d = date.fromisoformat(sched_date)
     key = (d.year, d.month)
-    if key not in month_cache:
+    if key not in cache:
         try:
-            month_cache[key] = garmin.get_scheduled_workouts(d.year, d.month) or {}
+            cache[key] = garmin.get_scheduled_workouts(d.year, d.month) or {}
         finally:
             time.sleep(0.3)
     return any(
         it.get("workoutId") == workout_id and str(it.get("date", ""))[:10] == sched_date
-        for it in month_cache[key].get("calendarItems") or []
+        for it in cache[key].get("calendarItems") or []
     )
 
 
 _SCHEDULE_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
-
-# How far back from an earlier attempt's start a library workout's createdDate may be and
-# still count as that attempt's upload — allows for clock skew between this container and
-# Garmin (createdDate is UTC: verified 2026-10-17, a workout uploaded at 15:47:42 container
-# UTC came back as createdDate "2026-10-17T15:47:43.0").
-_UPLOAD_MATCH_SKEW = timedelta(minutes=5)
 
 
 def _schedule_expired(sched_date: str) -> bool:
@@ -1977,25 +1998,93 @@ def _valid_schedule_date(item: dict[str, Any]) -> str | None:
     return str(sched_date)
 
 
-def _find_prior_upload(garmin: Garmin, item: dict[str, Any]) -> Any:
-    """workoutId of a library workout an earlier, failed upload attempt actually created, or None.
+def _find_prior_upload(garmin: Garmin, item: dict[str, Any], library: list[Any]) -> Any:
+    """workoutId of the library workout an earlier, failed upload attempt for this exact queue
+    item actually created, or None.
 
     upload_workout isn't idempotent: a timeout after Garmin stored the workout would make a
-    plain retry upload a duplicate. get_workouts is newest-first (verified 2026-10-17) — see
-    schemas/workouts.schema.json — so the first page covers any upload made since the
-    attempt; a match is the same name created no earlier than the attempt started.
+    plain retry upload a duplicate. Every upload carries _queue_ref(item id) as its
+    description, so a match is exact — not just the same name. get_workouts is newest-first
+    (verified 2026-10-17, see schemas/workouts.schema.json), so the first page covers any
+    upload since the attempt. library is that page, fetched at most once per run (see
+    _library_page).
     """
-    attempted_at = datetime.fromisoformat(item["upload_attempted_at"]) - _UPLOAD_MATCH_SKEW
-    for w in garmin.get_workouts(0, 50) or []:
-        try:
-            created = datetime.fromisoformat(str(w.get("createdDate"))).replace(tzinfo=UTC)
-        except ValueError:
-            continue
-        if created < attempted_at:
-            break  # newest-first: everything after this is older still
-        if w.get("workoutName") == item.get("name"):
+    ref = _queue_ref(item.get("id"))
+    for w in library:
+        if isinstance(w, dict) and w.get("description") == ref:
             return w.get("workoutId")
     return None
+
+
+def _library_page(garmin: Garmin, cache: dict[str, Any]) -> list[Any]:
+    """get_workouts' newest page, fetched at most once per sync_pending_workouts run."""
+    if "library" not in cache:
+        try:
+            cache["library"] = garmin.get_workouts(0, 50) or []
+        finally:
+            time.sleep(0.3)
+    library: list[Any] = cache["library"]
+    return library
+
+
+def _read_failure(
+    exc: Exception, counts: dict[str, int], what: str, item_id: Any, sched_date: Any
+) -> str:
+    """Outcome of a failed Garmin *read* made on an item's behalf (library or calendar lookup).
+
+    Never grounds for dropping the item — a failed read says nothing about the item itself.
+    "stop" kinds raise the typed error; a transient one (Garmin down) leaves the rest of the
+    queue for the next run; "other" is specific to this item's data, so the queue carries on.
+    """
+    counts["failed"] += 1
+    kind = _garmin_write_error_kind(exc)
+    if kind == "stop":
+        raise _stop_error(exc) from exc
+    log.warning(
+        "pending_workouts: can't check the %s for %s (%s): %s — will retry",
+        what,
+        item_id,
+        sched_date or "unscheduled",
+        exc,
+    )
+    return "stop" if kind == "transient" else "continue"
+
+
+def _write_failure(
+    exc: Exception, counts: dict[str, int], path: Path, item: dict[str, Any], doing: str
+) -> str:
+    """Outcome of a failed upload_workout/schedule_workout (see _garmin_write_error_kind):
+    "stop" kinds raise the typed error, a permanent rejection drops the item, a transient
+    failure leaves it and the rest of the queue for the next run, and "other" keeps just it."""
+    counts["failed"] += 1
+    kind = _garmin_write_error_kind(exc)
+    if kind == "stop":
+        log.warning(
+            "pending_workouts: %s %s stopped by %s — will retry", doing, item.get("id"), exc
+        )
+        raise _stop_error(exc) from exc
+    if kind == "permanent":
+        log.error(
+            "pending_workouts: Garmin rejected %s %r (id %s): %s — dropping it from the queue, "
+            "retrying the same request can't succeed%s",
+            doing,
+            item.get("name"),
+            item.get("id"),
+            exc,
+            "; it is in the Garmin workout library but NOT on the calendar"
+            if item.get("uploaded_workout_id")
+            else "",
+        )
+        _remove_queue_item(path)
+        return "continue"
+    log.warning(
+        "pending_workouts: failed %s %s: %s — keeping it%s",
+        doing,
+        item.get("id"),
+        exc,
+        " and the rest of the queue for the next run" if kind == "transient" else " in queue",
+    )
+    return "stop" if kind == "transient" else "continue"
 
 
 def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
@@ -2009,13 +2098,17 @@ def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[s
     auth/rate-limit stops the run, a permanent 4xx drops the item, a transient failure leaves
     it and the rest of the queue for the next run.
     """
-    _migrate_legacy_queue()
+    if not _migrate_legacy_queue():
+        return
     paths = _queued_item_paths()
     if not paths:
         return
 
     counts = {"uploaded": 0, "scheduled": 0, "failed": 0}
-    month_cache: dict[tuple[int, int], dict[str, Any]] = {}
+    # Per-run caches of Garmin reads (calendar months, the library's newest page) — not the
+    # shared _get_calendar_month cache, which could hold a month from before this run's
+    # scheduling.
+    cache: dict[Any, Any] = {}
     try:
         for path in paths:
             try:
@@ -2032,7 +2125,7 @@ def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[s
                 counts["failed"] += 1
                 _quarantine(path, "is not a JSON object")
                 continue
-            if _process_queue_item(garmin, client, path, item, counts, month_cache) == "stop":
+            if _process_queue_item(garmin, client, path, item, counts, cache) == "stop":
                 break
     finally:
         log.info(
@@ -2049,7 +2142,7 @@ def _process_queue_item(
     path: Path,
     item: dict[str, Any],
     counts: dict[str, int],
-    month_cache: dict[tuple[int, int], dict[str, Any]],
+    cache: dict[Any, Any],
 ) -> str:
     """Process one queue item. Returns "stop" to leave the rest of the queue for the next
     run (a transient Garmin failure), else "continue". Auth/rate-limit failures raise the
@@ -2089,23 +2182,22 @@ def _process_queue_item(
 
     already_uploaded = workout_id is not None
     found_prior_upload = False
-    if not already_uploaded and item.get("upload_attempted_at"):
+    resp: Any = None
+    if not already_uploaded:
         try:
-            workout_id = _find_prior_upload(garmin, item)
+            # Built first: a bug in this item's data fails here, before any attempt is
+            # recorded or any Garmin call made for it.
+            payload = _build_garmin_workout(item)
         except Exception as exc:
-            # Like the calendar read below: a failed library *read* is never grounds for
-            # dropping the item, and uploading blind could duplicate it — wait a run.
             counts["failed"] += 1
-            if _garmin_write_error_kind(exc) == "stop":
-                raise _stop_error(exc) from exc
-            log.warning(
-                "pending_workouts: can't check the library for an earlier upload of %s: %s — "
-                "will retry",
-                item_id,
-                exc,
-            )
-            return "stop"
-        found_prior_upload = workout_id is not None
+            log.warning("pending_workouts: can't build %s: %s — keeping in queue", item_id, exc)
+            return "continue"
+        if item.get("upload_attempted_at"):
+            try:
+                workout_id = _find_prior_upload(garmin, item, _library_page(garmin, cache))
+            except Exception as exc:
+                return _read_failure(exc, counts, "library", item_id, sched_date)
+            found_prior_upload = workout_id is not None
         if found_prior_upload:
             log.info(
                 "pending_workouts: %r was already uploaded by an earlier attempt "
@@ -2113,41 +2205,21 @@ def _process_queue_item(
                 item.get("name"),
                 workout_id,
             )
-
-    if not already_uploaded:
-        resp: Any = None
-        if workout_id is None:
+            try:
+                resp = garmin.get_workout_by_id(workout_id)  # for the workout_detail write
+            except Exception as exc:
+                log.warning("pending_workouts: can't fetch workout %s: %s", workout_id, exc)
+        else:
             try:
                 # Recorded before the call, so if it times out after Garmin stored the
-                # workout, the next run looks for that upload instead of repeating it.
+                # workout, the next run finds that upload instead of repeating it.
                 item = {**item, "upload_attempted_at": datetime.now(UTC).isoformat()}
                 _write_queue_item(path, item)
-                resp = garmin.upload_workout(_build_garmin_workout(item))
+                resp = garmin.upload_workout(payload)
             except _QueueWriteError:
                 raise
             except Exception as exc:
-                counts["failed"] += 1
-                kind = _garmin_write_error_kind(exc)
-                if kind == "stop":
-                    raise _stop_error(exc) from exc  # this item and later ones stay queued
-                if kind == "permanent":
-                    log.error(
-                        "pending_workouts: Garmin rejected %r (id %s): %s — dropping it from "
-                        "the queue, retrying the same workout can't succeed",
-                        item.get("name"),
-                        item_id,
-                        exc,
-                    )
-                    _remove_queue_item(path)
-                    return "continue"
-                log.warning(
-                    "pending_workouts: failed to upload %s: %s — keeping in queue%s",
-                    item_id,
-                    exc,
-                    " with the rest of the queue for the next run" if kind == "transient" else "",
-                )
-                # "other" is specific to this item; a transient failure means Garmin's down.
-                return "stop" if kind == "transient" else "continue"
+                return _write_failure(exc, counts, path, item, "uploading")
             counts["uploaded"] += 1
             log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item_id)
             workout_id = resp.get("workoutId") if isinstance(resp, dict) else None
@@ -2159,7 +2231,7 @@ def _process_queue_item(
         else:
             item = {**item, "uploaded_workout_id": workout_id}
             _write_queue_item(path, item)
-        if resp is not None:
+        if isinstance(resp, dict):
             try:
                 _write_workout_detail(client, resp)
             except Exception as exc:
@@ -2183,21 +2255,9 @@ def _process_queue_item(
     # A schedule may already have been attempted for an upload made on an earlier run.
     if already_uploaded or found_prior_upload:
         try:
-            done = _already_scheduled(garmin, workout_id, sched_date, month_cache)
+            done = _already_scheduled(garmin, workout_id, sched_date, cache)
         except Exception as exc:
-            # A failed calendar *read* says nothing about whether Garmin would accept the
-            # schedule — never grounds for giving up on the item, so no permanent path here.
-            counts["failed"] += 1
-            if _garmin_write_error_kind(exc) == "stop":
-                raise _stop_error(exc) from exc
-            log.warning(
-                "pending_workouts: can't check the calendar before retrying %s for %s: %s — "
-                "will retry",
-                item_id,
-                sched_date,
-                exc,
-            )
-            return "stop"
+            return _read_failure(exc, counts, "calendar", item_id, sched_date)
         if done:
             log.info(
                 "pending_workouts: %r already on the calendar for %s — not scheduling again",
@@ -2211,36 +2271,7 @@ def _process_queue_item(
     try:
         _schedule_uploaded_workout(garmin, workout_id, sched_date, item.get("name"))
     except Exception as exc:
-        counts["failed"] += 1
-        kind = _garmin_write_error_kind(exc)
-        if kind == "stop":
-            log.warning(
-                "pending_workouts: %s uploaded but not yet scheduled for %s: %s — will retry",
-                item_id,
-                sched_date,
-                exc,
-            )
-            raise _stop_error(exc) from exc
-        if kind == "permanent":
-            log.error(
-                "pending_workouts: giving up scheduling %r (workout %s) for %s: %s — it is in "
-                "the Garmin workout library but NOT on the calendar",
-                item.get("name"),
-                workout_id,
-                sched_date,
-                exc,
-            )
-            _remove_queue_item(path)
-            return "continue"
-        log.warning(
-            "pending_workouts: %s uploaded but scheduling for %s failed: %s — will retry",
-            item_id,
-            sched_date,
-            exc,
-        )
-        # A transient failure (Garmin down) stops the queue, same as on upload; "other"
-        # is specific to this item, so the rest of the queue carries on.
-        return "stop" if kind == "transient" else "continue"
+        return _write_failure(exc, counts, path, item, f"scheduling (for {sched_date})")
     counts["scheduled"] += 1
     _remove_queue_item(path)
     return "continue"
