@@ -298,7 +298,7 @@ func validateScheduleDate(s string, now time.Time) error {
 // (a ".item-*.tmp" dotfile, then linked — or renamed — into place; see appendToQueue); sync.py only rewrites or removes files it has
 // read. Neither side ever rewrites a file the other might be writing, so no lock and no
 // field-preservation rule is needed — unlike the single shared workout_queue.json this
-// replaced, which sync.py migrates on its first run (see sync._migrate_legacy_queue).
+// replaced (see sync._check_legacy_queue).
 const queueDirName = "workout_queue"
 
 func queueDir(dataDir string) string {

@@ -2891,19 +2891,6 @@ def test_scheduled_workout_lookahead_matches_go_tool_max():
     assert int(m.group(1)) == sync.SCHEDULED_WORKOUT_LOOKAHEAD_DAYS
 
 
-def test_pending_workouts_migrates_legacy_queue_file(tmp_path, monkeypatch):
-    """The pre-spool single workout_queue.json is drained into the spool dir and removed."""
-    import json as _json
-
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    (tmp_path / "workout_queue.json").write_text(_json.dumps([_queue_item(id="old")]))
-    garmin = MagicMock()
-    garmin.upload_workout.side_effect = GarminConnectConnectionError("API Error 503")
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert not (tmp_path / "workout_queue.json").exists()
-    assert [r["id"] for r in _read_queue(tmp_path)] == ["old"]
-
-
 def test_pending_workouts_ignores_go_tmp_dotfiles(tmp_path, monkeypatch):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     _write_queue(tmp_path, [])
@@ -3129,35 +3116,6 @@ def test_pending_workouts_quarantines_unprocessable_file(tmp_path, monkeypatch, 
     assert _read_queue(tmp_path) == []
 
 
-def test_pending_workouts_legacy_migration_skips_bad_entries(tmp_path, monkeypatch):
-    import json as _json
-
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    (tmp_path / "workout_queue.json").write_text(_json.dumps(["junk", _queue_item(id="9")]))
-    garmin = MagicMock()
-    garmin.upload_workout.return_value = _upload_response()
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.upload_workout.assert_called_once()
-    assert (tmp_path / "workout_queue" / "legacy-0.json.invalid").exists()
-    assert not (tmp_path / "workout_queue.json").exists()
-
-
-def test_pending_workouts_resumes_interrupted_legacy_migration(tmp_path, monkeypatch):
-    """A .migrating file left by a crash is finished; a newer legacy file waits its turn."""
-    import json as _json
-
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    (tmp_path / "workout_queue.json.migrating").write_text(_json.dumps([_queue_item(id="1")]))
-    (tmp_path / "workout_queue.json").write_text(_json.dumps([_queue_item(id="2")]))
-    garmin = MagicMock()
-    garmin.upload_workout.side_effect = GarminConnectConnectionError("API Error 503")
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]
-    assert (tmp_path / "workout_queue.json").exists()
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert [r["id"] for r in _read_queue(tmp_path)] == ["1", "2"]
-
-
 @pytest.mark.parametrize("bad", ["20261017", "2026-W42-6", "2026-10-17T00:00"])
 def test_valid_schedule_date_is_strict(bad):
     assert sync._valid_schedule_date({"id": "x", "schedule_date": bad}) is None
@@ -3194,29 +3152,91 @@ def test_build_garmin_workout_tags_description_with_queue_ref():
     assert w["description"] == "Queued by Waypoint · ref 42-ab"
 
 
-def test_pending_workouts_incomplete_migration_skips_spool(tmp_path, monkeypatch):
-    """Processing the spool mid-migration could upload an item that's then copied again."""
+def test_pending_workouts_removes_empty_legacy_queue_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    (tmp_path / "workout_queue.json").write_text("[]")
+    sync.sync_pending_workouts(MagicMock(), MagicMock(), {})
+    assert not (tmp_path / "workout_queue.json").exists()
+
+
+def test_pending_workouts_leaves_nonempty_legacy_queue_and_runs_spool(tmp_path, monkeypatch):
+    """No automatic migration: a non-empty legacy file is reported and left alone, and
+    never blocks the spool queue."""
     import json as _json
 
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    (tmp_path / "workout_queue.json").write_text(_json.dumps([_queue_item(id="1")]))
-    monkeypatch.setattr(
-        sync,
-        "_write_queue_item",
-        lambda path, item: (_ for _ in ()).throw(sync._QueueWriteError("disk full")),
-    )
+    legacy = _json.dumps([_queue_item(id="old")])
+    (tmp_path / "workout_queue.json").write_text(legacy)
+    _write_queue(tmp_path, [_queue_item(id="new")])
     garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response()
     sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.upload_workout.assert_not_called()
-    assert (tmp_path / "workout_queue.json.migrating").exists()
+    assert (tmp_path / "workout_queue.json").read_text() == legacy
+    garmin.upload_workout.assert_called_once()
+    assert _read_queue(tmp_path) == []
 
 
-def test_pending_workouts_remigration_never_overwrites_progress(tmp_path, monkeypatch):
-    import json as _json
-
+def test_pending_workouts_quarantines_after_repeated_item_failures(tmp_path, monkeypatch):
+    """A deterministic per-item failure (here: unsupported sport) must not retry forever."""
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    progressed = _uploaded_item(id="1")
-    _write_queue(tmp_path, [progressed])
-    (tmp_path / "workout_queue.json.migrating").write_text(_json.dumps([_queue_item(id="1")]))
-    assert sync._migrate_legacy_queue()
-    assert _read_queue(tmp_path)[0]["uploaded_workout_id"] == 555
+    _write_queue(tmp_path, [_queue_item(id="1", sport="walking")])
+    for _ in range(sync._MAX_OTHER_FAILURES):
+        sync.sync_pending_workouts(MagicMock(), MagicMock(), {})
+    assert _read_queue(tmp_path) == []
+    assert (tmp_path / "workout_queue" / "1.json.invalid").exists()
+
+
+@freeze_time("2026-10-17T13:00:00")
+def test_pending_workouts_rate_limit_fetching_recovered_upload_stops(
+    tmp_path, monkeypatch, no_sleep
+):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_attempted_item()])
+    garmin = MagicMock()
+    garmin.get_workouts.return_value = [
+        {"workoutId": 777, "description": "Queued by Waypoint · ref abc123"}
+    ]
+    garmin.get_workout_by_id.side_effect = GarminConnectTooManyRequestsError("429")
+    with pytest.raises(GarminConnectTooManyRequestsError):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.schedule_workout.assert_not_called()
+
+
+def _self_created_item(scheduled_id: int, date_str: str) -> dict:
+    return {
+        "id": scheduled_id,
+        "itemType": "workout",
+        "workoutId": 555,
+        "date": date_str,
+        "title": "Shakeout",
+        "sportTypeKey": "running",
+        "trainingPlanId": 0,
+    }
+
+
+@freeze_time("2026-10-17")
+def test_scheduled_workouts_tombstones_moved_self_created_workout(no_sleep):
+    """A create_workout entry moved from Oct 20 to Oct 22 in Garmin Connect must not linger
+    at Oct 20."""
+    garmin = _sched_garmin([_self_created_item(42, "2026-10-22")])
+    client = MagicMock()
+
+    def query(sql, language):
+        rows = (
+            [{"time": "2026-10-20T00:00:00", "scheduled_id": "42", "sport": "running"}]
+            if "scheduled_id IS NOT NULL" in sql
+            else []
+        )
+        res = MagicMock()
+        res.to_pylist.return_value = rows
+        return res
+
+    client.query.side_effect = query
+    sync.sync_scheduled_workouts(garmin, client, {})
+    lines = [str(p) for p in _written_points(client)]
+    tomb = [ln for ln in lines if "deleted_at=" in ln and "deleted_at=0" not in ln]
+    assert len(tomb) == 1
+    assert "scheduled_id=42" in tomb[0]
+    assert "workout_name" not in tomb[0]
+    fresh = [ln for ln in lines if "deleted_at=0" in ln]
+    assert any("scheduled_id=42" in ln for ln in fresh)  # the Oct 22 row, live

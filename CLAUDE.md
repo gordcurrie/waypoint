@@ -339,7 +339,12 @@ records `upload_attempted_at` *before* the call, and a later run that finds it w
 `description` every upload is tagged with (`"Queued by Waypoint · ref <queue id>"`, `sync._queue_ref`
 — verified to round-trip unchanged), so a timeout after Garmin stored the workout doesn't upload a
 duplicate. A name match alone isn't enough: two queued workouts can share a name. The tag shows
-in Garmin Connect as the workout's description. Nothing is scheduled onto a date that has passed (with a
+in Garmin Connect as the workout's description — unavoidable: the fields that *aren't* shown
+(`workoutSourceId`/`workoutProvider`) are rejected by `upload_workout` with a 500
+`DataIntegrityViolationException` (probed 2026-10-17). Editing that description in the app before a
+timed-out upload's retry runs would defeat the match (a ~30-minute window, only after a timeout).
+Deterministic per-item failures (bad item data) are quarantined to `<id>.json.invalid` after
+`_MAX_OTHER_FAILURES` (5) runs in a row instead of retrying forever. Nothing is scheduled onto a date that has passed (with a
 day's slack for time zones): an expired item uploads unscheduled, or is dropped if already uploaded.
 
 **`upload_workout`/`schedule_workout` errors are all `GarminConnectConnectionError`** (garminconnect
@@ -355,6 +360,11 @@ keeps the item without blocking the rest of the queue. A failed *read* while ret
 (`get_workouts`, `get_scheduled_workouts`) never drops an item, whatever its status. Don't
 classify `GarminConnectConnectionError` on these two calls without checking the status.
 
+**Self-created `scheduled_workout` rows are tombstoned too** — keyed by Garmin's `scheduled_id`, the
+same `deleted_at` mechanism as coach-plan renames (#104). Routine now that `schedule_date` puts
+workouts on the calendar: one moved or deleted in Garmin Connect would otherwise linger at its old
+date in `get_scheduled_workouts`.
+
 **Workout queue is a spool directory, one file per workout** — `<data-dir>/workout_queue/<id>.json`,
 shared by two processes. The Go MCP server only ever *creates* files (`appendToQueue`: write a
 `.item-*.tmp` dotfile, then `os.Link` it into place as `<id>.json` — fails rather than overwrites —
@@ -364,7 +374,9 @@ a file the other might be writing, so there's no lock. Keep it that way: a new G
 edits or cancels a queued workout would break that invariant — it needs a design change, not a
 read-modify-write of someone else's file. Replaced a single shared `workout_queue.json` (#111's
 review found it needed a cross-language flock plus field-preservation rules on every writer);
-`sync._migrate_legacy_queue` drains an old one into the spool on first run. **Deploy the MCP
+there is deliberately no automatic migration from it (making one safe against an old MCP server
+writing mid-migration took more machinery than it was worth): `sync._check_legacy_queue` deletes an
+empty one and logs an ERROR every run for a non-empty one, to be moved into the spool by hand. **Deploy the MCP
 server and sync sidecar together** (`make deploy` does): a new MCP server with an old sidecar
 writes to a spool dir nothing reads. Queue ids are `<UnixNano>-<8 hex>` — the random suffix keeps
 concurrent `create_workout` calls unique where the clock is only µs-resolution (macOS), and
