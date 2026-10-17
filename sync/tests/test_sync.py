@@ -3023,92 +3023,6 @@ def test_pending_workouts_records_upload_before_detail_write(tmp_path, monkeypat
     assert seen["queue"][0]["uploaded_workout_id"] == 555
 
 
-@freeze_time("2026-10-17T12:00:00")
-def test_pending_workouts_records_upload_attempt_before_uploading(tmp_path, monkeypatch):
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_queue_item()])
-    seen = {}
-
-    def upload(_workout):
-        seen["queue"] = _read_queue(tmp_path)
-        raise GarminConnectConnectionError("API Error 503")
-
-    garmin = MagicMock()
-    garmin.upload_workout.side_effect = upload
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert seen["queue"][0]["upload_attempted_at"].startswith("2026-10-17T12:00:00")
-
-
-def _attempted_item(**kw) -> dict:
-    item = _scheduled_item(**kw)
-    item["upload_attempted_at"] = "2026-10-17T12:00:00+00:00"
-    return item
-
-
-@freeze_time("2026-10-17T13:00:00")
-def test_pending_workouts_adopts_upload_from_timed_out_attempt(tmp_path, monkeypatch, no_sleep):
-    """An upload that timed out after Garmin stored it must not be uploaded again."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_attempted_item()])
-    garmin = MagicMock()
-    garmin.get_workouts.return_value = [
-        # Same name, different queue item: must not be adopted.
-        {
-            "workoutId": 1,
-            "workoutName": "Tempo Run",
-            "description": "Queued by Waypoint · ref other",
-        },
-        {
-            "workoutId": 777,
-            "workoutName": "Tempo Run",
-            "description": "Queued by Waypoint · ref abc123",
-        },
-    ]
-    garmin.get_workout_by_id.return_value = _upload_response(workout_id=777)
-    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
-    garmin.schedule_workout.return_value = {"workoutScheduleId": 9}
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.upload_workout.assert_not_called()
-    garmin.schedule_workout.assert_called_once_with(777, "2026-10-17")
-    assert _read_queue(tmp_path) == []
-
-
-@freeze_time("2026-10-17T13:00:00")
-def test_pending_workouts_reuploads_when_no_prior_upload_found(tmp_path, monkeypatch, no_sleep):
-    """A same-named workout without this item's ref tag is someone else's, not ours."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_attempted_item()])
-    garmin = MagicMock()
-    garmin.get_workouts.return_value = [
-        {"workoutId": 1, "workoutName": "Tempo Run", "description": None},
-    ]
-    garmin.upload_workout.return_value = _upload_response(workout_id=555)
-    garmin.schedule_workout.return_value = {"workoutScheduleId": 9}
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.upload_workout.assert_called_once()
-    garmin.schedule_workout.assert_called_once_with(555, "2026-10-17")
-
-
-@freeze_time("2026-10-17T13:00:00")
-@pytest.mark.parametrize(
-    ("message", "rest_of_queue_runs"),
-    [("API Error 503", False), ("API call client error (404): API Error 404", True)],
-)
-def test_pending_workouts_library_read_failure_keeps_item(
-    tmp_path, monkeypatch, no_sleep, message, rest_of_queue_runs
-):
-    """A failed library read never drops or blindly re-uploads the item; only a transient
-    one (Garmin down) holds up the rest of the queue."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_attempted_item(id="1"), _queue_item(id="2")])
-    garmin = MagicMock()
-    garmin.get_workouts.side_effect = GarminConnectConnectionError(message)
-    garmin.upload_workout.return_value = _upload_response()
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert garmin.upload_workout.call_count == (1 if rest_of_queue_runs else 0)
-    assert _read_queue(tmp_path)[0]["id"] == "1"
-
-
 @freeze_time("2026-10-17")
 def test_pending_workouts_transient_schedule_failure_stops_queue(tmp_path, monkeypatch):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
@@ -3139,37 +3053,6 @@ def test_valid_schedule_date_is_strict(bad):
     assert sync._valid_schedule_date({"id": "x", "schedule_date": bad}) is None
 
 
-@freeze_time("2026-10-17T13:00:00")
-def test_pending_workouts_fetches_library_once_per_run(tmp_path, monkeypatch, no_sleep):
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_attempted_item(id="1"), _attempted_item(id="2")])
-    garmin = MagicMock()
-    garmin.get_workouts.return_value = []
-    garmin.upload_workout.return_value = _upload_response()
-    garmin.schedule_workout.return_value = {"workoutScheduleId": 9}
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.get_workouts.assert_called_once()
-
-
-def test_pending_workouts_build_failure_records_no_attempt(tmp_path, monkeypatch):
-    """A bad item fails before an attempt is recorded or Garmin is called."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_queue_item(id="1", sport="walking"), _queue_item(id="2")])
-    garmin = MagicMock()
-    garmin.upload_workout.return_value = _upload_response()
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    remaining = _read_queue(tmp_path)
-    assert [r["id"] for r in remaining] == ["1"]
-    assert "upload_attempted_at" not in remaining[0]
-    garmin.get_workouts.assert_not_called()
-    garmin.upload_workout.assert_called_once()  # only "2"
-
-
-def test_build_garmin_workout_tags_description_with_queue_ref():
-    w = sync._build_garmin_workout(_queue_item(id="42-ab"))
-    assert w["description"] == "Queued by Waypoint · ref 42-ab"
-
-
 def test_pending_workouts_removes_empty_legacy_queue_file(tmp_path, monkeypatch):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     (tmp_path / "workout_queue.json").write_text("[]")
@@ -3192,32 +3075,6 @@ def test_pending_workouts_leaves_nonempty_legacy_queue_and_runs_spool(tmp_path, 
     assert (tmp_path / "workout_queue.json").read_text() == legacy
     garmin.upload_workout.assert_called_once()
     assert _read_queue(tmp_path) == []
-
-
-def test_pending_workouts_quarantines_after_repeated_item_failures(tmp_path, monkeypatch):
-    """A deterministic per-item failure (here: unsupported sport) must not retry forever."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_queue_item(id="1", sport="walking")])
-    for _ in range(sync._MAX_OTHER_FAILURES):
-        sync.sync_pending_workouts(MagicMock(), MagicMock(), {})
-    assert _read_queue(tmp_path) == []
-    assert (tmp_path / "workout_queue" / "1.json.invalid").exists()
-
-
-@freeze_time("2026-10-17T13:00:00")
-def test_pending_workouts_rate_limit_fetching_recovered_upload_stops(
-    tmp_path, monkeypatch, no_sleep
-):
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_attempted_item()])
-    garmin = MagicMock()
-    garmin.get_workouts.return_value = [
-        {"workoutId": 777, "description": "Queued by Waypoint · ref abc123"}
-    ]
-    garmin.get_workout_by_id.side_effect = GarminConnectTooManyRequestsError("429")
-    with pytest.raises(GarminConnectTooManyRequestsError):
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.schedule_workout.assert_not_called()
 
 
 def _self_created_item(scheduled_id: int, date_str: str) -> dict:
@@ -3265,50 +3122,6 @@ def test_scheduled_workouts_self_created_without_sport_not_falsely_tombstoned(no
     assert not [ln for ln in lines if "deleted_at=" in ln and "deleted_at=0" not in ln]
 
 
-def test_pending_workouts_read_failure_never_counts_against_item(tmp_path, monkeypatch, no_sleep):
-    """A malformed Garmin response on a read must not quarantine a valid uploaded item."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_uploaded_item(date_str="2099-01-01")])
-    garmin = MagicMock()
-    garmin.get_scheduled_workouts.return_value = "not a dict"
-    for _ in range(sync._MAX_OTHER_FAILURES + 1):
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-    remaining = _read_queue(tmp_path)
-    assert len(remaining) == 1
-    assert remaining[0].get("other_failures", 0) == 0  # reads never count as item failures
-
-
-def test_pending_workouts_persistent_5xx_stops_blocking_then_quarantines(
-    tmp_path, monkeypatch, no_sleep
-):
-    """A body Garmin always 500s on must not hold up the queue forever, and is quarantined
-    (kept, not deleted) once it has been failing for _FAILURE_GIVE_UP."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_queue_item(id="1"), _queue_item(id="2")])
-    garmin = MagicMock()
-
-    def upload(workout):
-        if workout["description"].endswith("ref 1"):
-            raise GarminConnectConnectionError("API Error 500 - DataIntegrityViolationException")
-        return _upload_response()
-
-    garmin.upload_workout.side_effect = upload
-    garmin.get_workouts.return_value = []  # the failed uploads never landed
-    with freeze_time("2026-10-17T00:00:00") as frozen:
-        for _ in range(sync._BLOCKING_TRANSIENT_FAILURES):
-            sync.sync_pending_workouts(garmin, MagicMock(), {})
-            frozen.tick(timedelta(minutes=30))
-        # Blocked for exactly _BLOCKING_TRANSIENT_FAILURES runs...
-        assert [r["id"] for r in _read_queue(tmp_path)] == ["1", "2"]
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-        # ...then it stops holding up the rest.
-        assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]
-        frozen.tick(sync._FAILURE_GIVE_UP)
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert _read_queue(tmp_path) == []
-    assert (tmp_path / "workout_queue" / "1.json.invalid").exists()
-
-
 def test_pending_workouts_outage_does_not_quarantine_early(tmp_path, monkeypatch, no_sleep):
     """Many runs inside _FAILURE_GIVE_UP (a short SYNC_SCHEDULE during an outage) must not
     quarantine anything — the give-up is time-based, not run-based."""
@@ -3323,21 +3136,6 @@ def test_pending_workouts_outage_does_not_quarantine_early(tmp_path, monkeypatch
     assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]
 
 
-def test_pending_workouts_progress_resets_failure_count(tmp_path, monkeypatch, no_sleep):
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    item = _scheduled_item(date_str="2099-01-01")
-    item["other_failures"] = 2
-    item["first_failure_at"] = "2026-01-01T00:00:00+00:00"
-    _write_queue(tmp_path, [item])
-    garmin = MagicMock()
-    garmin.upload_workout.return_value = _upload_response(workout_id=555)
-    garmin.schedule_workout.side_effect = ValueError("bad")
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    after = _read_queue(tmp_path)[0]
-    assert after["other_failures"] == 1  # counted afresh after the upload
-    assert after["first_failure_at"] > "2026-10"  # and a new streak started
-
-
 @freeze_time("2026-10-17")
 def test_pending_workouts_permanent_4xx_quarantines_not_deletes(tmp_path, monkeypatch):
     """A Garmin-wide 4xx (moved endpoint) must not delete every queued workout."""
@@ -3349,20 +3147,6 @@ def test_pending_workouts_permanent_4xx_quarantines_not_deletes(tmp_path, monkey
     assert _read_queue(tmp_path) == []
     assert (tmp_path / "workout_queue" / "1.json.invalid").exists()
     assert (tmp_path / "workout_queue" / "2.json.invalid").exists()
-
-
-def test_pending_workouts_quarantines_item_without_id(tmp_path, monkeypatch):
-    import json as _json
-
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [])
-    item = _queue_item()
-    del item["id"]
-    (tmp_path / "workout_queue" / "x.json").write_text(_json.dumps(item))
-    garmin = MagicMock()
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.upload_workout.assert_not_called()
-    assert (tmp_path / "workout_queue" / "x.json.invalid").exists()
 
 
 @freeze_time("2026-10-20")
@@ -3381,76 +3165,9 @@ def test_pending_workouts_expired_but_scheduled_item_is_not_reported_missing(
     garmin.schedule_workout.assert_not_called()
 
 
-@freeze_time("2026-10-17T13:00:00")
-def test_pending_workouts_non_list_library_is_a_read_failure(tmp_path, monkeypatch, no_sleep):
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_attempted_item()])
-    garmin = MagicMock()
-    garmin.get_workouts.return_value = {"unexpected": "shape"}
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.upload_workout.assert_not_called()
-    assert len(_read_queue(tmp_path)) == 1
-
-
-def test_pending_workouts_read_failure_streak_eventually_quarantines(
-    tmp_path, monkeypatch, no_sleep
-):
-    """A lookup that fails forever ends in quarantine, not a Garmin read every run forever."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    item = _attempted_item()
-    item["schedule_date"] = "2099-01-01"
-    _write_queue(tmp_path, [item])
-    garmin = MagicMock()
-    garmin.get_workouts.return_value = {"unexpected": "shape"}
-    with freeze_time("2026-10-17T13:00:00") as frozen:
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-        assert _read_queue(tmp_path)[0].get("other_failures", 0) == 0
-        frozen.tick(sync._FAILURE_GIVE_UP)
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert _read_queue(tmp_path) == []
-    assert (tmp_path / "workout_queue" / "abc123.json.invalid").exists()
-
-
-@freeze_time("2026-10-17T13:00:00")
-def test_pending_workouts_transient_read_failure_stops_blocking(tmp_path, monkeypatch, no_sleep):
-    """A library endpoint that keeps failing must not hold the queue for up to 7 days."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_attempted_item(id="1"), _queue_item(id="2")])
-    garmin = MagicMock()
-    garmin.get_workouts.side_effect = GarminConnectConnectionError("API Error 503")
-    garmin.upload_workout.return_value = _upload_response()
-    for _ in range(sync._BLOCKING_TRANSIENT_FAILURES):
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert [r["id"] for r in _read_queue(tmp_path)] == ["1", "2"]
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]  # "2" got through
-
-
-@pytest.mark.parametrize(
-    "fields",
-    [
-        {"first_failure_at": "2026-10-17T00:00:00"},  # naive timestamp
-        {"first_failure_at": 12345},
-        {"other_failures": "lots"},
-        {"transient_failures": None},
-    ],
-)
-def test_pending_workouts_hand_edited_failure_fields_dont_crash(tmp_path, monkeypatch, fields):
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    item = {**_queue_item(id="1"), **fields}
-    _write_queue(tmp_path, [item, _queue_item(id="2")])
-    garmin = MagicMock()
-    garmin.upload_workout.side_effect = [
-        GarminConnectConnectionError("API Error 503"),
-        _upload_response(),
-    ]
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert _read_queue(tmp_path)[0]["id"] == "1"
-
-
 def test_query_active_keys_log_level_depends_on_column(caplog):
     client = MagicMock()
-    client.query.side_effect = Exception("boom")
+    client.query.side_effect = Exception("Schema error: No field named scheduled_id")
     with caplog.at_level("INFO"):
         sync._query_active_keys(client, date(2026, 10, 1), date(2026, 11, 1), ("workout_name",))
         sync._query_active_keys(
@@ -3462,36 +3179,6 @@ def test_query_active_keys_log_level_depends_on_column(caplog):
         )
     levels = {r.getMessage().split()[1]: r.levelname for r in caplog.records}
     assert levels == {"workout_name": "WARNING", "scheduled_id": "INFO"}
-
-
-@freeze_time("2026-10-20T13:00:00")
-def test_pending_workouts_library_search_pages_back_to_attempt(tmp_path, monkeypatch, no_sleep):
-    """An earlier upload pushed off the newest page by newer workouts is still found."""
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_attempted_item()])  # attempted 2026-10-17T12:00
-    newer = [
-        {"workoutId": 1000 + i, "createdDate": "2026-10-19T00:00:00.0", "description": None}
-        for i in range(sync._LIBRARY_PAGE)
-    ]
-    ours = {
-        "workoutId": 777,
-        "createdDate": "2026-10-17T12:00:03.0",
-        "description": "Queued by Waypoint · ref abc123",
-    }
-    older = {"workoutId": 1, "createdDate": "2026-01-01T00:00:00.0", "description": None}
-    pages = {0: newer, sync._LIBRARY_PAGE: [ours, older]}
-    garmin = MagicMock()
-    garmin.get_workouts.side_effect = lambda start, limit: pages.get(start, [])
-    garmin.get_workout_by_id.return_value = _upload_response(workout_id=777)
-    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
-    garmin.schedule_workout.return_value = {"workoutScheduleId": 9}
-    item = _read_queue(tmp_path)[0]
-    item["schedule_date"] = "2026-10-21"
-    _write_queue(tmp_path, [item])
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    garmin.upload_workout.assert_not_called()
-    garmin.schedule_workout.assert_called_once_with(777, "2026-10-21")
-    assert garmin.get_workouts.call_count == 2  # stopped once past the attempt
 
 
 @freeze_time("2026-10-17")
@@ -3510,32 +3197,6 @@ def test_pending_workouts_creates_spool_dir(tmp_path, monkeypatch):
     assert (tmp_path / "workout_queue").is_dir()
 
 
-@freeze_time("2026-10-17")
-def test_quarantined_uploaded_item_says_it_needs_scheduling(tmp_path, monkeypatch, caplog):
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    item = _uploaded_item(date_str="2099-01-01")
-    item["other_failures"] = sync._MAX_OTHER_FAILURES - 1
-    _write_queue(tmp_path, [item])
-    garmin = MagicMock()
-    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
-    garmin.schedule_workout.side_effect = ValueError("bad id")
-    sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert (tmp_path / "workout_queue" / "abc123.json.invalid").exists()
-    assert "workout 555 is in the Garmin workout library but NOT on the calendar" in caplog.text
-
-
-@pytest.mark.parametrize(
-    ("created", "want"),
-    [
-        ("2026-10-17T15:47:43.0", datetime(2026, 10, 17, 15, 47, 43, tzinfo=UTC)),
-        ("2026-10-17T10:47:43-05:00", datetime(2026, 10, 17, 15, 47, 43, tzinfo=UTC)),
-        ("garbage", None),
-    ],
-)
-def test_created_at_converts_offsets(created, want):
-    assert sync._created_at({"createdDate": created}) == want
-
-
 def test_non_json_2xx_response_is_transient():
     """A maintenance page served as 200 makes resp.json() raise requests' JSONDecodeError,
     which is an OSError — transient, not an item-specific failure that would quarantine
@@ -3548,19 +3209,6 @@ def test_non_json_2xx_response_is_transient():
     with pytest.raises(Exception) as excinfo:
         r.json()
     assert sync._garmin_write_error_kind(excinfo.value) == "transient"
-
-
-def test_pending_workouts_keeps_first_upload_attempt_time(tmp_path, monkeypatch, no_sleep):
-    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
-    _write_queue(tmp_path, [_queue_item()])
-    garmin = MagicMock()
-    garmin.get_workouts.return_value = []
-    garmin.upload_workout.side_effect = GarminConnectConnectionError("API Error 503")
-    with freeze_time("2026-10-17T12:00:00") as frozen:
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-        frozen.tick(timedelta(days=2))
-        sync.sync_pending_workouts(garmin, MagicMock(), {})
-    assert _read_queue(tmp_path)[0]["upload_attempted_at"].startswith("2026-10-17T12:00")
 
 
 def test_quarantine_rename_failure_stops_processing(tmp_path, monkeypatch):
@@ -3581,14 +3229,6 @@ def test_quarantine_rename_failure_stops_processing(tmp_path, monkeypatch):
     garmin.upload_workout.assert_called_once()
 
 
-def test_library_search_stops_on_page_without_dates(no_sleep):
-    garmin = MagicMock()
-    garmin.get_workouts.return_value = [{"workoutId": i} for i in range(sync._LIBRARY_PAGE)]
-    since = datetime(2026, 10, 1, tzinfo=UTC)
-    assert len(sync._library_since(garmin, {}, since)) == sync._LIBRARY_PAGE
-    garmin.get_workouts.assert_called_once()
-
-
 def test_invalid_schedule_date_logged_once(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     _write_queue(tmp_path, [_scheduled_item(date_str="2026/10/20")])
@@ -3598,3 +3238,95 @@ def test_invalid_schedule_date_logged_once(tmp_path, monkeypatch, caplog):
     sync.sync_pending_workouts(garmin, MagicMock(), {})
     assert caplog.text.count("invalid schedule_date") == 1
     assert _read_queue(tmp_path)[0]["invalid_schedule_date"] == "2026/10/20"
+
+
+def test_pending_workouts_persistent_5xx_stops_blocking_then_quarantines(
+    tmp_path, monkeypatch, no_sleep
+):
+    """A body Garmin always 500s on holds up the queue for _BLOCKING_ATTEMPTS runs only,
+    and is quarantined (kept, not deleted) once it has been failing for _FAILURE_GIVE_UP."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item(id="1", name="Bad"), _queue_item(id="2")])
+    garmin = MagicMock()
+
+    def upload(workout):
+        if workout["workoutName"] == "Bad":
+            raise GarminConnectConnectionError("API Error 500 - DataIntegrityViolationException")
+        return _upload_response()
+
+    garmin.upload_workout.side_effect = upload
+    with freeze_time("2026-10-17T00:00:00") as frozen:
+        for _ in range(sync._BLOCKING_ATTEMPTS):
+            sync.sync_pending_workouts(garmin, MagicMock(), {})
+            frozen.tick(timedelta(minutes=30))
+        assert [r["id"] for r in _read_queue(tmp_path)] == ["1", "2"]
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+        assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]  # "2" got through
+        frozen.tick(sync._FAILURE_GIVE_UP)
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path) == []
+    assert (tmp_path / "workout_queue" / "1.json.invalid").exists()
+
+
+def test_pending_workouts_item_specific_failure_never_blocks(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_queue_item(id="1", sport="walking"), _queue_item(id="2")])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response()
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    remaining = _read_queue(tmp_path)
+    assert [r["id"] for r in remaining] == ["1"]
+    assert remaining[0]["attempts"] == 1
+
+
+@freeze_time("2026-10-17")
+def test_quarantined_uploaded_item_says_it_needs_scheduling(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_scheduled_item(date_str="2099-01-01")])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response(workout_id=555)
+    garmin.schedule_workout.side_effect = GarminConnectConnectionError("API Error 400")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert (tmp_path / "workout_queue" / "abc123.json.invalid").exists()
+    assert "workout 555 is in the Garmin workout library but NOT on the calendar" in caplog.text
+
+
+@freeze_time("2026-10-17")
+def test_pending_workouts_upload_resets_failure_streak(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    item = _scheduled_item(date_str="2099-01-01")
+    item.update(attempts=7, first_failure_at="2026-10-12T00:00:00+00:00")
+    _write_queue(tmp_path, [item])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response(workout_id=555)
+    garmin.schedule_workout.side_effect = GarminConnectConnectionError("API Error 503")
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    after = _read_queue(tmp_path)[0]
+    assert after["attempts"] == 1
+    assert after["first_failure_at"].startswith("2026-10-17")
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"first_failure_at": "2026-10-17T00:00:00"},  # naive
+        {"first_failure_at": 12345},
+        {"attempts": "lots"},
+        {"attempts": None},
+    ],
+)
+def test_pending_workouts_hand_edited_failure_fields_dont_crash(tmp_path, monkeypatch, fields):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [{**_queue_item(id="1"), **fields}, _queue_item(id="2")])
+    garmin = MagicMock()
+    garmin.upload_workout.side_effect = [
+        GarminConnectConnectionError("API Error 503"),
+        _upload_response(),
+    ]
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert _read_queue(tmp_path)[0]["id"] == "1"
+
+
+def test_build_garmin_workout_description_is_null():
+    """No dedupe tag in the user-visible description (see sync_pending_workouts)."""
+    assert sync._build_garmin_workout(_queue_item())["description"] is None

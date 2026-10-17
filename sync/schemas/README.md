@@ -39,8 +39,6 @@ edge cases used are noted in each schema's top-level `description`. In summary:
 | `get_adaptive_training_plan_by_id` | `adaptive_training_plan.schema.json` | one active FBT_ADAPTIVE plan; rest/base/tempo/long-run task mix |
 | `get_training_plans` | `training_plans.schema.json` | one active plan |
 | `get_activity_exercise_sets` | `activity_exercise_sets.schema.json` | one real strength_training activity, 43 sets |
-| `get_workouts` | `workouts.schema.json` | 7-workout library, newest first |
-| `get_workout_by_id` | `workout.schema.json` | one probe workout (deleted after) |
 | `schedule_workout` | `workout_schedule.schema.json` | two live calls scheduling one real running workout (write endpoint — see below) |
 
 `vo2max.schema.json` is a shared `$defs` file, not tied to one method — `get_max_metrics`'s
@@ -60,8 +58,7 @@ a raw `connectapi()` capture if this endpoint needs re-deriving.
 (#97) — same `connectapi(...)`-direct, not-in-`METHOD_SCHEMA` situation as `fitness_age`,
 for the same reason (the path includes a per-task UUID, not a fixed method name).
 
-`workout_upload.schema.json` documents the outbound `upload_workout` request body (its
-`description` carries `sync._queue_ref`'s tag — see the schema)
+`workout_upload.schema.json` documents the outbound `upload_workout` request body
 built by `sync.py`'s `_build_garmin_workout`/`_build_garmin_step`/`_build_garmin_repeat_group`
 — not derived from a live capture like the others (`upload_workout` is a write endpoint,
 out of scope for the read-method sweep above). It's the structural record for what used

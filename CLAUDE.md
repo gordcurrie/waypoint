@@ -321,82 +321,67 @@ response — no separate `get_workout_by_id` round-trip needed. Each `Executable
 carries `weightValue`/`weightUnit` fields.
 
 **`schedule_workout` — putting an uploaded workout on the calendar** (confirmed 2026-10-17 via a
-live call: scheduled a real uploaded workout, read it back via `get_scheduled_workout_by_id`,
-`calendarDate` matched) — `upload_workout` alone only adds to the workout library; nothing reaches
-the watch until it's on the calendar. `garmin.schedule_workout(workoutId, "YYYY-MM-DD")` POSTs
-`{"date": ...}` to `workout-service/schedule/<workoutId>` and returns `workoutScheduleId` (the id
-`unschedule_workout` takes), `calendarDate`, and a `workout` object shaped like `upload_workout`'s
-response (schema: `sync/schemas/workout_schedule.schema.json`, drift-checked). `create_workout`'s
-optional `schedule_date` uses this. Once a scheduled item uploads, `sync_pending_workouts` records
-`uploaded_workout_id` on its queue entry *before* calling `schedule_workout`, so a failed schedule
-is retried next run without re-uploading (a re-upload would be a duplicate workout). A retry first
-checks the calendar month for an item with that `workoutId` + `date` (shape verified live
-2026-10-17: `itemType: "workout"`, `id` == `workoutScheduleId`) so a schedule Garmin applied but
-whose response was lost isn't added twice. `upload_workout` gets the same protection: the item
-records `upload_attempted_at` *before* the call, and a later run that finds it without
-`uploaded_workout_id` first looks for that upload in `get_workouts` (newest-first by `createdDate` —
-verified 2026-10-17; `orderBy`/`orderSeq` params are ignored), paging back to before the *first*
-attempt (`_library_since`, at most 1000 workouts), matching the
-`description` every upload is tagged with (`"Queued by Waypoint · ref <queue id>"`, `sync._queue_ref`
-— verified to round-trip unchanged), so a timeout after Garmin stored the workout doesn't upload a
-duplicate. A name match alone isn't enough: two queued workouts can share a name. The tag shows
-in Garmin Connect as the workout's description — unavoidable: the fields that *aren't* shown
-(`workoutSourceId`/`workoutProvider`) are rejected by `upload_workout` with a 500
-`DataIntegrityViolationException` (probed 2026-10-17). Editing that description in the app before a
-timed-out upload's retry runs would defeat the match (a ~30-minute window, only after a timeout).
-Per-item failure limits (fields on the queue item, reset when it uploads). Bad item data
-(`other_failures`) is quarantined to `<id>.json.invalid` after 5 runs in a row. A transient
-5xx/403/network failure (`transient_failures`, on a write or a read made for the item) holds up the
-rest of the queue for its first 3 runs (Garmin is probably down), then stops blocking (probably this
-item — e.g. a body Garmin always 500s on). Any item still failing 7 days after its failure streak
-began (`first_failure_at` — time-based, so an outage can't quarantine everything early however short
-`SYNC_SCHEDULE` is) is quarantined; failed *reads* extend that streak but never count as
-`other_failures`. A permanent 4xx is quarantined too, never deleted — a Garmin-wide 4xx (moved endpoint)
-would otherwise wipe the whole queue in one run. Quarantine never deletes a workout definition. Nothing is scheduled onto a date that has passed (with a
-day's slack for time zones): an expired item uploads unscheduled, or is dropped if already uploaded.
+live call, read back via `get_scheduled_workout_by_id`: `calendarDate` matched) — `upload_workout`
+alone only adds to the workout library; nothing reaches the watch until it's on the calendar.
+`garmin.schedule_workout(workoutId, "YYYY-MM-DD")` POSTs `{"date": ...}` to
+`workout-service/schedule/<workoutId>` and returns `workoutScheduleId` (the id `unschedule_workout`
+takes), `calendarDate`, and a `workout` object shaped like `upload_workout`'s response (schema:
+`sync/schemas/workout_schedule.schema.json`, drift-checked). `create_workout`'s optional
+`schedule_date` uses this. Once a scheduled item uploads, `sync_pending_workouts` records
+`uploaded_workout_id` on its queue file *before* calling `schedule_workout`, so a failed schedule is
+retried without re-uploading. A schedule retry first checks the calendar month for an item with that
+`workoutId` + `date` (shape verified live 2026-10-17: `itemType: "workout"`, `id` ==
+`workoutScheduleId`), so a schedule Garmin applied but whose response was lost isn't added twice.
+Nothing is scheduled onto a date that has passed (with a day's slack for time zones).
+
+An `upload_workout` whose response is lost *after* Garmin stored the workout is retried as a fresh
+upload — deliberately not detected. #111 built detection (tagging each upload's visible
+`description`, paging back through `get_workouts`) and then removed it: rare, worst case one extra
+library workout, and it was most of the queue code's complexity.
+
+**Queue failure handling** (`sync._record_failure`, two fields on the item, cleared when it uploads):
+a transient failure (5xx/403/network) holds up the rest of the queue for its first 3 `attempts`
+(Garmin is probably down), then stops blocking (probably this item — e.g. a body Garmin always 500s
+on). An item still failing 7 days after `first_failure_at` is quarantined to `<id>.json.invalid` —
+time-based, so an outage can't quarantine everything early however short `SYNC_SCHEDULE` is. A
+permanent 4xx (400/404/410/422) is quarantined at once. Quarantine never deletes a workout
+definition: a Garmin-wide 4xx (moved endpoint) would otherwise wipe the queue in one run.
 
 **`upload_workout`/`schedule_workout` errors are all `GarminConnectConnectionError`** (garminconnect
 0.3.6) — both call `garmin.client.post` directly, bypassing the `_handle_api_errors` decorator the
 read methods get, so 401/429/404/5xx all arrive as `GarminConnectConnectionError("API Error NNN - ...")`
-with no typed rate-limit/auth exception. `sync._garmin_write_error_kind` parses the status back out:
-401/429 stop the run (re-raised as the typed `GarminConnectAuthenticationError` so the main loop
-re-logs-in on a 401 — a 429 just retries at the normal `SYNC_SCHEDULE` interval, there's no extra
-backoff); 400/404/410/422 quarantine the item
-(ERROR log — retrying the same request can't succeed); every other 4xx (403 is Cloudflare's bot
-wall, 408/409 can clear), 5xx and network errors (`requests.Timeout` etc. surface raw — all
-`OSError`s) leave the item *and the rest of the queue* for the next run; a non-Garmin exception
-keeps the item without blocking the rest of the queue. A failed *read* while retrying
-(`get_workouts`, `get_scheduled_workouts`) never drops an item, whatever its status. Don't
-classify `GarminConnectConnectionError` on these two calls without checking the status.
+with no typed rate-limit/auth exception, and network errors surface raw (`requests.Timeout` etc. —
+all `OSError`s, as is requests' `JSONDecodeError` for a non-JSON 200). `sync._garmin_write_error_kind`
+parses the status back out: 401/429 stop the run (re-raised as the typed
+`GarminConnectAuthenticationError` so the main loop re-logs-in on a 401 — a 429 just retries at the
+normal `SYNC_SCHEDULE` interval, there's no extra backoff); 400/404/410/422 are permanent; every other
+4xx (403 is Cloudflare's bot wall, 408/409 can clear), 5xx and `OSError`s are transient; anything
+else (not a Garmin error — bad item data, a bug) is item-specific and never blocks the rest of the
+queue. Don't classify `GarminConnectConnectionError` on these two calls without checking the status.
 
 **Self-created `scheduled_workout` rows are tombstoned too** — keyed by Garmin's `scheduled_id`, the
-same `deleted_at` mechanism as coach-plan renames (#104). Routine now that `schedule_date` puts
-workouts on the calendar: one moved or deleted in Garmin Connect would otherwise linger at its old
-date in `get_scheduled_workouts`.
+same `deleted_at` mechanism as coach-plan renames (#104), from tomorrow onwards. Routine now that
+`schedule_date` puts workouts on the calendar: one moved or deleted in Garmin Connect would
+otherwise linger at its old date in `get_scheduled_workouts`. *Today* isn't covered yet: what a
+completed self-created calendar entry looks like is unverified, and a false tombstone would hide a
+real same-day workout.
 
 **Workout queue is a spool directory, one file per workout** — `<data-dir>/workout_queue/<id>.json`,
-shared by two processes. The Go MCP server only ever *creates* files (`appendToQueue`: write a
-`.item-*.tmp` dotfile, then `os.Link` it into place as `<id>.json` — fails rather than overwrites —
-falling back to rename where hard links aren't supported); the sync sidecar only rewrites (adding
-`uploaded_workout_id`) or removes files it has read, and ignores dotfiles. Neither side ever writes
-a file the other might be writing, so there's no lock. Keep it that way: a new Go feature that
-edits or cancels a queued workout would break that invariant — it needs a design change, not a
-read-modify-write of someone else's file. Replaced a single shared `workout_queue.json` (#111's
-review found it needed a cross-language flock plus field-preservation rules on every writer);
-there is deliberately no automatic migration from it (making one safe against an old MCP server
-writing mid-migration took more machinery than it was worth): `sync._check_legacy_queue` deletes an
-empty one and logs an ERROR every run for a non-empty one, to be moved into the spool by hand —
-and `scripts/deploy.sh` guards the one deploy that crosses over: while the running deployment is
-pre-spool (no `/data/workout_queue/` dir — the spool-aware sidecar creates it every run), it stops
-the old MCP server (so nothing can be queued in the legacy file mid-deploy, even if the file doesn't
-exist yet; restarted on any early exit) and refuses to deploy while that file still holds workouts.
-If the state can't be read through the sync container it refuses too (`SKIP_LEGACY_QUEUE_CHECK=1`
-overrides). Once a spool-aware sidecar has run, deploys skip all of this. Queue files are fsynced
-(file and directory) before being linked/renamed into place. **Deploy the MCP
-server and sync sidecar together** (`make deploy` does): a new MCP server with an old sidecar
-writes to a spool dir nothing reads. Queue ids are `<UnixNano>-<8 hex>` — the random suffix keeps
-concurrent `create_workout` calls unique where the clock is only µs-resolution (macOS), and
-`appendToQueue` links the file into place (fails rather than overwrites on a collision).
+shared by two processes. The Go MCP server only ever *creates* files (`appendToQueue`: write and
+fsync a `.item-*.tmp` dotfile, then `os.Link` it into place as `<id>.json` — fails rather than
+overwrites — falling back to rename only where hard links aren't supported); the sync sidecar only
+rewrites (adding `uploaded_workout_id`/failure fields, fsynced) or removes files it has read, and
+ignores dotfiles. Neither side ever writes a file the other might be writing, so there's no lock.
+Keep it that way: a Go feature that edits or cancels a queued workout would break that invariant —
+it needs a design change, not a read-modify-write of someone else's file. Queue ids are
+`<UnixNano>-<8 hex>`: fixed length (so a name sort is creation order), with a random suffix that
+keeps concurrent `create_workout` calls unique where the clock is only µs-resolution (macOS).
+
+Replaced a single shared `workout_queue.json`; there's deliberately no automatic migration from it.
+`sync._check_legacy_queue` deletes an empty one and logs an ERROR every run for a non-empty one.
+**Deploy the MCP server and sync sidecar together** (`make deploy` does), and before the first
+deploy of the spool version check that `/data/workout_queue.json` holds only `[]` — a workout still
+in it would be stranded (move it into `workout_queue/<id>.json` by hand).
 
 **`weightValue`/`weightUnit` shape** (confirmed 2026-08-09 via a live probe: uploaded a
 disposable strength step with `weightValue: 60.0, weightUnit: {"unitKey": "kilogram"}`, read

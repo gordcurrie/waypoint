@@ -15,8 +15,7 @@
       "type": "string"
     },
     "description": {
-      "type": "string",
-      "description": "\"Queued by Waypoint · ref <queue item id>\" (sync._queue_ref) — lets a retry recognise this item's own earlier upload in get_workouts after a timeout. Round-trips unchanged (verified 2026-10-17, probe upload + delete). Visible in the Garmin Connect app as the workout's description."
+      "description": "Always null — not currently settable via create_workout."
     },
     "sportType": {
       "$ref": "#/$defs/sportType"
