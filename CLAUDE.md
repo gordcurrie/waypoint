@@ -320,6 +320,16 @@ InfluxDB measurement (read by the `get_workout_detail` MCP tool) straight from t
 response — no separate `get_workout_by_id` round-trip needed. Each `ExecutableStepDTO` also
 carries `weightValue`/`weightUnit` fields.
 
+**`schedule_workout` — putting an uploaded workout on the calendar** (confirmed 2026-10-17 via a
+live call: scheduled a real uploaded workout, read it back via `get_scheduled_workout_by_id`,
+`calendarDate` matched) — `upload_workout` alone only adds to the workout library; nothing reaches
+the watch until it's on the calendar. `garmin.schedule_workout(workoutId, "YYYY-MM-DD")` POSTs
+`{"date": ...}` to `workout-service/schedule/<workoutId>` and returns `workoutScheduleId` (the id
+`unschedule_workout` takes), `calendarDate`, and a `workout` object shaped like `upload_workout`'s
+response. `create_workout`'s optional `schedule_date` uses this — `sync._schedule_uploaded_workout`
+runs only after a successful upload and never re-queues on failure (a retry would re-upload a
+duplicate workout).
+
 **`weightValue`/`weightUnit` shape** (confirmed 2026-08-09 via a live probe: uploaded a
 disposable strength step with `weightValue: 60.0, weightUnit: {"unitKey": "kilogram"}`, read
 it back, `delete_workout`'d it) — a bare `{"unitKey": "kilogram"}` is enough; Garmin resolves
