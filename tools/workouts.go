@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -211,7 +213,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			}
 		}
 		item := WorkoutQueueItem{
-			ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
+			ID:           newQueueID(time.Now()),
 			Name:         input.Name,
 			Sport:        input.Sport,
 			ScheduleDate: input.ScheduleDate,
@@ -311,21 +313,36 @@ func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
 	if err != nil {
 		return fmt.Errorf("marshal queue item: %w", err)
 	}
-	final := filepath.Join(dir, item.ID+".json")
-	if _, err := os.Stat(final); err == nil {
-		return fmt.Errorf("queue item %s already exists", item.ID)
+	// Unique dotfile tmp: sync.py only picks up *.json files not starting with ".", so it
+	// never reads a half-written item, and concurrent calls never share a tmp file.
+	f, err := os.CreateTemp(dir, ".item-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create queue tmp: %w", err)
 	}
-	// Dotfile tmp name: sync.py only picks up *.json files not starting with ".",
-	// so it never reads a half-written item.
-	tmp := filepath.Join(dir, "."+item.ID+".json.tmp")
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
 		return fmt.Errorf("write queue tmp: %w", err)
 	}
-	if err := os.Rename(tmp, final); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("rename queue item: %w", err)
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close queue tmp: %w", err)
+	}
+	// Link, not Rename: it fails if the target exists, so an id collision is an error
+	// rather than one queued workout silently replacing another.
+	if err := os.Link(tmp, filepath.Join(dir, item.ID+".json")); err != nil {
+		return fmt.Errorf("queue item %s: %w", item.ID, err)
 	}
 	return nil
+}
+
+// newQueueID is a UnixNano timestamp plus a random suffix. The timestamp keeps sync.py's
+// (len, name) sort in creation order; the suffix keeps concurrent create_workout calls
+// unique even where the clock is only microsecond-resolution (macOS).
+func newQueueID(now time.Time) string {
+	var b [4]byte
+	_, _ = rand.Read(b[:]) // crypto/rand.Read never returns an error (Go 1.24+)
+	return fmt.Sprintf("%d-%s", now.UnixNano(), hex.EncodeToString(b[:]))
 }
 
 func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) ([]garmin.ScheduledWorkout, error) {

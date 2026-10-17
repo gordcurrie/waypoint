@@ -38,6 +38,7 @@ METHOD_SCHEMA = {
     "get_training_plans": "training_plans.schema.json",
     "get_activity_exercise_sets": "activity_exercise_sets.schema.json",
     "schedule_workout": "workout_schedule.schema.json",
+    "get_workouts": "workouts.schema.json",
 }
 
 

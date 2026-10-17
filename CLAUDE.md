@@ -332,16 +332,26 @@ optional `schedule_date` uses this. Once a scheduled item uploads, `sync_pending
 is retried next run without re-uploading (a re-upload would be a duplicate workout). A retry first
 checks the calendar month for an item with that `workoutId` + `date` (shape verified live
 2026-10-17: `itemType: "workout"`, `id` == `workoutScheduleId`) so a schedule Garmin applied but
-whose response was lost isn't added twice.
+whose response was lost isn't added twice. `upload_workout` gets the same protection: the item
+records `upload_attempted_at` *before* the call, and a later run that finds it without
+`uploaded_workout_id` first looks for that upload via `get_workouts` (newest-first by `createdDate`,
+which is UTC — both verified 2026-10-17; `orderBy`/`orderSeq` params are ignored) matching
+`workoutName` and `createdDate >= upload_attempted_at - 5min`, so a timeout after Garmin stored
+the workout doesn't upload a duplicate. Nothing is scheduled onto a date that has passed (with a
+day's slack for time zones): an expired item uploads unscheduled, or is dropped if already uploaded.
 
 **`upload_workout`/`schedule_workout` errors are all `GarminConnectConnectionError`** (garminconnect
 0.3.6) — both call `garmin.client.post` directly, bypassing the `_handle_api_errors` decorator the
 read methods get, so 401/429/404/5xx all arrive as `GarminConnectConnectionError("API Error NNN - ...")`
 with no typed rate-limit/auth exception. `sync._garmin_write_error_kind` parses the status back out:
-401/429 stop the run, any other 4xx drops the item (ERROR log — retrying can't succeed), 5xx/network
-retries next run (a schedule retry gives up once its date has passed), and a non-Garmin exception
-keeps the item without blocking the rest of the queue. Don't catch `GarminConnectConnectionError` as
-"transient" on these two calls without checking the status.
+401/429 stop the run (re-raised as the typed `GarminConnectAuthenticationError`/
+`TooManyRequestsError` so the main loop re-logs-in or backs off); 400/404/410/422 drop the item
+(ERROR log — retrying the same request can't succeed); every other 4xx (403 is Cloudflare's bot
+wall, 408/409 can clear), 5xx and network errors (`requests.Timeout` etc. surface raw — all
+`OSError`s) leave the item *and the rest of the queue* for the next run; a non-Garmin exception
+keeps the item without blocking the rest of the queue. A failed *read* while retrying
+(`get_workouts`, `get_scheduled_workouts`) never drops an item, whatever its status. Don't
+classify `GarminConnectConnectionError` on these two calls without checking the status.
 
 **Workout queue is a spool directory, one file per workout** — `<data-dir>/workout_queue/<id>.json`,
 shared by two processes. The Go MCP server only ever *creates* files (`appendToQueue`: write a
@@ -351,7 +361,11 @@ a file the other might be writing, so there's no lock. Keep it that way: a new G
 edits or cancels a queued workout would break that invariant — it needs a design change, not a
 read-modify-write of someone else's file. Replaced a single shared `workout_queue.json` (#111's
 review found it needed a cross-language flock plus field-preservation rules on every writer);
-`sync._migrate_legacy_queue` drains an old one into the spool on first run.
+`sync._migrate_legacy_queue` drains an old one into the spool on first run. **Deploy the MCP
+server and sync sidecar together** (`make deploy` does): a new MCP server with an old sidecar
+writes to a spool dir nothing reads. Queue ids are `<UnixNano>-<8 hex>` — the random suffix keeps
+concurrent `create_workout` calls unique where the clock is only µs-resolution (macOS), and
+`appendToQueue` links the file into place (fails rather than overwrites on a collision).
 
 **`weightValue`/`weightUnit` shape** (confirmed 2026-08-09 via a live probe: uploaded a
 disposable strength step with `weightValue: 60.0, weightUnit: {"unitKey": "kilogram"}`, read

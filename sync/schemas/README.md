@@ -39,6 +39,7 @@ edge cases used are noted in each schema's top-level `description`. In summary:
 | `get_adaptive_training_plan_by_id` | `adaptive_training_plan.schema.json` | one active FBT_ADAPTIVE plan; rest/base/tempo/long-run task mix |
 | `get_training_plans` | `training_plans.schema.json` | one active plan |
 | `get_activity_exercise_sets` | `activity_exercise_sets.schema.json` | one real strength_training activity, 43 sets |
+| `get_workouts` | `workouts.schema.json` | 7-workout library, newest first |
 | `schedule_workout` | `workout_schedule.schema.json` | two live calls scheduling one real running workout (write endpoint — see below) |
 
 `vo2max.schema.json` is a shared `$defs` file, not tied to one method — `get_max_metrics`'s

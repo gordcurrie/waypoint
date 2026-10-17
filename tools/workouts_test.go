@@ -1099,3 +1099,45 @@ func TestValidateScheduleDate_UpperBound(t *testing.T) {
 		}
 	}
 }
+
+func TestNewQueueID_UniqueAtSameInstant(t *testing.T) {
+	now := time.Now()
+	seen := map[string]bool{}
+	for range 1000 {
+		id := newQueueID(now)
+		if seen[id] {
+			t.Fatalf("duplicate id %s", id)
+		}
+		seen[id] = true
+	}
+}
+
+func TestAppendToQueue_ConcurrentCallsAllLand(t *testing.T) {
+	dir := t.TempDir()
+	const n = 50
+	errs := make(chan error, n)
+	now := time.Now() // same timestamp for all: only the random suffix keeps them apart
+	for range n {
+		go func() {
+			errs <- appendToQueue(dir, &WorkoutQueueItem{ID: newQueueID(now), Name: "w", Sport: "running"})
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, err := loadQueueItems(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != n {
+		t.Fatalf("want %d queued items, got %d", n, len(items))
+	}
+	entries, _ := os.ReadDir(queueDir(dir))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			t.Errorf("leftover tmp file %s", e.Name())
+		}
+	}
+}

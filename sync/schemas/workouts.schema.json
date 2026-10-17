@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/workouts.schema.json",
+  "title": "Workout library list (get_workouts)",
+  "description": "Returned by garminconnect's get_workouts(start, limit) — the account's workout library, newest first by createdDate (orderBy/orderSeq params are accepted but don't change the order). Consumed by sync_pending_workouts' _find_prior_upload, which looks for a workout an earlier timed-out upload_workout created, matching workoutName and createdDate >= that attempt's start. Each item is the same workout object get_workout_by_id returns, minus workoutSegments.\n\nVerified against: 2026-10-17, a 7-workout library (a deleted workout is absent here and 404s from get_workout_by_id). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "workoutId": {
+        "type": "integer"
+      },
+      "workoutName": {
+        "type": "string"
+      },
+      "createdDate": {
+        "type": "string",
+        "description": "UTC, no offset, e.g. \"2026-10-17T15:47:43.0\" — verified against a workout uploaded at 15:47:42 container UTC."
+      },
+      "updatedDate": {
+        "type": ["string", "null"],
+        "description": "observed null on every item"
+      }
+    },
+    "required": ["workoutId", "workoutName", "createdDate"],
+    "additionalProperties": true
+  }
+}
