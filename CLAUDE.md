@@ -358,8 +358,9 @@ day's slack for time zones): an expired item uploads unscheduled, or is dropped 
 0.3.6) — both call `garmin.client.post` directly, bypassing the `_handle_api_errors` decorator the
 read methods get, so 401/429/404/5xx all arrive as `GarminConnectConnectionError("API Error NNN - ...")`
 with no typed rate-limit/auth exception. `sync._garmin_write_error_kind` parses the status back out:
-401/429 stop the run (re-raised as the typed `GarminConnectAuthenticationError`/
-`TooManyRequestsError` so the main loop re-logs-in or backs off); 400/404/410/422 quarantine the item
+401/429 stop the run (re-raised as the typed `GarminConnectAuthenticationError` so the main loop
+re-logs-in on a 401 — a 429 just retries at the normal `SYNC_SCHEDULE` interval, there's no extra
+backoff); 400/404/410/422 quarantine the item
 (ERROR log — retrying the same request can't succeed); every other 4xx (403 is Cloudflare's bot
 wall, 408/409 can clear), 5xx and network errors (`requests.Timeout` etc. surface raw — all
 `OSError`s) leave the item *and the rest of the queue* for the next run; a non-Garmin exception
@@ -384,10 +385,13 @@ review found it needed a cross-language flock plus field-preservation rules on e
 there is deliberately no automatic migration from it (making one safe against an old MCP server
 writing mid-migration took more machinery than it was worth): `sync._check_legacy_queue` deletes an
 empty one and logs an ERROR every run for a non-empty one, to be moved into the spool by hand —
-and `scripts/deploy.sh` refuses to deploy while the running sidecar's `/data/workout_queue.json`
-still holds workouts (or can't be read — `SKIP_LEGACY_QUEUE_CHECK=1` overrides that). While the file
-exists it also stops the old MCP server first, so nothing can be appended mid-deploy (restarted on
-any early exit); once the new sidecar has removed it, deploys skip all of this. **Deploy the MCP
+and `scripts/deploy.sh` guards the one deploy that crosses over: while the running deployment is
+pre-spool (no `/data/workout_queue/` dir — the spool-aware sidecar creates it every run), it stops
+the old MCP server (so nothing can be queued in the legacy file mid-deploy, even if the file doesn't
+exist yet; restarted on any early exit) and refuses to deploy while that file still holds workouts.
+If the state can't be read through the sync container it refuses too (`SKIP_LEGACY_QUEUE_CHECK=1`
+overrides). Once a spool-aware sidecar has run, deploys skip all of this. Queue files are fsynced
+(file and directory) before being linked/renamed into place. **Deploy the MCP
 server and sync sidecar together** (`make deploy` does): a new MCP server with an old sidecar
 writes to a spool dir nothing reads. Queue ids are `<UnixNano>-<8 hex>` — the random suffix keeps
 concurrent `create_workout` calls unique where the clock is only µs-resolution (macOS), and

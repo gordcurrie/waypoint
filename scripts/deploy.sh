@@ -25,39 +25,42 @@ COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.homelab.yml)
 
 # The sync sidecar no longer reads the old single-file workout queue (it moved to the
 # workout_queue/ spool dir, and deliberately doesn't auto-migrate — see
-# sync._check_legacy_queue). Refuse to deploy over workouts still waiting in the old file:
-# let the running sidecar upload them first (one sync interval), then retry.
-
-# Prints the legacy file's contents, or nothing if it doesn't exist. Fails if the sync
-# container can't be reached, so that is never mistaken for "no file".
-read_legacy() {
-    "${COMPOSE[@]}" exec -T sync sh -c \
-        'if [ -e /data/workout_queue.json ]; then cat /data/workout_queue.json; fi'
+# sync._check_legacy_queue). Deploying over a pre-spool version must not strand workouts
+# still waiting in the old file: let the running sidecar upload them first, then retry.
+#
+# Prints "spool" if the running deployment is already spool-aware (the sidecar creates
+# /data/workout_queue/ every run), else the legacy file's contents (nothing if absent).
+# Fails if the sync container can't be reached, so that's never mistaken for "no file".
+queue_state() {
+    "${COMPOSE[@]}" exec -T sync sh -c '
+        if [ -d /data/workout_queue ]; then echo spool
+        elif [ -e /data/workout_queue.json ]; then cat /data/workout_queue.json
+        fi'
 }
 pending() {
     local c="${1//[[:space:]]/}"
-    [[ -n "${c}" && "${c}" != "[]" ]]
+    [[ -n "${c}" && "${c}" != "[]" && "${c}" != "spool" ]]
 }
 
-if ! legacy="$(read_legacy)"; then
+if ! state="$(queue_state)"; then
     if [[ "${SKIP_LEGACY_QUEUE_CHECK}" != "1" ]]; then
-        echo "Refusing to deploy: can't read /data/workout_queue.json through the sync" >&2
-        echo "container (is it running?). Re-run with SKIP_LEGACY_QUEUE_CHECK=1 to deploy anyway." >&2
+        echo "Refusing to deploy: can't check the workout queue through the sync container" >&2
+        echo "(is it running?). Re-run with SKIP_LEGACY_QUEUE_CHECK=1 to deploy anyway." >&2
         exit 1
     fi
-    legacy=""
+    state="spool"
 fi
-if [[ -n "${legacy}" ]]; then
-    # The file still exists, so the old MCP server is still a possible writer: stop it so
-    # nothing can be appended between this check and the rebuild, and re-check. It's
-    # restarted on any exit before `up` below recreates it. Once the new sidecar has
-    # removed the (empty) file, later deploys skip all of this.
+if [[ "${state}" != "spool" ]]; then
+    # Pre-spool deployment: its MCP server writes the legacy file — even one that doesn't
+    # exist yet — so stop it, so nothing can be queued there between this check and the
+    # rebuild, then re-check. Restarted on any exit before `up` below recreates it. Once
+    # the new sidecar has run, later deploys skip all of this.
     "${COMPOSE[@]}" stop mcp-server
     trap '"${COMPOSE[@]}" start mcp-server' EXIT
-    legacy="$(read_legacy)"
-    if pending "${legacy}"; then
+    state="$(queue_state)"
+    if pending "${state}"; then
         echo "Refusing to deploy: /data/workout_queue.json still holds queued workouts:" >&2
-        echo "${legacy}" >&2
+        echo "${state}" >&2
         echo "Wait for the next sync run to upload them (or restart the sync container), then retry." >&2
         exit 1
     fi

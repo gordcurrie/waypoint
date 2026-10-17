@@ -20,6 +20,7 @@ import re
 import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -1111,6 +1112,10 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         # Same for self-created entries — now routine since create_workout's schedule_date
         # puts workouts on the calendar: one moved or deleted in Garmin Connect must not
         # linger at its old date. Keyed by Garmin's own scheduled_id (stable for these).
+        # A separate query from the coach-plan one on purpose, not one combined SELECT: the
+        # scheduled_id column doesn't exist until a self-created row has been written, and a
+        # combined query naming it would then fail outright and take coach-plan tombstoning
+        # (#104) down with it — same reasoning as _query_active_calendar_event_keys.
         self_tags = ("scheduled_id", "sport")
         stale_self = (
             _query_active_keys(
@@ -1784,10 +1789,21 @@ def _queue_dir() -> Path:
 
 
 def _write_queue_item(path: Path, item: dict[str, Any]) -> None:
+    """Atomically replace path with item. fsynced (file, then directory) so a crash or
+    power loss can't leave a truncated file — which would be quarantined, losing the
+    workout or, worse, its uploaded_workout_id (causing a duplicate upload)."""
     tmp = path.with_name(f".{path.name}.tmp")
     try:
-        tmp.write_text(json.dumps(item))
+        with open(tmp, "w") as fh:
+            fh.write(json.dumps(item))
+            fh.flush()
+            os.fsync(fh.fileno())
         tmp.replace(path)
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     except OSError as exc:
         raise _QueueWriteError(f"cannot update queue item {path.name}: {exc}") from exc
 
@@ -1939,9 +1955,12 @@ def _garmin_write_error_kind(exc: Exception) -> str:
 
 
 def _stop_error(exc: Exception) -> Exception:
-    """The typed garminconnect exception a "stop" failure should propagate as, so the main
-    loop reacts properly: re-login on 401, back off on 429. A raw
-    GarminConnectConnectionError("API Error 401") would only be logged and retried."""
+    """The typed garminconnect exception a "stop" failure should propagate as. What matters
+    is 401: the main loop re-logs-in on GarminConnectAuthenticationError, whereas a raw
+    GarminConnectConnectionError("API Error 401") would only be logged and retried with the
+    same dead session. (A 429 becomes GarminConnectTooManyRequestsError for an accurate log
+    line only — the main loop treats it like any connection error, retrying at the normal
+    SYNC_SCHEDULE interval with no extra backoff.)"""
     if isinstance(exc, GarminConnectAuthenticationError | GarminConnectTooManyRequestsError):
         return exc
     if _http_status(exc) == 401:
@@ -1998,7 +2017,8 @@ def _already_scheduled(
         cache, (d.year, d.month), lambda: garmin.get_scheduled_workouts(d.year, d.month) or {}
     )
     return any(
-        it.get("workoutId") == workout_id and str(it.get("date", ""))[:10] == sched_date
+        # str() both sides: a hand-edited queue file may hold the id as a string.
+        str(it.get("workoutId")) == str(workout_id) and str(it.get("date", ""))[:10] == sched_date
         for it in month.get("calendarItems") or []
     )
 
@@ -2051,19 +2071,63 @@ def _find_prior_upload(item: dict[str, Any], library: list[Any]) -> Any:
     #     "createdDate": "2026-10-17T15:47:43.0", "updateDate": "...",
     #     "sportType": {"sportTypeId": 1, "sportTypeKey": "running", ...}, ...}, ...]
     ref = _queue_ref(item.get("id"))
-    if not isinstance(library, list):
-        raise TypeError(f"get_workouts returned {type(library).__name__}, not a list")
     for w in library:
         if isinstance(w, dict) and w.get("description") == ref:
             return w.get("workoutId")
     return None
 
 
-def _library_page(garmin: Garmin, cache: dict[str, Any]) -> list[Any]:
-    """get_workouts' newest page, fetched at most once per sync_pending_workouts run. Shape:
-    see _find_prior_upload."""
-    library: list[Any] = _fetch_once(cache, "library", lambda: garmin.get_workouts(0, 50) or [])
-    return library
+_LIBRARY_PAGE = 50
+# Bounds the search at 1000 workouts, far more than an account creates in the at-most-7-day
+# window an item can spend retrying (_FAILURE_GIVE_UP).
+_LIBRARY_MAX_PAGES = 20
+
+
+def _failing_since_attempt(item: dict[str, Any]) -> datetime:
+    """How far back the library must be searched for this item's earlier upload: its
+    upload_attempted_at, less a day's slack for clock skew; the whole library if unusable."""
+    try:
+        attempted = datetime.fromisoformat(str(item["upload_attempted_at"]))
+    except (KeyError, TypeError, ValueError):
+        return datetime.min.replace(tzinfo=UTC)
+    if attempted.tzinfo is None:
+        attempted = attempted.replace(tzinfo=UTC)
+    return attempted - timedelta(days=1)
+
+
+def _created_at(workout: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(workout["createdDate"])).replace(tzinfo=UTC)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _library_since(garmin: Garmin, cache: dict[Any, Any], since: datetime) -> list[Any]:
+    """Library workouts, newest first, back to at least one created before `since` (or the
+    whole library). Paged, each page fetched at most once per sync_pending_workouts run —
+    not just the newest page, since newer uploads (other queue items, hand-built workouts)
+    can push an earlier attempt's upload off it. Shape: see _find_prior_upload."""
+    workouts: list[Any] = []
+    for n in range(_LIBRARY_MAX_PAGES):
+        start = n * _LIBRARY_PAGE
+        page = (
+            _fetch_once(
+                cache, ("library", start), partial(garmin.get_workouts, start, _LIBRARY_PAGE)
+            )
+            or []
+        )
+        if not isinstance(page, list):
+            raise TypeError(f"get_workouts returned {type(page).__name__}, not a list")
+        workouts.extend(page)
+        oldest = _created_at(page[-1]) if page else None
+        if len(page) < _LIBRARY_PAGE or (oldest is not None and oldest < since):
+            return workouts
+    log.warning(
+        "pending_workouts: library search stopped at %d workouts before reaching %s",
+        len(workouts),
+        since.isoformat(),
+    )
+    return workouts
 
 
 # Per-item failure bookkeeping, cleared when the item makes progress (uploads):
@@ -2129,7 +2193,7 @@ def _record_failure(path: Path, item: dict[str, Any], exc: Exception, kind: str)
             "first_failure_at": first.isoformat(),
         },
     )
-    blocking = kind == "transient" and transient < _BLOCKING_TRANSIENT_FAILURES
+    blocking = kind == "transient" and transient <= _BLOCKING_TRANSIENT_FAILURES
     log.warning(
         "pending_workouts: %s failed: %s — keeping it%s",
         item.get("id"),
@@ -2214,6 +2278,12 @@ def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[s
     it and the rest of the queue for the next run.
     """
     _check_legacy_queue()
+    # Created every run, not just by the first create_workout: its existence is how
+    # scripts/deploy.sh tells a spool-aware deployment from a pre-spool one.
+    try:
+        _queue_dir().mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log.warning("pending_workouts: cannot create %s: %s", _queue_dir(), exc)
     paths = _queued_item_paths()
     if not paths:
         return
@@ -2325,7 +2395,9 @@ def _process_queue_item(
             return _record_failure(path, item, exc, "other")
         if item.get("upload_attempted_at"):
             try:
-                workout_id = _find_prior_upload(item, _library_page(garmin, cache))
+                workout_id = _find_prior_upload(
+                    item, _library_since(garmin, cache, _failing_since_attempt(item))
+                )
             except Exception as exc:
                 return _read_failure(exc, counts, "library", path, item, sched_date)
             found_prior_upload = workout_id is not None

@@ -3293,11 +3293,16 @@ def test_pending_workouts_persistent_5xx_stops_blocking_then_quarantines(
         return _upload_response()
 
     garmin.upload_workout.side_effect = upload
+    garmin.get_workouts.return_value = []  # the failed uploads never landed
     with freeze_time("2026-10-17T00:00:00") as frozen:
         for _ in range(sync._BLOCKING_TRANSIENT_FAILURES):
             sync.sync_pending_workouts(garmin, MagicMock(), {})
             frozen.tick(timedelta(minutes=30))
-        assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]  # "2" got through
+        # Blocked for exactly _BLOCKING_TRANSIENT_FAILURES runs...
+        assert [r["id"] for r in _read_queue(tmp_path)] == ["1", "2"]
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+        # ...then it stops holding up the rest.
+        assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]
         frozen.tick(sync._FAILURE_GIVE_UP)
         sync.sync_pending_workouts(garmin, MagicMock(), {})
     assert _read_queue(tmp_path) == []
@@ -3416,6 +3421,8 @@ def test_pending_workouts_transient_read_failure_stops_blocking(tmp_path, monkey
     garmin.upload_workout.return_value = _upload_response()
     for _ in range(sync._BLOCKING_TRANSIENT_FAILURES):
         sync.sync_pending_workouts(garmin, MagicMock(), {})
+    assert [r["id"] for r in _read_queue(tmp_path)] == ["1", "2"]
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
     assert [r["id"] for r in _read_queue(tmp_path)] == ["1"]  # "2" got through
 
 
@@ -3455,3 +3462,49 @@ def test_query_active_keys_log_level_depends_on_column(caplog):
         )
     levels = {r.getMessage().split()[1]: r.levelname for r in caplog.records}
     assert levels == {"workout_name": "WARNING", "scheduled_id": "INFO"}
+
+
+@freeze_time("2026-10-20T13:00:00")
+def test_pending_workouts_library_search_pages_back_to_attempt(tmp_path, monkeypatch, no_sleep):
+    """An earlier upload pushed off the newest page by newer workouts is still found."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_attempted_item()])  # attempted 2026-10-17T12:00
+    newer = [
+        {"workoutId": 1000 + i, "createdDate": "2026-10-19T00:00:00.0", "description": None}
+        for i in range(sync._LIBRARY_PAGE)
+    ]
+    ours = {
+        "workoutId": 777,
+        "createdDate": "2026-10-17T12:00:03.0",
+        "description": "Queued by Waypoint · ref abc123",
+    }
+    older = {"workoutId": 1, "createdDate": "2026-01-01T00:00:00.0", "description": None}
+    pages = {0: newer, sync._LIBRARY_PAGE: [ours, older]}
+    garmin = MagicMock()
+    garmin.get_workouts.side_effect = lambda start, limit: pages.get(start, [])
+    garmin.get_workout_by_id.return_value = _upload_response(workout_id=777)
+    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
+    garmin.schedule_workout.return_value = {"workoutScheduleId": 9}
+    item = _read_queue(tmp_path)[0]
+    item["schedule_date"] = "2026-10-21"
+    _write_queue(tmp_path, [item])
+    sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.upload_workout.assert_not_called()
+    garmin.schedule_workout.assert_called_once_with(777, "2026-10-21")
+    assert garmin.get_workouts.call_count == 2  # stopped once past the attempt
+
+
+@freeze_time("2026-10-17")
+def test_already_scheduled_matches_string_workout_id(no_sleep):
+    garmin = MagicMock()
+    garmin.get_scheduled_workouts.return_value = {
+        "calendarItems": [{"workoutId": 1732218826, "date": "2026-10-17"}]
+    }
+    assert sync._already_scheduled(garmin, "1732218826", "2026-10-17", {})
+
+
+def test_pending_workouts_creates_spool_dir(tmp_path, monkeypatch):
+    """Its existence is how deploy.sh recognises a spool-aware deployment."""
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    sync.sync_pending_workouts(MagicMock(), MagicMock(), {})
+    assert (tmp_path / "workout_queue").is_dir()
