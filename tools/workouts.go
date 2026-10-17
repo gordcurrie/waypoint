@@ -76,6 +76,9 @@ var validSports = map[string]bool{
 
 var queueMu sync.Mutex
 
+// queueLockFile is flocked by both appendToQueue and sync.py's _queue_lock.
+const queueLockFile = "workout_queue.lock"
+
 func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	type scheduledWorkoutsInput struct {
 		Days int `json:"days,omitempty" jsonschema:"look-ahead window in days, default 14, max 60"`
@@ -131,7 +134,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		Name:  "create_workout",
 		Title: "Create Workout",
 		Description: "Queue a structured workout for upload to Garmin Connect. The Python sidecar uploads it on the next sync run (every 30 minutes by default; set via SYNC_SCHEDULE). Requires --data-dir pointing to the shared sync volume. Returns the queue ID. " +
-			"Set schedule_date (YYYY-MM-DD) to also put it on that day of the Garmin calendar so it shows up on the watch; without it the workout only lands in the Garmin Connect workout library. " +
+			"Set schedule_date (YYYY-MM-DD, today or later) to also put it on that day of the Garmin calendar so it shows up on the watch; without it the workout only lands in the Garmin Connect workout library. get_scheduled_workouts only sees 60 days ahead, so a workout scheduled further out won't appear there (or be conflict-checkable) until it's within that window. " +
 			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
 			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. Optionally set weight_kg (requires category/exercise_name) for a weight target shown on the watch. " +
@@ -150,10 +153,8 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		if len(input.Steps) == 0 {
 			return errorResult(fmt.Errorf("steps must not be empty"))
 		}
-		if input.ScheduleDate != "" {
-			if _, err := time.Parse(time.DateOnly, input.ScheduleDate); err != nil {
-				return errorResult(fmt.Errorf("create_workout: schedule_date must be YYYY-MM-DD, got %q", input.ScheduleDate))
-			}
+		if err := validateScheduleDate(input.ScheduleDate, time.Now()); err != nil {
+			return errorResult(err)
 		}
 		for i, step := range input.Steps {
 			if !validStepTypes[step.Type] {
@@ -258,6 +259,25 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	})
 }
 
+// validateScheduleDate rejects a malformed or past schedule_date ("" means unscheduled).
+// "Past" is before yesterday in the server's clock, not before today: the MCP server
+// may run in UTC while the user is hours behind, so the user's today can already be
+// the server's yesterday.
+func validateScheduleDate(s string, now time.Time) error {
+	if s == "" {
+		return nil
+	}
+	d, err := time.Parse(time.DateOnly, s)
+	if err != nil {
+		return fmt.Errorf("create_workout: schedule_date must be YYYY-MM-DD, got %q", s)
+	}
+	y, m, day := now.AddDate(0, 0, -1).Date()
+	if d.Before(time.Date(y, m, day, 0, 0, 0, 0, time.UTC)) {
+		return fmt.Errorf("create_workout: schedule_date %s is in the past", s)
+	}
+	return nil
+}
+
 func queuePath(dataDir string) string {
 	return filepath.Join(dataDir, "workout_queue.json")
 }
@@ -298,6 +318,11 @@ func saveQueue(dataDir string, items []WorkoutQueueItem) error {
 func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
 	queueMu.Lock()
 	defer queueMu.Unlock()
+	unlock, err := lockQueueFile(dataDir)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	items, err := loadQueue(dataDir)
 	if err != nil {
 		return err

@@ -326,9 +326,16 @@ live call: scheduled a real uploaded workout, read it back via `get_scheduled_wo
 the watch until it's on the calendar. `garmin.schedule_workout(workoutId, "YYYY-MM-DD")` POSTs
 `{"date": ...}` to `workout-service/schedule/<workoutId>` and returns `workoutScheduleId` (the id
 `unschedule_workout` takes), `calendarDate`, and a `workout` object shaped like `upload_workout`'s
-response. `create_workout`'s optional `schedule_date` uses this — `sync._schedule_uploaded_workout`
-runs only after a successful upload and never re-queues on failure (a retry would re-upload a
-duplicate workout).
+response (schema: `sync/schemas/workout_schedule.schema.json`, drift-checked). `create_workout`'s
+optional `schedule_date` uses this. Once a scheduled item uploads, `sync_pending_workouts` records
+`uploaded_workout_id` on its queue entry *before* calling `schedule_workout`, so a failed schedule
+is retried next run without re-uploading (a re-upload would be a duplicate workout).
+
+**Workout queue file is shared across two processes** — the Go MCP server appends
+(`appendToQueue`), the sync sidecar consumes (`sync_pending_workouts`). Both flock
+`<data-dir>/workout_queue.lock`, and the sidecar commits each item's outcome by re-reading the
+queue under that lock rather than writing back a snapshot, so a `create_workout` mid-sync isn't
+lost. Any new writer of `workout_queue.json` must take the same lock.
 
 **`weightValue`/`weightUnit` shape** (confirmed 2026-08-09 via a live probe: uploaded a
 disposable strength step with `weightValue: 60.0, weightUnit: {"unitKey": "kilogram"}`, read

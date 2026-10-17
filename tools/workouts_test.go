@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -938,7 +939,8 @@ func TestCreateWorkout_ScheduleDate(t *testing.T) {
 		date    string
 		wantErr bool
 	}{
-		{"valid", "2026-10-17", false},
+		{"valid", time.Now().AddDate(0, 0, 3).Format(time.DateOnly), false},
+		{"past", "2020-01-01", true},
 		{"not a date", "tomorrow", true},
 		{"wrong format", "10/17/2026", true},
 		{"impossible date", "2026-02-30", true},
@@ -978,5 +980,35 @@ func TestAppendToQueue_ScheduleDateRoundTrips(t *testing.T) {
 	}
 	if items[0].ScheduleDate != "2026-10-17" || items[1].ScheduleDate != "" {
 		t.Fatalf("got %+v", items)
+	}
+}
+
+func TestValidateScheduleDate(t *testing.T) {
+	now := time.Date(2026, 10, 17, 3, 0, 0, 0, time.UTC)
+	cases := []struct {
+		date    string
+		wantErr bool
+	}{
+		{"", false},
+		{"2026-10-17", false},
+		{"2026-10-16", false}, // user's today when the server's clock is ahead (UTC)
+		{"2026-10-15", true},
+		{"2027-01-05", false},
+		{"2026-13-01", true},
+	}
+	for _, tc := range cases {
+		if err := validateScheduleDate(tc.date, now); (err != nil) != tc.wantErr {
+			t.Errorf("validateScheduleDate(%q) err = %v, wantErr %v", tc.date, err, tc.wantErr)
+		}
+	}
+}
+
+func TestAppendToQueue_CreatesLockFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "a", Sport: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, queueLockFile)); err != nil {
+		t.Fatalf("want lock file shared with sync.py: %v", err)
 	}
 }

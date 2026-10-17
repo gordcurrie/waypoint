@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gordcurrie/waypoint/sync/schemas/workout_schedule.schema.json",
+  "title": "Workout schedule response (schedule_workout)",
+  "description": "Returned by garminconnect's schedule_workout(workout_id, date_str), which POSTs {\"date\": \"YYYY-MM-DD\"} to workout-service/schedule/<workoutId>. Called by sync_pending_workouts (via _schedule_uploaded_workout) for a create_workout queue item carrying schedule_date; only workoutScheduleId is read (for logging). get_scheduled_workout_by_id(workoutScheduleId) returns the same top-level shape.\n\nVerified against: 2026-10-17, two live calls scheduling a real uploaded running workout (one kept, one a probe removed via unschedule_workout, which returns {}). Additional fields beyond what's listed here may exist and are tolerated (additionalProperties: true).",
+  "type": "object",
+  "properties": {
+    "workoutScheduleId": {
+      "type": "integer",
+      "description": "Id of this calendar entry — what unschedule_workout and get_scheduled_workout_by_id take. Distinct from workout.workoutId (the library workout), which can be scheduled on many days."
+    },
+    "workout": {
+      "type": "object",
+      "description": "The scheduled library workout — same shape as upload_workout's / get_workout_by_id's response (workoutId, workoutName, sportType, workoutSegments, ...). Not read by sync.py."
+    },
+    "calendarDate": {
+      "type": "string",
+      "format": "date",
+      "description": "Echoes the requested date."
+    },
+    "createdDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "ownerId": {
+      "type": "integer"
+    },
+    "newName": {
+      "description": "observed null"
+    },
+    "consumer": {
+      "description": "observed null"
+    },
+    "atpPlanTypeId": {
+      "description": "observed null"
+    },
+    "associatedActivityId": {
+      "description": "observed null — presumably set once an activity completes this workout; not captured."
+    },
+    "priority": {
+      "description": "observed null"
+    },
+    "associatedActivityDateTime": {
+      "description": "observed null"
+    },
+    "tpType": {
+      "description": "observed null"
+    },
+    "nameChanged": {
+      "type": "boolean"
+    },
+    "protected": {
+      "type": "boolean"
+    },
+    "itp": {
+      "type": "boolean"
+    },
+    "race": {
+      "type": "boolean"
+    }
+  },
+  "required": ["workoutScheduleId", "calendarDate"],
+  "additionalProperties": true
+}
