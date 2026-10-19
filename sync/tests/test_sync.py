@@ -1898,7 +1898,14 @@ def _queue_item(
     steps: list | None = None,
 ) -> dict:
     if steps is None:
-        steps = [{"type": "interval", "duration_s": 1200, "target_hr_zone": 4}]
+        steps = [
+            {
+                "type": "interval",
+                "duration_s": 1200,
+                "target_hr_low_bpm": 145,
+                "target_hr_high_bpm": 165,
+            }
+        ]
     return {"id": id, "name": name, "sport": sport, "steps": steps}
 
 
@@ -2325,7 +2332,12 @@ def test_build_garmin_workout_running_structure():
         sport="running",
         steps=[
             {"type": "warmup", "duration_s": 600, "description": "easy"},
-            {"type": "interval", "duration_s": 1200, "target_hr_zone": 4},
+            {
+                "type": "interval",
+                "duration_s": 1200,
+                "target_hr_low_bpm": 145,
+                "target_hr_high_bpm": 165,
+            },
             {"type": "cooldown", "duration_s": 600},
         ],
     )
@@ -2338,7 +2350,8 @@ def test_build_garmin_workout_running_structure():
     assert seg["workoutSteps"][0]["endConditionValue"] == 600.0
     assert seg["workoutSteps"][1]["type"] == "ExecutableStepDTO"
     assert seg["workoutSteps"][1]["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
-    assert seg["workoutSteps"][1]["targetValueOne"] == 4.0
+    assert seg["workoutSteps"][1]["targetValueOne"] == 145.0
+    assert seg["workoutSteps"][1]["targetValueTwo"] == 165.0
     assert seg["workoutSteps"][2]["type"] == "ExecutableStepDTO"
     assert seg["workoutSteps"][2]["targetType"]["workoutTargetTypeKey"] == "no.target"
 
@@ -2884,7 +2897,17 @@ def test_calendar_events_tombstones_personal_event_without_shareable_column(no_s
 @pytest.mark.parametrize(
     "sport,steps",
     [
-        ("running", [{"type": "interval", "duration_s": 1200, "target_hr_zone": 4}]),
+        (
+            "running",
+            [
+                {
+                    "type": "interval",
+                    "duration_s": 1200,
+                    "target_hr_low_bpm": 145,
+                    "target_hr_high_bpm": 165,
+                }
+            ],
+        ),
         (
             "running",
             [

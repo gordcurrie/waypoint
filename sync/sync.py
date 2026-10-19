@@ -1611,7 +1611,8 @@ def _build_garmin_step(
     target_type: dict[str, Any] | None
     target_val1: float | None
     target_val2: float | None
-    hr_zone = step.get("target_hr_zone")
+    hr_low = step.get("target_hr_low_bpm")
+    hr_high = step.get("target_hr_high_bpm")
     pace_fast = step.get("target_pace_zone_fast_s_per_km")
     pace_slow = step.get("target_pace_zone_slow_s_per_km")
     if pace_fast is not None and pace_slow is not None:
@@ -1623,13 +1624,18 @@ def _build_garmin_step(
         target_type = {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "pace.zone"}
         target_val1 = 1000.0 / float(pace_fast)
         target_val2 = 1000.0 / float(pace_slow)
-    elif hr_zone is not None:
+    elif hr_low is not None and hr_high is not None:
+        # Verified live 2026-10-19 (probe upload + get_workout_by_id readback +
+        # delete_workout): heart.rate.zone's targetValueOne/Two are a bpm range, LOW then
+        # HIGH, stored as sent (135.0/150.0) — the same form Garmin Coach plan steps and
+        # app-built workouts use. The old target_hr_zone sent a zone number here, which the
+        # watch showed as a "2-3 bpm" target (#112).
         target_type = {
             "workoutTargetTypeId": 4,
             "workoutTargetTypeKey": "heart.rate.zone",
         }
-        target_val1 = float(hr_zone)
-        target_val2 = float(hr_zone)
+        target_val1 = float(hr_low)
+        target_val2 = float(hr_high)
     elif step["type"] == "rest":
         # Real Garmin rest steps serialize targetType as null, not the explicit
         # no.target object exercise-performing steps get (confirmed against a

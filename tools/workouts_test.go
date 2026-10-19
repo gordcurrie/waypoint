@@ -928,12 +928,49 @@ func TestCreateWorkout_PaceZone(t *testing.T) {
 		{"zero fast", "running", pace(0, 300), true},
 		{"not running", "cycling", pace(300, 315), true},
 		{"only fast set", "running", map[string]any{"type": "interval", "distance_m": 1000, "target_pace_zone_fast_s_per_km": 300}, true},
-		{"with hr zone", "running", func() map[string]any { m := pace(300, 315); m["target_hr_zone"] = 3; return m }(), true},
+		{"with hr range", "running", func() map[string]any {
+			m := pace(300, 315)
+			m["target_hr_low_bpm"] = 145
+			m["target_hr_high_bpm"] = 165
+			return m
+		}(), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := callCreateWorkout(t, map[string]any{
 				"name": "Race pace", "sport": tc.sport, "steps": []map[string]any{tc.step},
+			})
+			if result.IsError != tc.wantErr {
+				t.Fatalf("IsError = %v, want %v: %v", result.IsError, tc.wantErr, result.Content)
+			}
+		})
+	}
+}
+
+func TestCreateWorkout_HRRange(t *testing.T) {
+	hr := func(lo, hi any) map[string]any {
+		return map[string]any{
+			"type": "interval", "duration_s": 600,
+			"target_hr_low_bpm": lo, "target_hr_high_bpm": hi,
+		}
+	}
+	cases := []struct {
+		name    string
+		step    map[string]any
+		wantErr bool
+	}{
+		{"valid", hr(145, 165), false},
+		{"low not below high", hr(165, 145), true},
+		{"equal bounds", hr(150, 150), true},
+		{"zone number by mistake", hr(2, 3), true},
+		{"too high", hr(200, 240), true},
+		{"only low set", map[string]any{"type": "interval", "duration_s": 600, "target_hr_low_bpm": 145}, true},
+		{"old target_hr_zone field", map[string]any{"type": "interval", "duration_s": 600, "target_hr_zone": 2}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := callCreateWorkout(t, map[string]any{
+				"name": "Easy run", "sport": "running", "steps": []map[string]any{tc.step},
 			})
 			if result.IsError != tc.wantErr {
 				t.Fatalf("IsError = %v, want %v: %v", result.IsError, tc.wantErr, result.Content)

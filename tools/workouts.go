@@ -36,6 +36,11 @@ import (
 // stores by sync.py. Verified live 2026-10-12 (probe upload + readback + delete):
 // pace.zone (workoutTargetTypeId 6) round-trips unconverted, targetValueOne = the
 // faster (higher m/s) bound, targetValueTwo = the slower one.
+//
+// TargetHRLowBpm/TargetHRHighBpm set a Garmin heart.rate.zone target as a bpm range — the
+// form Garmin Coach plan workouts and app-built workouts use (targetValueOne = low,
+// targetValueTwo = high; e.g. a coach "155bpm ±10" step is 145/165). Verified live
+// 2026-10-19 (probe upload + readback + delete): a 135/150 range round-trips as sent.
 type WorkoutStep struct {
 	Type         string  `json:"type"`
 	DurationS    *int    `json:"duration_s,omitempty"`
@@ -45,7 +50,9 @@ type WorkoutStep struct {
 	RestS        *int    `json:"rest_s,omitempty"`
 	Category     *string `json:"category,omitempty"`
 	ExerciseName *string `json:"exercise_name,omitempty"`
-	TargetHRZone *int    `json:"target_hr_zone,omitempty"`
+	// Heart rate range in bpm (e.g. 145 and 165). Set both, low < high.
+	TargetHRLowBpm  *int `json:"target_hr_low_bpm,omitempty"`
+	TargetHRHighBpm *int `json:"target_hr_high_bpm,omitempty"`
 	// Pace alert range in s/km (e.g. 300 = 5:00/km). Set both, fast < slow; running only.
 	TargetPaceZoneFastSPerKm *float64 `json:"target_pace_zone_fast_s_per_km,omitempty"`
 	TargetPaceZoneSlowSPerKm *float64 `json:"target_pace_zone_slow_s_per_km,omitempty"`
@@ -137,7 +144,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
 			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. Optionally set weight_kg (requires category/exercise_name) for a weight target shown on the watch. " +
-			"Optional target, at most one per step: target_hr_zone (1–5), or a pace zone (Garmin pace.zone, the watch's pace alert range; running only) via target_pace_zone_fast_s_per_km + target_pace_zone_slow_s_per_km in seconds per km, e.g. 300 and 315 for 5:00–5:15/km.",
+			"Optional target, at most one per step: a heart rate range via target_hr_low_bpm + target_hr_high_bpm (e.g. 145 and 165, the same form as Garmin Coach's \"155bpm ±10\"), or a pace zone (Garmin pace.zone, the watch's pace alert range; running only) via target_pace_zone_fast_s_per_km + target_pace_zone_slow_s_per_km in seconds per km, e.g. 300 and 315 for 5:00–5:15/km.",
 		// Adds a new file to the queue spool dir — additive, not destructive (nothing is
 		// overwritten or deleted), and each call creates a distinct queue entry so it's not
 		// idempotent. Explicit because the SDK defaults DestructiveHint to true when unset.
@@ -155,7 +162,8 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		if err := validateScheduleDate(input.ScheduleDate, time.Now()); err != nil {
 			return errorResult(err)
 		}
-		for i, step := range input.Steps {
+		for i := range input.Steps {
+			step := &input.Steps[i]
 			if !validStepTypes[step.Type] {
 				return errorResult(fmt.Errorf("create_workout: step %d: invalid type %q (valid: warmup, interval, recovery, cooldown, steady)", i+1, step.Type))
 			}
@@ -175,8 +183,14 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			if endConditions != 1 {
 				return errorResult(fmt.Errorf("create_workout: step %d: specify exactly one of duration_s, distance_m, or reps", i+1))
 			}
-			if step.TargetHRZone != nil && (*step.TargetHRZone < 1 || *step.TargetHRZone > 5) {
-				return errorResult(fmt.Errorf("create_workout: step %d: target_hr_zone must be 1–5", i+1))
+			if (step.TargetHRLowBpm == nil) != (step.TargetHRHighBpm == nil) {
+				return errorResult(fmt.Errorf("create_workout: step %d: target_hr_low_bpm and target_hr_high_bpm must be set together", i+1))
+			}
+			if step.TargetHRLowBpm != nil {
+				lo, hi := *step.TargetHRLowBpm, *step.TargetHRHighBpm
+				if lo < minHRBpm || hi > maxHRBpm || lo >= hi {
+					return errorResult(fmt.Errorf("create_workout: step %d: heart rate range needs %d <= target_hr_low_bpm < target_hr_high_bpm <= %d (got %d, %d)", i+1, minHRBpm, maxHRBpm, lo, hi))
+				}
 			}
 			if (step.TargetPaceZoneFastSPerKm == nil) != (step.TargetPaceZoneSlowSPerKm == nil) {
 				return errorResult(fmt.Errorf("create_workout: step %d: target_pace_zone_fast_s_per_km and target_pace_zone_slow_s_per_km must be set together", i+1))
@@ -186,8 +200,8 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 				if input.Sport != "running" {
 					return errorResult(fmt.Errorf("create_workout: step %d: a pace zone target is only supported for running", i+1))
 				}
-				if step.TargetHRZone != nil {
-					return errorResult(fmt.Errorf("create_workout: step %d: set either target_hr_zone or a pace zone, not both", i+1))
+				if step.TargetHRLowBpm != nil {
+					return errorResult(fmt.Errorf("create_workout: step %d: set either a heart rate range or a pace zone, not both", i+1))
 				}
 				if fast <= 0 || slow <= fast {
 					return errorResult(fmt.Errorf("create_workout: step %d: pace zone needs 0 < target_pace_zone_fast_s_per_km < target_pace_zone_slow_s_per_km (got %v, %v)", i+1, fast, slow))
@@ -257,6 +271,13 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		return jsonResult(detail)
 	})
 }
+
+// minHRBpm/maxHRBpm bound a heart rate range target — wide enough for any real athlete,
+// tight enough to reject a zone number (2) or a pace (300) passed by mistake.
+const (
+	minHRBpm = 40
+	maxHRBpm = 230
+)
 
 // maxScheduleAheadDays bounds how far ahead create_workout's schedule_date may be.
 const maxScheduleAheadDays = 365

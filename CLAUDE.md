@@ -398,6 +398,15 @@ coach-plan pace targets below. `create_workout`'s `target_pace_zone_fast_s_per_k
 `target_pace_zone_slow_s_per_km` step fields take s/km and `sync._build_garmin_step` converts
 (`1000 / s_per_km`).
 
+**`heart.rate.zone` upload shape** (confirmed 2026-10-19 via a live probe: uploaded a disposable
+step with `targetValueOne: 135.0`/`targetValueTwo: 150.0`, read it back, `delete_workout`'d it) —
+values are a **bpm range**, LOW then HIGH, stored as sent. Same form as Garmin Coach plan steps
+(the app's "155bpm ±10" is 145/165) and app-built workouts. `create_workout`'s
+`target_hr_low_bpm`/`target_hr_high_bpm` step fields map straight onto it. They replaced
+`target_hr_zone`, which sent the zone number as both bpm values (the watch showed a "2-3 bpm"
+target, #112). `zoneNumber: <n>` with null values also round-trips, but how the watch shows it
+is unverified, so it isn't used.
+
 **Coach-plan workout's real target range — `GET workout-service/fbt-adaptive/<workoutUuid>`**
 (#97, confirmed 2026-08-09 against 3 real tasks: a single-step HR-zone run, a 3-step pace-zone
 tempo run, a strength RepeatGroupDTO) — `sync_training_plan`'s flat `workoutDescription` string
