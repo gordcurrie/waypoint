@@ -2338,7 +2338,10 @@ def test_build_garmin_workout_running_structure():
     assert seg["workoutSteps"][0]["endConditionValue"] == 600.0
     assert seg["workoutSteps"][1]["type"] == "ExecutableStepDTO"
     assert seg["workoutSteps"][1]["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
-    assert seg["workoutSteps"][1]["targetValueOne"] == 4.0
+    assert seg["workoutSteps"][1]["zoneNumber"] == 4
+    assert seg["workoutSteps"][1]["targetValueOne"] is None
+    assert seg["workoutSteps"][1]["targetValueTwo"] is None
+    assert seg["workoutSteps"][0]["zoneNumber"] is None
     assert seg["workoutSteps"][2]["type"] == "ExecutableStepDTO"
     assert seg["workoutSteps"][2]["targetType"]["workoutTargetTypeKey"] == "no.target"
 

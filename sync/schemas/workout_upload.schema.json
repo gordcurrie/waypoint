@@ -150,11 +150,15 @@
         },
         "targetValueOne": {
           "type": ["number", "null"],
-          "description": "heart.rate.zone: HR zone number (targetValueOne and targetValueTwo set to the same value). pace.zone: the FASTER bound in m/s (numerically higher; 1000 / target_pace_zone_fast_s_per_km) \u2014 round-trips unconverted, verified live 2026-10-12. null otherwise."
+          "description": "heart.rate.zone: a bpm range (LOW bound) \u2014 create_workout never sets it (sends zoneNumber instead; null). pace.zone: the FASTER bound in m/s (numerically higher; 1000 / target_pace_zone_fast_s_per_km) \u2014 round-trips unconverted, verified live 2026-10-12. null otherwise."
         },
         "targetValueTwo": {
           "type": ["number", "null"],
-          "description": "heart.rate.zone: same zone number as targetValueOne. pace.zone: the SLOWER bound in m/s (numerically lower; 1000 / target_pace_zone_slow_s_per_km). null otherwise."
+          "description": "heart.rate.zone: a bpm range (HIGH bound) \u2014 null from create_workout. pace.zone: the SLOWER bound in m/s (numerically lower; 1000 / target_pace_zone_slow_s_per_km). null otherwise."
+        },
+        "zoneNumber": {
+          "type": ["integer", "null"],
+          "description": "heart.rate.zone: the HR zone number (1\u20135, target_hr_zone), with targetValueOne/Two null. Verified live 2026-10-19 (probe upload + readback + delete): stored as sent. Sending the zone number as targetValueOne/Two instead made the watch show a \"2-3 bpm\" target (#112). null otherwise."
         },
         "category": {
           "description": "Exercise catalog category (e.g. \"BENCH_PRESS\") for strength steps — see internal/garmin/exercises/catalog.json. Real Garmin workouts serialize this as an explicit null when unset, not an omitted key — confirmed against a captured real workout; _build_garmin_step always emits the key."

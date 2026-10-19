@@ -137,7 +137,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
 			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. Optionally set weight_kg (requires category/exercise_name) for a weight target shown on the watch. " +
-			"Optional target, at most one per step: target_hr_zone (1–5), or a pace zone (Garmin pace.zone, the watch's pace alert range; running only) via target_pace_zone_fast_s_per_km + target_pace_zone_slow_s_per_km in seconds per km, e.g. 300 and 315 for 5:00–5:15/km.",
+			"Optional target, at most one per step: target_hr_zone (1–5, the user's own Garmin HR zones), or a pace zone (Garmin pace.zone, the watch's pace alert range; running only) via target_pace_zone_fast_s_per_km + target_pace_zone_slow_s_per_km in seconds per km, e.g. 300 and 315 for 5:00–5:15/km.",
 		// Adds a new file to the queue spool dir — additive, not destructive (nothing is
 		// overwritten or deleted), and each call creates a distinct queue entry so it's not
 		// idempotent. Explicit because the SDK defaults DestructiveHint to true when unset.
