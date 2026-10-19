@@ -3,6 +3,7 @@
 import errno
 import json
 import os
+import re
 import stat
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -1351,15 +1352,22 @@ def test_scheduled_workouts_fbt_adaptive_without_training_plan_id_skipped(no_sle
 def _tombstone_query_client(coach_rows: list | None = None, self_rows: list | None = None):
     """Client whose active-key lookups return coach_rows for the coach-plan query (filtered
     on workout_name) and self_rows for the self-created one (filtered on scheduled_id) — as
-    the real WHERE ... IS NOT NULL clauses would."""
+    the real WHERE ... IS NOT NULL clauses would — keeping only rows inside the query's
+    time bounds, so a test can tell which dates each window covers (#113 review)."""
     client = MagicMock()
+
+    def in_bounds(rows: list | None, sql: str) -> list:
+        start = re.search(r"time >= '(\d{4}-\d{2}-\d{2})", sql)
+        end = re.search(r"time < '(\d{4}-\d{2}-\d{2})", sql)
+        assert start and end
+        return [r for r in rows or [] if start[1] <= str(r["time"])[:10] < end[1]]
 
     def query(sql, language):
         res = MagicMock()
         if "workout_name IS NOT NULL" in sql:
-            res.to_pylist.return_value = coach_rows or []
+            res.to_pylist.return_value = in_bounds(coach_rows, sql)
         elif "scheduled_id IS NOT NULL" in sql:
-            res.to_pylist.return_value = self_rows or []
+            res.to_pylist.return_value = in_bounds(self_rows, sql)
         else:
             res.to_pylist.return_value = []
         return res
@@ -3209,6 +3217,21 @@ def test_scheduled_workouts_self_created_today_not_falsely_tombstoned(no_sleep):
     garmin = _sched_garmin([_self_created_item(42, "2026-10-17")])
     client = _tombstone_query_client(
         self_rows=[{"time": "2026-10-17T00:00:00", "scheduled_id": "42", "sport": "running"}]
+    )
+    sync.sync_scheduled_workouts(garmin, client, {})
+    lines = [str(p) for p in _written_points(client)]
+    assert not [ln for ln in lines if "deleted_at=" in ln and "deleted_at=0" not in ln]
+
+
+@freeze_time("2026-10-17")
+def test_scheduled_workouts_coach_plan_today_still_not_tombstoned(no_sleep):
+    """#113 widens only the self-created window: a coach-plan entry renamed on today's date
+    is still left alone (its window keeps starting tomorrow, #105)."""
+    garmin = _sched_garmin(
+        [_coach_plan_item(scheduled_id=111, date_str="2026-10-17", title="Base", sport="running")]
+    )
+    client = _tombstone_query_client(
+        coach_rows=[{"time": "2026-10-17 00:00:00", "sport": "running", "workout_name": "Recovery"}]
     )
     sync.sync_scheduled_workouts(garmin, client, {})
     lines = [str(p) for p in _written_points(client)]
