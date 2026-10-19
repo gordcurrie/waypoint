@@ -13,12 +13,14 @@ State persisted in DATA_DIR/sync_state.json.
 login outside the container to seed TOKEN_STORE, then restart.
 """
 
+import errno
 import json
 import logging
 import os
 import re
 import time
-from datetime import UTC, date, datetime, timedelta
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -841,15 +843,24 @@ def sync_activity_details(garmin: Garmin, client: InfluxDBClient3, state: dict[s
     log.info("activity_details: wrote %d points for %d activities", len(points), len(activities))
 
 
-def _query_active_coach_plan_keys(
-    client: InfluxDBClient3, start: date, end: date
-) -> set[tuple[str, str, str]]:
-    """Return the (date, sport, workout_name) keys currently stored for coach-plan
-    scheduled_workout points in [start, end). Used by sync_scheduled_workouts to find
-    stale entries to tombstone (#104) — deliberately does not filter on deleted_at
-    (see that call site's comment for why), so an already-tombstoned key is returned
-    here too and gets harmlessly re-tombstoned on every run until it ages out of the
-    sync window entirely.
+def _query_active_keys(
+    client: InfluxDBClient3,
+    start: date,
+    end: date,
+    tags: tuple[str, ...],
+    missing_column_expected: bool = False,
+) -> set[tuple[str, ...]]:
+    """Return the (date, *tags) keys currently stored for scheduled_workout points in
+    [start, end) whose first tag is set. Used by sync_scheduled_workouts to find stale
+    entries to tombstone — coach-plan entries keyed by ("workout_name", "sport") (#104), and
+    self-created ones by ("scheduled_id", "sport"). Deliberately does not filter on
+    deleted_at, so an already-tombstoned key is returned here too and gets harmlessly
+    re-tombstoned on every run until it ages out of the sync window entirely.
+
+    A tag missing from a row reads back as None and is mapped to "": influxdb_client_3 drops
+    an empty-string tag on write, so a key built from a fresh item with an empty sport ("")
+    and the stored row (no sport tag) must compare equal — and a tombstone written with ""
+    is likewise dropped, landing on that same tagless series.
     """
     # Explicit UTC-midnight RFC3339 timestamps, not date-only literals (#105 review) —
     # matches how every other bounded time query in this codebase (e.g.
@@ -858,16 +869,42 @@ def _query_active_coach_plan_keys(
     start_ts = _day_ts(start).strftime("%Y-%m-%dT%H:%M:%SZ")
     end_ts = _day_ts(end).strftime("%Y-%m-%dT%H:%M:%SZ")
     sql = (
-        "SELECT DISTINCT time, sport, workout_name FROM scheduled_workout "
+        f"SELECT DISTINCT time, {', '.join(tags)} FROM scheduled_workout "
         f"WHERE time >= '{start_ts}' AND time < '{end_ts}' "
-        "AND workout_name IS NOT NULL"
+        f"AND {tags[0]} IS NOT NULL"
     )
     try:
         rows = client.query(sql, language="sql").to_pylist()
-        return {(str(r["time"])[:10], str(r["sport"]), str(r["workout_name"])) for r in rows}
+        return {
+            (str(r["time"])[:10], *("" if r.get(t) is None else str(r[t]) for t in tags))
+            for r in rows
+        }
     except Exception as exc:
-        log.warning("scheduled_workouts: active-key lookup failed, skipping tombstoning: %s", exc)
+        # A failed lookup only means fewer tombstones this run, never a false one. With
+        # missing_column_expected (scheduled_id: like _query_active_calendar_event_keys, a
+        # tag column only exists once a point carrying it was written, and an account with
+        # only coach-plan workouts has none) it's routine, so info; otherwise (workout_name
+        # always exists on a coach-plan account) it's a real query failure, so warning.
+        column_missing = missing_column_expected and tags[0] in str(exc)
+        log.log(
+            logging.INFO if column_missing else logging.WARNING,
+            "scheduled_workouts: %s key lookup failed%s, not tombstoning by it this run: %s",
+            tags[0],
+            " (column doesn't exist yet)" if column_missing else "",
+            exc,
+        )
         return set()
+
+
+def _tombstones(keys: set[tuple[str, ...]], tags: tuple[str, ...], deleted_at: float) -> list[Any]:
+    """deleted_at-only points overwriting each (date, *tag values) key's series in place."""
+    points = []
+    for date_str, *values in keys:
+        p = Point("scheduled_workout").time(_day_ts(date.fromisoformat(date_str)))
+        for tag, value in zip(tags, values, strict=True):
+            p = p.tag(tag, value)
+        points.append(p.field("deleted_at", deleted_at))
+    return points
 
 
 # Per-run cache of calendar month responses, shared by sync_scheduled_workouts and
@@ -884,6 +921,18 @@ def _reset_calendar_month_cache() -> None:
     _calendar_month_cache["months"] = {}
 
 
+def _fetch_once(cache: dict[Any, Any], key: Any, fetch: Callable[[], Any]) -> Any:
+    """cache[key], calling fetch() to fill it on a miss. Only successful results are cached,
+    so a failed fetch is retried by the next caller. Sleeps only on a real fetch, to pace
+    Garmin calls."""
+    if key not in cache:
+        try:
+            cache[key] = fetch()
+        finally:
+            time.sleep(0.3)
+    return cache[key]
+
+
 def _get_calendar_month(garmin: Garmin, year: int, month: int) -> dict[str, Any]:
     """Return garmin.get_scheduled_workouts(year, month), fetching each month at most
     once per run. Only successful responses are cached, so a month that failed for
@@ -891,28 +940,34 @@ def _get_calendar_month(garmin: Garmin, year: int, month: int) -> dict[str, Any]
     if _calendar_month_cache["garmin"] is not garmin:
         _calendar_month_cache["garmin"] = garmin
         _calendar_month_cache["months"] = {}
-    months: dict[tuple[int, int], dict[str, Any]] = _calendar_month_cache["months"]
-    key = (year, month)
-    if key not in months:
-        try:
-            months[key] = garmin.get_scheduled_workouts(year, month) or {}
-        finally:
-            time.sleep(0.3)
-    return months[key]
+    resp: dict[str, Any] = _fetch_once(
+        _calendar_month_cache["months"],
+        (year, month),
+        lambda: garmin.get_scheduled_workouts(year, month) or {},
+    )
+    return resp
+
+
+# Matches get_scheduled_workouts' max window (maxScheduledWorkoutsDays in tools/workouts.go;
+# test_scheduled_workout_lookahead_matches_go_tool_max checks they agree), so a workout
+# create_workout schedules anywhere in that window is visible to the tool. Covers
+# 3-4 calendar months; sync_calendar_events fetches the same months anyway, and
+# _get_calendar_month shares them, so the wider window costs no extra Garmin calls.
+SCHEDULED_WORKOUT_LOOKAHEAD_DAYS = 60
 
 
 def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
-    """Sync Garmin calendar workouts for the current and next month into InfluxDB."""
+    """Sync Garmin calendar workouts for the next SCHEDULED_WORKOUT_LOOKAHEAD_DAYS into InfluxDB."""
     today = date.today()
+    horizon = today + timedelta(days=SCHEDULED_WORKOUT_LOOKAHEAD_DAYS)
     months = [(today.year, today.month)]
-    # Always include next month to cover a 14-day lookahead that spans a boundary.
-    if today.month == 12:
-        months.append((today.year + 1, 1))
-    else:
-        months.append((today.year, today.month + 1))
+    while months[-1] != (horizon.year, horizon.month):
+        year, month = months[-1]
+        months.append((year + 1, 1) if month == 12 else (year, month + 1))
 
     points: list[Any] = []
-    fresh_coach_keys: set[tuple[str, str, str]] = set()
+    fresh_coach_keys: set[tuple[str, ...]] = set()
+    fresh_self_keys: set[tuple[str, ...]] = set()
     had_error = False
     for year, month in months:
         try:
@@ -970,9 +1025,12 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                     p = Point("scheduled_workout").time(_day_ts(scheduled_date))
                     if is_coach_plan_item:
                         p = p.tag("sport", sport_val).tag("workout_name", name_val)
-                        fresh_coach_keys.add((scheduled_date.isoformat(), sport_val, name_val))
+                        fresh_coach_keys.add((scheduled_date.isoformat(), name_val, sport_val))
                     else:
                         p = p.tag("scheduled_id", str(scheduled_id)).tag("sport", sport_val)
+                        fresh_self_keys.add(
+                            (scheduled_date.isoformat(), str(scheduled_id), sport_val)
+                        )
 
                     dur = _fval(item, "duration")
                     fields: dict[str, Any] = {
@@ -982,16 +1040,14 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
                         if dur is not None
                         else _fval(item, "estimatedDurationInSecs"),
                     }
-                    if is_coach_plan_item:
-                        # Explicitly clear any stale tombstone from a prior rename
-                        # (#104): InfluxDB merges fields at the same series+timestamp
-                        # rather than replacing the point outright, so if this exact
-                        # (sport, workout_name) key was tombstoned before and is now
-                        # fresh again (plan reverted or regenerated identically), a
-                        # write that omits deleted_at would leave the earlier
-                        # deleted_at value in place and this real, current workout
-                        # would stay permanently filtered out.
-                        fields["deleted_at"] = 0.0
+                    # Explicitly clear any stale tombstone (#104): InfluxDB merges fields
+                    # at the same series+timestamp rather than replacing the point
+                    # outright, so if this exact key was tombstoned before and is now
+                    # fresh again (coach plan reverted or regenerated identically, or a
+                    # self-created workout moved back to a day it left), a write that
+                    # omits deleted_at would leave the earlier deleted_at value in place
+                    # and this real, current workout would stay permanently filtered out.
+                    fields["deleted_at"] = 0.0
                     p, n = _add_fields(p, fields)
                     if n:
                         points.append(p)
@@ -1046,28 +1102,41 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         window_end = (
             date(last_year + 1, 1, 1) if last_month == 12 else date(last_year, last_month + 1, 1)
         )
-        stored_coach_keys = _query_active_coach_plan_keys(client, window_start, window_end)
-        stale_keys = stored_coach_keys - fresh_coach_keys
         deleted_at = datetime.now(UTC).timestamp()
-        for date_str, sport_val, name_val in stale_keys:
-            p = (
-                Point("scheduled_workout")
-                .time(_day_ts(date.fromisoformat(date_str)))
-                .tag("sport", sport_val)
-                .tag("workout_name", name_val)
-                .field("deleted_at", deleted_at)
-            )
-            points.append(p)
+        coach_tags = ("workout_name", "sport")
+        stale_keys = (
+            _query_active_keys(client, window_start, window_end, coach_tags) - fresh_coach_keys
+        )
+        points.extend(_tombstones(stale_keys, coach_tags, deleted_at))
         if stale_keys:
             log.info("scheduled_workouts: tombstoned %d stale coach-plan entries", len(stale_keys))
+        # Same for self-created entries — now routine since create_workout's schedule_date
+        # puts workouts on the calendar: one moved or deleted in Garmin Connect must not
+        # linger at its old date. Keyed by Garmin's own scheduled_id (stable for these).
+        # A separate query from the coach-plan one on purpose, not one combined SELECT: the
+        # scheduled_id column doesn't exist until a self-created row has been written, and a
+        # combined query naming it would then fail outright and take coach-plan tombstoning
+        # (#104) down with it — same reasoning as _query_active_calendar_event_keys.
+        self_tags = ("scheduled_id", "sport")
+        stale_self = (
+            _query_active_keys(
+                client, window_start, window_end, self_tags, missing_column_expected=True
+            )
+            - fresh_self_keys
+        )
+        points.extend(_tombstones(stale_self, self_tags, deleted_at))
+        if stale_self:
+            log.info(
+                "scheduled_workouts: tombstoned %d stale self-created entries", len(stale_self)
+            )
 
     _write(client, points)
     log.info("scheduled_workouts: wrote %d points", len(points))
 
 
 # Calendar events (e.g. races) are typically added months out, well past
-# sync_scheduled_workouts' current+next-month window — so they get their own,
-# longer lookahead. Seven calendar months (current included) always covers
+# sync_scheduled_workouts' SCHEDULED_WORKOUT_LOOKAHEAD_DAYS (60-day) window — so they
+# get their own, longer lookahead. Seven calendar months (current included) always covers
 # get_calendar_events' 180-day window — six would stop short when run late in a
 # month (e.g. Oct 31 + 180d = Apr 29, past a six-month fetch ending Apr 1).
 CALENDAR_EVENT_LOOKAHEAD_MONTHS = 7
@@ -1094,7 +1163,7 @@ def _query_active_calendar_event_keys(
 ) -> set[tuple[str, str, str]]:
     """Return the (date, tag name, tag value) keys currently stored in calendar_event in
     [start, end) — see _calendar_event_key.
-    Same tombstone-lookup role as _query_active_coach_plan_keys — used by
+    Same tombstone-lookup role as _query_active_keys — used by
     sync_calendar_events to find events that were moved to a different date or deleted.
     """
     start_ts = _day_ts(start).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1651,8 +1720,9 @@ def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
     sport = item.get("sport", "running")
     # No silent fallback: an unrecognized sport previously defaulted to sportTypeId 1
     # ("running") while keeping the wrong key, which Garmin resolves by ID — silently
-    # mislabeling the workout as a run. Fail loudly instead; the item stays queued for
-    # retry (see sync_pending_workouts) rather than uploading with a wrong sport.
+    # mislabeling the workout as a run. Fail loudly instead: sync_pending_workouts keeps the
+    # item and retries it (quarantining it after _FAILURE_GIVE_UP), rather than uploading
+    # it with a wrong sport.
     if sport not in _SPORT_TYPES:
         raise ValueError(f"unsupported workout sport {sport!r} — no verified Garmin sportTypeId")
     sport_type = _SPORT_TYPES[sport]
@@ -1689,11 +1759,117 @@ def _build_garmin_workout(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _save_queue(items: list[dict[str, Any]]) -> None:
-    queue_file = DATA_DIR / "workout_queue.json"
-    tmp = queue_file.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(items))
-    tmp.rename(queue_file)
+# Spool directory of one <id>.json file per queued workout, shared with the Go MCP server
+# (tools/workouts.go appendToQueue). Go only ever creates new files (a ".item-*.tmp" dotfile,
+# then linked — or, where hard links aren't supported, renamed — into place as <id>.json);
+# this sidecar only rewrites or removes files it has read. Neither side ever
+# writes a file the other could be writing, so no lock is needed.
+_QUEUE_DIR_NAME = "workout_queue"
+
+
+# The single shared file the spool replaced — see _check_legacy_queue.
+_LEGACY_QUEUE_FILE = "workout_queue.json"
+
+
+class _QueueWriteError(Exception):
+    """A queue item's outcome couldn't be persisted. Processing must stop: carrying on would
+    upload more workouts whose completion can't be recorded, so the next run would upload
+    them again as duplicates."""
+
+
+def _queue_dir() -> Path:
+    return DATA_DIR / _QUEUE_DIR_NAME
+
+
+def _write_queue_item(path: Path, item: dict[str, Any]) -> None:
+    """Atomically replace path with item. fsynced (file, then directory) so a crash or
+    power loss can't leave a truncated file — which would be quarantined, losing the
+    workout or, worse, its uploaded_workout_id (causing a duplicate upload)."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    try:
+        with open(tmp, "w") as fh:
+            fh.write(json.dumps(item))
+            fh.flush()
+            os.fsync(fh.fileno())
+        tmp.replace(path)
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        except OSError as exc:
+            # Some filesystems can't fsync a directory; the rename itself still happened.
+            if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
+                raise
+        finally:
+            os.close(dir_fd)
+    except OSError as exc:
+        raise _QueueWriteError(f"cannot update queue item {path.name}: {exc}") from exc
+
+
+def _remove_queue_item(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        raise _QueueWriteError(f"cannot remove queue item {path.name}: {exc}") from exc
+
+
+def _quarantine(path: Path, reason: str) -> None:
+    """Rename a queue file that can never be processed to <name>.invalid: out of the *.json
+    glob so it isn't re-logged every run, but kept for a human to look at. Raises
+    _QueueWriteError if the rename fails: the item would otherwise stay live with nothing
+    recorded, re-sending the same failing request every run with no give-up."""
+    log.error(
+        "pending_workouts: %s %s — moving it aside as %s.invalid", path.name, reason, path.name
+    )
+    try:
+        path.replace(path.with_name(f"{path.name}.invalid"))
+    except OSError as exc:
+        raise _QueueWriteError(f"cannot move {path.name} aside: {exc}") from exc
+
+
+def _check_legacy_queue() -> None:
+    """Deal with the pre-spool single workout_queue.json, which nothing writes any more.
+
+    Deliberately no automatic migration: making one safe against an old MCP server still
+    writing the file mid-migration (duplicate uploads, lost items, id collisions) took more
+    machinery than the one case it serves — the MCP server and this sidecar are deployed
+    together, and the file is normally empty ("[]") by the time either is upgraded. An
+    empty one is removed; anything else is left untouched and reported every run, for a
+    human to move into the spool dir (one <id>.json file per item) by hand.
+    """
+    legacy = DATA_DIR / _LEGACY_QUEUE_FILE
+    if not legacy.exists():
+        return
+    try:
+        items = json.loads(legacy.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        log.error(
+            "pending_workouts: cannot read legacy %s: %s — move it aside by hand", legacy, exc
+        )
+        return
+    if items == []:
+        try:
+            legacy.unlink()
+        except OSError as exc:
+            log.warning("pending_workouts: cannot remove empty legacy %s: %s", legacy, exc)
+        return
+    log.error(
+        "pending_workouts: legacy %s still holds %d item(s) the spool queue won't upload — move "
+        "each into %s/ as its own <id>.json file, then delete it",
+        legacy,
+        len(items) if isinstance(items, list) else 1,
+        _queue_dir(),
+    )
+
+
+def _queued_item_paths() -> list[Path]:
+    """Queue files in creation order: Go's ids are "<UnixNano>-<8 hex>" (newQueueID), fixed
+    length, so sorting by name sorts by creation time. If the id format ever gets a
+    variable-length part, this ordering must change with it. Dotfiles are in-progress
+    writes (Go's and our own)."""
+    if not _queue_dir().is_dir():
+        return []
+    paths = [p for p in _queue_dir().glob("*.json") if not p.name.startswith(".")]
+    return sorted(paths, key=lambda p: p.name)
 
 
 def _write_workout_detail(client: InfluxDBClient3, resp: dict[str, Any]) -> None:
@@ -1726,55 +1902,392 @@ def _write_workout_detail(client: InfluxDBClient3, resp: dict[str, Any]) -> None
         _write(client, [p])
 
 
+_API_ERROR_STATUS_RE = re.compile(r"API Error (\d{3})")
+
+# 4xx statuses meaning "this request can never succeed as sent". Everything else in 4xx is
+# treated as transient: 403 is what Cloudflare's bot wall returns (see "Python sidecar is
+# required" in CLAUDE.md), 408 is a timeout, 409 a conflict that can clear.
+_PERMANENT_4XX = frozenset({400, 404, 410, 422})
+
+
+def _http_status(exc: Exception) -> int | None:
+    """HTTP status behind a garminconnect error. Checks a status_code / response.status_code
+    attribute first, then the "API Error NNN" message garminconnect's client raises with —
+    the same order as garminconnect's own private _extract_status_code, reimplemented rather
+    than imported so a garminconnect upgrade that renames it can't break this sidecar."""
+    for status in (
+        getattr(exc, "status_code", None),
+        getattr(getattr(exc, "response", None), "status_code", None),
+    ):
+        if isinstance(status, int):
+            return status
+    m = _API_ERROR_STATUS_RE.search(str(exc))
+    return int(m.group(1)) if m else None
+
+
+def _garmin_write_error_kind(exc: Exception) -> str:
+    """Classify a failure from upload_workout/schedule_workout: "stop", "permanent",
+    "transient" or "other".
+
+    Both call garmin.client.post directly, bypassing garminconnect's _handle_api_errors
+    decorator, so every HTTP status >= 400 — 401 after a refresh and 429 included — surfaces
+    as GarminConnectConnectionError("API Error NNN - ...") (garminconnect 0.3.6,
+    client.py _run_request), and network failures surface raw from its requests.Session
+    (requests.Timeout etc., all OSError subclasses):
+      - "stop": auth failure or rate limit — make no more Garmin calls this run.
+      - "permanent": 400/404/410/422 (e.g. 404 on a workout deleted in the app, 400 on a body
+        or date Garmin rejects) — retrying the same request can't succeed.
+      - "transient": 5xx, any other 4xx, timeout, network error — worth retrying next run.
+      - "other": not a Garmin or network error at all (e.g. a bug building this item's
+        request) — specific to this item, so it's kept but doesn't hold up the queue.
+    """
+    if isinstance(exc, GarminConnectAuthenticationError | GarminConnectTooManyRequestsError):
+        return "stop"
+    if isinstance(exc, OSError):
+        return "transient"
+    if not isinstance(exc, GarminConnectConnectionError):
+        return "other"
+    status = _http_status(exc)
+    if status in (401, 429):
+        return "stop"
+    if status in _PERMANENT_4XX:
+        return "permanent"
+    return "transient"
+
+
+def _raise_if_stop(exc: Exception) -> None:
+    """Re-raise exc as its typed garminconnect error if it's a "stop" failure (auth/rate
+    limit). Every failed Garmin call in _process_queue_item goes through this (via
+    _record_failure) — swallowing a 401 would leave the run going with a dead session
+    instead of the main loop re-logging in."""
+    if _garmin_write_error_kind(exc) == "stop":
+        raise _stop_error(exc) from exc
+
+
+def _stop_error(exc: Exception) -> Exception:
+    """The typed garminconnect exception a "stop" failure should propagate as. What matters
+    is 401: the main loop re-logs-in on GarminConnectAuthenticationError, whereas a raw
+    GarminConnectConnectionError("API Error 401") would only be logged and retried with the
+    same dead session. (A 429 becomes GarminConnectTooManyRequestsError for an accurate log
+    line only — the main loop treats it like any connection error, retrying at the normal
+    SYNC_SCHEDULE interval with no extra backoff.)"""
+    if isinstance(exc, GarminConnectAuthenticationError | GarminConnectTooManyRequestsError):
+        return exc
+    if _http_status(exc) == 401:
+        return GarminConnectAuthenticationError(str(exc))
+    return GarminConnectTooManyRequestsError(str(exc))
+
+
+def _schedule_uploaded_workout(garmin: Garmin, workout_id: Any, sched_date: str, name: Any) -> None:
+    """Put an uploaded workout on the Garmin calendar on sched_date.
+
+    garminconnect's schedule_workout POSTs {"date": "YYYY-MM-DD"} to
+    workout-service/schedule/<workoutId>. Response confirmed live 2026-10-17 (scheduled a real
+    uploaded workout, read it back via get_scheduled_workout_by_id) — see
+    schemas/workout_schedule.schema.json:
+        {
+          "workoutScheduleId": 1811236098,   # id unschedule_workout takes
+          "workout": {...},                  # same shape as upload_workout's response
+          "calendarDate": "2026-10-17",
+          "createdDate": "2026-10-17",
+          "ownerId": ..., "race": false, "protected": false, ...
+        }
+    """
+    sched = garmin.schedule_workout(workout_id, sched_date)
+    log.info(
+        "pending_workouts: scheduled %r for %s (schedule id %s)",
+        name,
+        sched_date,
+        sched.get("workoutScheduleId") if isinstance(sched, dict) else None,
+    )
+
+
+def _already_scheduled(
+    garmin: Garmin,
+    workout_id: Any,
+    sched_date: str,
+    cache: dict[Any, Any],
+) -> bool:
+    """Whether workout_id is already on the calendar on sched_date.
+
+    schedule_workout isn't idempotent: a retry after a call Garmin applied but whose
+    response was lost (timeout), or whose queue removal then failed to persist, would add
+    a second calendar entry. The calendar month's items carry the scheduled workout's
+    workoutId and date — confirmed live 2026-10-17:
+        {"id": 1811236098, "itemType": "workout", "workoutId": 1732218826,
+         "date": "2026-10-17", "trainingPlanId": 0, ...}
+    (id == schedule_workout's workoutScheduleId).
+
+    cache is sync_pending_workouts' per-run cache (months keyed by (year, month)), not the
+    shared _get_calendar_month cache: a month fetched there before this run's scheduling
+    would be stale here.
+    """
+    d = date.fromisoformat(sched_date)
+    month = _fetch_once(
+        cache, (d.year, d.month), lambda: garmin.get_scheduled_workouts(d.year, d.month) or {}
+    )
+    return any(
+        # str() both sides: a hand-edited queue file may hold the id as a string.
+        str(it.get("workoutId")) == str(workout_id) and str(it.get("date", ""))[:10] == sched_date
+        for it in month.get("calendarItems") or []
+    )
+
+
+_SCHEDULE_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _schedule_expired(sched_date: str) -> bool:
+    """Whether sched_date is over everywhere — i.e. before today in UTC-12, the same
+    cutoff create_workout's validateScheduleDate uses. Scheduling onto a past day only adds
+    a phantom missed workout."""
+    return date.fromisoformat(sched_date) < datetime.now(timezone(timedelta(hours=-12))).date()
+
+
+def _valid_schedule_date(item: dict[str, Any]) -> str | None:
+    """item's schedule_date if it's strictly YYYY-MM-DD (what garminconnect's schedule_workout
+    accepts, and what create_workout enforces via time.DateOnly), else None. A bad one means a
+    hand-edited queue file. (date.fromisoformat alone would also accept "20261017".)"""
+    sched_date = item.get("schedule_date")
+    if not sched_date:
+        return None
+    try:
+        if not _SCHEDULE_DATE_RE.fullmatch(str(sched_date)):
+            raise ValueError
+        date.fromisoformat(str(sched_date))
+    except ValueError:
+        return None
+    return str(sched_date)
+
+
+# Failure handling for a queue item, deliberately kept to two fields on the item, cleared
+# when it makes progress (uploads):
+# - "attempts": failed runs in a row. A transient failure (5xx/403/network) normally means
+#   Garmin is down, so it holds up the rest of the queue — but only for the first
+#   _BLOCKING_ATTEMPTS runs; after that it's more likely this item (e.g. a body Garmin always
+#   500s on, the DataIntegrityViolationException seen live) and it stops blocking the others.
+# - "first_failure_at": when that streak began. An item still failing _FAILURE_GIVE_UP later
+#   is quarantined. Time-based, so a long Garmin outage can't quarantine everything early
+#   however short SYNC_SCHEDULE is.
+# A permanent rejection (400/404/410/422) is quarantined at once. Quarantine
+# (<id>.json.invalid) never deletes a workout definition.
+_BLOCKING_ATTEMPTS = 3
+_FAILURE_GIVE_UP = timedelta(days=7)
+
+
+def _parse_utc(value: Any) -> datetime | None:
+    """An ISO timestamp as an aware UTC datetime (naive taken as UTC), or None."""
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _record_failure(
+    path: Path, item: dict[str, Any], exc: Exception, doing: str, read: bool = False
+) -> str:
+    """Handle a failed Garmin call made for item. Returns "stop" if the rest of the queue
+    should wait for the next run, else "continue". Auth/rate-limit failures raise the typed
+    garminconnect error instead (see _raise_if_stop). A failed *read* (read=True) is never
+    permanent: a 4xx on a calendar lookup says nothing about whether the item can succeed."""
+    _raise_if_stop(exc)
+    kind = _garmin_write_error_kind(exc)
+    if read and kind == "permanent":
+        kind = "transient"
+    uploaded = item.get("uploaded_workout_id")
+    # An uploaded item only ever fails on scheduling: say so, or the user may re-create a
+    # workout that's already in their library.
+    unscheduled_note = (
+        f"; workout {uploaded} is in the Garmin workout library but NOT on the calendar for "
+        f"{item.get('schedule_date')} — schedule it by hand"
+        if uploaded
+        else ""
+    )
+    if kind == "permanent":
+        # Quarantined, not deleted: if the 4xx is really Garmin-wide (a moved endpoint, an
+        # edge rejecting every POST), every queued workout would be lost in one run.
+        _quarantine(path, f"was rejected by Garmin {doing} ({exc}){unscheduled_note}")
+        return "continue"
+    now = datetime.now(UTC)
+    first = _parse_utc(item.get("first_failure_at")) or now
+    if now - first >= _FAILURE_GIVE_UP:
+        _quarantine(path, f"has been failing since {first.isoformat()} ({exc}){unscheduled_note}")
+        return "continue"
+    try:
+        attempts = max(0, int(item.get("attempts") or 0)) + 1
+    except (TypeError, ValueError):
+        attempts = 1
+    _write_queue_item(path, {**item, "attempts": attempts, "first_failure_at": first.isoformat()})
+    # "other" (not a Garmin error — bad item data, a bug) is specific to this item, so it
+    # never holds up the rest.
+    blocking = kind == "transient" and attempts <= _BLOCKING_ATTEMPTS
+    log.warning(
+        "pending_workouts: failed %s %s (attempt %d): %s — keeping it%s",
+        doing,
+        item.get("id"),
+        attempts,
+        exc,
+        " and the rest of the queue for the next run" if blocking else " in queue",
+    )
+    return "stop" if blocking else "continue"
+
+
 def sync_pending_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:
-    """Upload queued workouts to Garmin Connect. Items stay in queue on failure (retry next run)."""
-    queue_file = DATA_DIR / "workout_queue.json"
-    if not queue_file.exists():
-        return
+    """Upload queued workouts to Garmin Connect, scheduling any that carry schedule_date.
 
+    Once an item with schedule_date has uploaded, its file records uploaded_workout_id
+    before schedule_workout is called, so a retry only re-attempts the schedule — never a
+    second upload. A schedule retry checks the calendar first, so one Garmin applied but
+    whose response was lost isn't added twice. (An *upload* whose response is lost after
+    Garmin stored it is retried as a fresh upload: rare, and at worst one extra library
+    workout — accepted rather than detected.) See _record_failure for failure handling.
+    """
+    _check_legacy_queue()
     try:
-        items: list[dict[str, Any]] = json.loads(queue_file.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        log.warning("pending_workouts: cannot read queue: %s", exc)
+        _queue_dir().mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log.warning("pending_workouts: cannot create %s: %s", _queue_dir(), exc)
+    paths = _queued_item_paths()
+    if not paths:
         return
 
-    if not items:
-        return
-
-    remaining: list[dict[str, Any]] = []
-    uploaded = 0
+    counts = {"uploaded": 0, "scheduled": 0, "failed": 0}
+    # Per-run cache of calendar months for _already_scheduled — not the shared
+    # _get_calendar_month cache, which could hold a month from before this run's scheduling.
+    cache: dict[Any, Any] = {}
     try:
-        for i, item in enumerate(items):
+        for path in paths:
             try:
-                workout = _build_garmin_workout(item)
-                resp = garmin.upload_workout(workout)
-                uploaded += 1
-                log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item.get("id"))
-                try:
-                    _write_workout_detail(client, resp)
-                except Exception as exc:
-                    log.warning(
-                        "pending_workouts: failed to write workout_detail for %s: %s",
-                        item.get("id"),
-                        exc,
-                    )
-            except (
-                GarminConnectAuthenticationError,
-                GarminConnectTooManyRequestsError,
-                GarminConnectConnectionError,
-            ):
-                remaining.extend(items[i:])  # current item + all unprocessed
-                raise
+                item = json.loads(path.read_text())
+            except OSError as exc:
+                counts["failed"] += 1
+                log.warning("pending_workouts: cannot read %s: %s — skipping", path.name, exc)
+                continue
+            except json.JSONDecodeError as exc:
+                counts["failed"] += 1
+                _quarantine(path, f"is not valid JSON ({exc})")
+                continue
+            if not isinstance(item, dict):
+                counts["failed"] += 1
+                _quarantine(path, "is not a JSON object")
+                continue
+            if _process_queue_item(garmin, client, path, item, counts, cache) == "stop":
+                break
+    finally:
+        log.info(
+            "pending_workouts: uploaded %d, scheduled %d, %d failed (see warnings/errors)",
+            counts["uploaded"],
+            counts["scheduled"],
+            counts["failed"],
+        )
+
+
+def _process_queue_item(
+    garmin: Garmin,
+    client: InfluxDBClient3,
+    path: Path,
+    item: dict[str, Any],
+    counts: dict[str, int],
+    cache: dict[Any, Any],
+) -> str:
+    """Process one queue item. Returns "stop" to leave the rest of the queue for the next
+    run, else "continue"; auth/rate-limit failures and _QueueWriteError propagate."""
+    item_id = item.get("id")
+    workout_id = item.get("uploaded_workout_id")
+    sched_date = _valid_schedule_date(item)
+    if item.get("schedule_date") and sched_date is None:
+        # Logged once, then moved aside on the item so a retry doesn't repeat the ERROR.
+        log.error(
+            "pending_workouts: %s has invalid schedule_date %r — ignoring it, can't schedule",
+            item_id,
+            item["schedule_date"],
+        )
+        item = {**item, "invalid_schedule_date": item["schedule_date"]}
+        del item["schedule_date"]
+        _write_queue_item(path, item)
+    if sched_date is not None and _schedule_expired(sched_date):
+        if workout_id is None:
+            log.warning(
+                "pending_workouts: %r was for %s, which has passed — uploading it unscheduled",
+                item.get("name"),
+                sched_date,
+            )
+        sched_date = None
+    if workout_id is not None and sched_date is None:
+        # Already uploaded, and the date is gone (passed or invalid). Re-uploading would
+        # duplicate the workout, so there's nothing left to do with it.
+        log.warning(
+            "pending_workouts: %r (workout %s) is in the Garmin workout library; it may not be "
+            "on the calendar — check it by hand. Dropping it from the queue.",
+            item.get("name"),
+            workout_id,
+        )
+        _remove_queue_item(path)
+        return "continue"
+
+    if workout_id is None:
+        try:
+            resp = garmin.upload_workout(_build_garmin_workout(item))
+        except Exception as exc:
+            counts["failed"] += 1
+            return _record_failure(path, item, exc, "uploading")
+        counts["uploaded"] += 1
+        log.info("pending_workouts: uploaded %r (id %s)", item.get("name"), item_id)
+        workout_id = resp.get("workoutId") if isinstance(resp, dict) else None
+        # Record the upload first — before the InfluxDB detail write or scheduling — so the
+        # window in which a crash or kill causes a duplicate upload next run is as small as
+        # it can be. A _QueueWriteError here propagates.
+        if sched_date is None or workout_id is None:
+            _remove_queue_item(path)
+        else:
+            item = {k: v for k, v in item.items() if k not in ("attempts", "first_failure_at")}
+            item["uploaded_workout_id"] = workout_id
+            _write_queue_item(path, item)
+        if isinstance(resp, dict):
+            try:
+                _write_workout_detail(client, resp)
             except Exception as exc:
                 log.warning(
-                    "pending_workouts: failed to upload %s: %s — keeping in queue",
-                    item.get("id"),
-                    exc,
+                    "pending_workouts: failed to write workout_detail for %s: %s", item_id, exc
                 )
-                remaining.append(item)
-    finally:
-        _save_queue(remaining)
-    log.info("pending_workouts: uploaded %d, %d remaining in queue", uploaded, len(remaining))
+        if sched_date is None:
+            return "continue"
+        if workout_id is None:
+            log.error(
+                "pending_workouts: %r uploaded but the response has no workoutId — it is in "
+                "the Garmin workout library but NOT scheduled for %s; schedule it by hand",
+                item.get("name"),
+                sched_date,
+            )
+            return "continue"
+    else:
+        # A retry: a previous schedule_workout may have been applied with only its response
+        # (or the queue update after it) lost.
+        assert sched_date is not None  # uploaded + no date returned above
+        try:
+            done = _already_scheduled(garmin, workout_id, sched_date, cache)
+        except Exception as exc:
+            counts["failed"] += 1
+            return _record_failure(path, item, exc, "checking the calendar for", read=True)
+        if done:
+            log.info(
+                "pending_workouts: %r already on the calendar for %s — not scheduling again",
+                item.get("name"),
+                sched_date,
+            )
+            counts["scheduled"] += 1
+            _remove_queue_item(path)
+            return "continue"
+
+    assert sched_date is not None  # every unscheduled path returned above
+    try:
+        _schedule_uploaded_workout(garmin, workout_id, sched_date, item.get("name"))
+    except Exception as exc:
+        counts["failed"] += 1
+        return _record_failure(path, item, exc, f"scheduling (for {sched_date})")
+    counts["scheduled"] += 1
+    _remove_queue_item(path)
+    return "continue"
 
 
 def sync_respiration(garmin: Garmin, client: InfluxDBClient3, state: dict[str, Any]) -> None:

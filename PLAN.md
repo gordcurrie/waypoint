@@ -105,7 +105,7 @@ Follows `gordcurrie/agent-skills` → `generate-mcp` skill conventions:
 - `http` — Streamable HTTP via `mcp.NewStreamableHTTPHandler`. Homelab deployment.
 
 **Tools (data only — no LLM calls):** 15 read-only tools plus one write (`create_workout`,
-always queues an upload) — see `tools/register.go` for the authoritative, current list
+always queues an upload; optional `schedule_date` also puts it on the Garmin calendar) — see `tools/register.go` for the authoritative, current list
 grouped by file (`activities.go`, `health.go`, `training.go`, `fitness.go`, `splits.go`,
 `workouts.go`, `exercises.go`). Full per-tool descriptions are in the `waypoint` MCP
 server's own instructions (surfaced to Claude at connect time), not duplicated here to

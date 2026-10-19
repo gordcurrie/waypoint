@@ -39,6 +39,7 @@ edge cases used are noted in each schema's top-level `description`. In summary:
 | `get_adaptive_training_plan_by_id` | `adaptive_training_plan.schema.json` | one active FBT_ADAPTIVE plan; rest/base/tempo/long-run task mix |
 | `get_training_plans` | `training_plans.schema.json` | one active plan |
 | `get_activity_exercise_sets` | `activity_exercise_sets.schema.json` | one real strength_training activity, 43 sets |
+| `schedule_workout` | `workout_schedule.schema.json` | two live calls scheduling one real running workout (write endpoint — see below) |
 
 `vo2max.schema.json` is a shared `$defs` file, not tied to one method — `get_max_metrics`'s
 `generic`/`heatAltitudeAcclimation` objects and `get_training_status`'s
@@ -66,11 +67,18 @@ removed for containing real account PII — see CLAUDE.md's "RepeatGroupDTO stru
 Validated against `_build_garmin_workout`'s actual output (a warmup + 3-set bench-press
 repeat group + cooldown) with zero schema violations.
 
+`workout_schedule.schema.json` documents `schedule_workout`'s *response* — unlike
+`upload_workout`, it's in `METHOD_SCHEMA`, so `drift_check.py` validates every live
+scheduling call `sync_pending_workouts` makes for a `create_workout` item with
+`schedule_date`. Derived 2026-10-17 from two live calls (one kept on the calendar, one a
+probe removed again with `unschedule_workout`). `inspect_api.py`'s `<method> <date>`
+calling convention doesn't fit it (it takes a workout id and has a side effect), so
+re-derive it with a probe schedule + `unschedule_workout`, not `inspect_api.py`.
+
 ## Known gaps (not covered — see per-field notes in the schemas themselves)
 
 - Sleep data on a night with no recording at all
 - HRV on a day with no reading (device not worn)
-- A scheduled-workout calendar item with `workoutId` actually set
 - `get_lactate_threshold` for an account with no LT test ever taken
 - Non-running activity types (cycling, swimming, strength_training)
 

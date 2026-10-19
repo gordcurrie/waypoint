@@ -2,12 +2,16 @@ package tools
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
+	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -49,12 +53,17 @@ type WorkoutStep struct {
 	Description              string   `json:"description,omitempty"`
 }
 
-// WorkoutQueueItem is written to the shared queue file for the Python sidecar to consume.
+// WorkoutQueueItem is written to the queue spool dir (see queueDirName) for the Python sidecar to consume.
+//
+// ScheduleDate (YYYY-MM-DD, optional) also puts the uploaded workout on that day of the
+// Garmin calendar via garminconnect's schedule_workout — verified live 2026-10-17 (scheduled
+// a real uploaded workout, read it back via get_scheduled_workout_by_id: calendarDate matched).
 type WorkoutQueueItem struct {
-	ID    string        `json:"id"`
-	Name  string        `json:"name"`
-	Sport string        `json:"sport"`
-	Steps []WorkoutStep `json:"steps"`
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	Sport        string        `json:"sport"`
+	ScheduleDate string        `json:"schedule_date,omitempty"`
+	Steps        []WorkoutStep `json:"steps"`
 }
 
 var validStepTypes = map[string]bool{
@@ -69,11 +78,9 @@ var validSports = map[string]bool{
 	"swimming": true, "strength_training": true,
 }
 
-var queueMu sync.Mutex
-
 func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	type scheduledWorkoutsInput struct {
-		Days int `json:"days,omitempty" jsonschema:"look-ahead window in days, default 14, max 60"`
+		Days int `json:"days,omitempty" jsonschema:"look-ahead window in days, default 14, max 60"` // max: maxScheduledWorkoutsDays
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -85,7 +92,7 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			"Rest days appear here even though they have no real Garmin calendar entry — scheduled_id is 0 for those, since it's a plan entry, not a real calendar item. scheduled_id is also 0 for coach/training-plan-assigned workouts generally (deduped by sport+name rather than Garmin's own id); only self-created workouts (via create_workout) carry a real nonzero scheduled_id.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input scheduledWorkoutsInput) (*mcp.CallToolResult, any, error) {
-		days := clampInt(input.Days, 14, 60)
+		days := clampInt(input.Days, 14, maxScheduledWorkoutsDays)
 		workouts, err := queryScheduledWorkouts(ctx, client, days)
 		if err != nil {
 			return errorResult(err)
@@ -116,20 +123,22 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	})
 
 	type createWorkoutInput struct {
-		Name  string        `json:"name"  jsonschema:"workout name e.g. Tuesday tempo run"`
-		Sport string        `json:"sport" jsonschema:"sport type: running cycling swimming strength_training"`
-		Steps []WorkoutStep `json:"steps" jsonschema:"ordered list of workout steps"`
+		Name         string        `json:"name"  jsonschema:"workout name e.g. Tuesday tempo run"`
+		Sport        string        `json:"sport" jsonschema:"sport type: running cycling swimming strength_training"`
+		ScheduleDate string        `json:"schedule_date,omitempty" jsonschema:"optional YYYY-MM-DD: also schedule the workout on this day of the Garmin calendar; omit to only add it to the workout library"`
+		Steps        []WorkoutStep `json:"steps" jsonschema:"ordered list of workout steps"`
 	}
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "create_workout",
 		Title: "Create Workout",
 		Description: "Queue a structured workout for upload to Garmin Connect. The Python sidecar uploads it on the next sync run (every 30 minutes by default; set via SYNC_SCHEDULE). Requires --data-dir pointing to the shared sync volume. Returns the queue ID. " +
+			fmt.Sprintf("Set schedule_date (YYYY-MM-DD, the user's today up to %d days ahead; a date already past in every time zone is rejected) to also put it on that day of the Garmin calendar so it shows up on the watch; without it the workout only lands in the Garmin Connect workout library. get_scheduled_workouts only sees %d days ahead, so a workout scheduled further out won't appear there (or be conflict-checkable) until it's within that window. ", maxScheduleAheadDays, maxScheduledWorkoutsDays) +
 			"Check get_scheduled_workouts first to avoid conflicts. " +
 			"Each step needs type (warmup/interval/recovery/cooldown/steady) and exactly one of duration_s, distance_m, or reps. " +
 			"For a strength exercise: call search_exercises first to get a valid category/exercise_name pair (free-text guesses are rejected), set reps, and optionally sets + rest_s to repeat it as a set — e.g. sets=3, rest_s=60 becomes \"3 sets of N reps, 60s rest between\" on the watch. Optionally set weight_kg (requires category/exercise_name) for a weight target shown on the watch. " +
 			"Optional target, at most one per step: target_hr_zone (1–5), or a pace zone (Garmin pace.zone, the watch's pace alert range; running only) via target_pace_zone_fast_s_per_km + target_pace_zone_slow_s_per_km in seconds per km, e.g. 300 and 315 for 5:00–5:15/km.",
-		// Queues a new item onto the shared file — additive, not destructive (nothing is
+		// Adds a new file to the queue spool dir — additive, not destructive (nothing is
 		// overwritten or deleted), and each call creates a distinct queue entry so it's not
 		// idempotent. Explicit because the SDK defaults DestructiveHint to true when unset.
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: boolPtr(false)},
@@ -142,6 +151,9 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 		}
 		if len(input.Steps) == 0 {
 			return errorResult(fmt.Errorf("steps must not be empty"))
+		}
+		if err := validateScheduleDate(input.ScheduleDate, time.Now()); err != nil {
+			return errorResult(err)
 		}
 		for i, step := range input.Steps {
 			if !validStepTypes[step.Type] {
@@ -204,15 +216,20 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 			}
 		}
 		item := WorkoutQueueItem{
-			ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
-			Name:  input.Name,
-			Sport: input.Sport,
-			Steps: input.Steps,
+			ID:           newQueueID(time.Now()),
+			Name:         input.Name,
+			Sport:        input.Sport,
+			ScheduleDate: input.ScheduleDate,
+			Steps:        input.Steps,
 		}
-		if err := appendToQueue(dataDir, item); err != nil {
+		if err := appendToQueue(dataDir, &item); err != nil {
 			return errorResult(fmt.Errorf("create_workout: queue write: %w", err))
 		}
-		return jsonResult(map[string]string{"id": item.ID, "name": item.Name, "status": "queued"})
+		resp := map[string]string{"id": item.ID, "name": item.Name, "status": "queued"}
+		if item.ScheduleDate != "" {
+			resp["schedule_date"] = item.ScheduleDate
+		}
+		return jsonResult(resp)
 	})
 
 	type workoutDetailInput struct {
@@ -241,51 +258,149 @@ func registerWorkoutTools(s *mcp.Server, client influxClient, dataDir string) {
 	})
 }
 
-func queuePath(dataDir string) string {
-	return filepath.Join(dataDir, "workout_queue.json")
+// maxScheduleAheadDays bounds how far ahead create_workout's schedule_date may be.
+const maxScheduleAheadDays = 365
+
+// maxScheduledWorkoutsDays is get_scheduled_workouts' max look-ahead. sync.py's
+// SCHEDULED_WORKOUT_LOOKAHEAD_DAYS must match it — anything further out is never synced,
+// so the tool would silently return nothing there (test_sync.py checks the two agree).
+const maxScheduledWorkoutsDays = 60
+
+// earliestZone/latestZone are the furthest-behind (UTC-12) and furthest-ahead (UTC+14)
+// time zones in use. A date before today in earliestZone is already over everywhere on
+// Earth; today in latestZone is the latest date that's anyone's "today".
+var (
+	earliestZone = time.FixedZone("UTC-12", -12*60*60)
+	latestZone   = time.FixedZone("UTC+14", 14*60*60)
+)
+
+func dateIn(now time.Time, zone *time.Location) time.Time {
+	y, m, d := now.In(zone).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-func loadQueue(dataDir string) ([]WorkoutQueueItem, error) {
-	data, err := os.ReadFile(queuePath(dataDir))
-	if os.IsNotExist(err) {
-		return nil, nil
+// validateScheduleDate rejects a malformed or past schedule_date ("" means unscheduled).
+// The MCP server doesn't know the user's time zone, so both bounds are taken in whichever
+// zone is most permissive: "past" means before today in UTC-12 (past for every user), and
+// "too far ahead" means past maxScheduleAheadDays from today in UTC+14 (so every user,
+// wherever they are, can schedule up to their own today + maxScheduleAheadDays).
+func validateScheduleDate(s string, now time.Time) error {
+	if s == "" {
+		return nil
 	}
+	d, err := time.Parse(time.DateOnly, s)
 	if err != nil {
-		return nil, fmt.Errorf("read queue: %w", err)
+		return fmt.Errorf("create_workout: schedule_date must be YYYY-MM-DD, got %q", s)
 	}
-	var items []WorkoutQueueItem
-	if err := json.Unmarshal(data, &items); err != nil {
-		return nil, fmt.Errorf("parse queue: %w", err)
+	if d.Before(dateIn(now, earliestZone)) {
+		return fmt.Errorf("create_workout: schedule_date %s is in the past", s)
 	}
-	return items, nil
-}
-
-func saveQueue(dataDir string, items []WorkoutQueueItem) error {
-	data, err := json.Marshal(items)
-	if err != nil {
-		return fmt.Errorf("marshal queue: %w", err)
-	}
-	if err := os.MkdirAll(dataDir, 0o750); err != nil {
-		return fmt.Errorf("create data dir: %w", err)
-	}
-	tmp := queuePath(dataDir) + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("write queue tmp: %w", err)
-	}
-	if err := os.Rename(tmp, queuePath(dataDir)); err != nil {
-		return fmt.Errorf("rename queue: %w", err)
+	// Upper bound catches typo'd years (2062 for 2026) before they're queued and fail
+	// only later, out of sight, in the sync sidecar.
+	if latest := dateIn(now, latestZone).AddDate(0, 0, maxScheduleAheadDays); d.After(latest) {
+		return fmt.Errorf("create_workout: schedule_date %s is more than %d days ahead", s, maxScheduleAheadDays)
 	}
 	return nil
 }
 
-func appendToQueue(dataDir string, item WorkoutQueueItem) error {
-	queueMu.Lock()
-	defer queueMu.Unlock()
-	items, err := loadQueue(dataDir)
-	if err != nil {
-		return err
+// queueDirName is the spool directory, under the data dir shared with the sync sidecar,
+// holding one <id>.json file per queued workout. Go only ever creates new files there
+// (a ".item-*.tmp" dotfile, then linked — or renamed — into place; see appendToQueue); sync.py only rewrites or removes files it has
+// read. Neither side ever rewrites a file the other might be writing, so no lock and no
+// field-preservation rule is needed — unlike the single shared workout_queue.json this
+// replaced (see sync._check_legacy_queue).
+const queueDirName = "workout_queue"
+
+func queueDir(dataDir string) string {
+	return filepath.Join(dataDir, queueDirName)
+}
+
+// appendToQueue adds item to the queue as its own spool file.
+func appendToQueue(dataDir string, item *WorkoutQueueItem) error {
+	dir := queueDir(dataDir)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("create queue dir: %w", err)
 	}
-	return saveQueue(dataDir, append(items, item))
+	data, err := json.Marshal(item)
+	if err != nil {
+		return fmt.Errorf("marshal queue item: %w", err)
+	}
+	// Unique dotfile tmp: sync.py only picks up *.json files not starting with ".", so it
+	// never reads a half-written item, and concurrent calls never share a tmp file.
+	f, err := os.CreateTemp(dir, ".item-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create queue tmp: %w", err)
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write queue tmp: %w", err)
+	}
+	// fsync before it's linked in, so a crash can't leave a truncated <id>.json that sync.py
+	// would quarantine, losing the workout.
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("sync queue tmp: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close queue tmp: %w", err)
+	}
+	// Link, not Rename: it fails if the target exists, so an id collision is an error
+	// rather than one queued workout silently replacing another. Where hard links aren't
+	// supported (e.g. some SMB/FUSE mounts), fall back to Rename — newQueueID's random
+	// suffix already makes a collision vanishingly unlikely.
+	final := filepath.Join(dir, item.ID+".json")
+	err = os.Link(tmp, final)
+	switch {
+	case err == nil:
+	case errors.Is(err, fs.ErrExist):
+		return fmt.Errorf("queue item %s already exists", item.ID)
+	case linkUnsupported(err):
+		if err := os.Rename(tmp, final); err != nil {
+			return fmt.Errorf("queue item %s: %w", item.ID, err)
+		}
+	default:
+		return fmt.Errorf("queue item %s: %w", item.ID, err)
+	}
+	// fsync the directory too, so the new entry itself survives a crash right after
+	// create_workout reports "queued" (sync.py's _write_queue_item does the same). Best
+	// effort only: the item is already linked in, so reporting a failure here would make
+	// the caller retry create_workout and queue a duplicate workout.
+	_ = syncDir(dir)
+	return nil
+}
+
+// linkUnsupported reports whether a Link error means the filesystem can't hard-link at
+// all (EPERM/ENOTSUP/EXDEV, e.g. some SMB/FUSE mounts) — the only case where falling back
+// to an overwriting Rename is acceptable. Any other error (EACCES, ENOSPC, …) is real.
+func linkUnsupported(err error) bool {
+	return errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.ENOTSUP) ||
+		errors.Is(err, syscall.EXDEV)
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(filepath.Clean(dir))
+	if err != nil {
+		return fmt.Errorf("open queue dir: %w", err)
+	}
+	defer func() { _ = d.Close() }()
+	// Directory fsync isn't supported everywhere (e.g. Windows); the file itself was
+	// already synced, so that's not worth failing the call over.
+	if err := d.Sync(); err != nil && !errors.Is(err, syscall.EINVAL) && !errors.Is(err, os.ErrPermission) {
+		return fmt.Errorf("sync queue dir: %w", err)
+	}
+	return nil
+}
+
+// newQueueID is a UnixNano timestamp plus a random suffix. It's fixed length, so sync.py's
+// plain name sort (_queued_item_paths) is creation order — keep it fixed-length. The
+// suffix keeps concurrent create_workout calls unique even where the clock is only
+// microsecond-resolution (macOS).
+func newQueueID(now time.Time) string {
+	var b [4]byte
+	_, _ = rand.Read(b[:]) // crypto/rand.Read never returns an error (Go 1.24+)
+	return fmt.Sprintf("%d-%s", now.UnixNano(), hex.EncodeToString(b[:]))
 }
 
 func queryScheduledWorkouts(ctx context.Context, client influxClient, days int) ([]garmin.ScheduledWorkout, error) {

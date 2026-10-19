@@ -1,10 +1,16 @@
 package tools
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -595,7 +601,7 @@ func TestMergeTrainingPlanDetail_SortedByDate(t *testing.T) {
 
 func TestLoadQueue_EmptyWhenFileAbsent(t *testing.T) {
 	dir := t.TempDir()
-	items, err := loadQueue(dir)
+	items, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -612,10 +618,10 @@ func TestSaveAndLoadQueue_RoundTrip(t *testing.T) {
 			{Type: "warmup", DurationS: &dur, Description: "easy"},
 		}},
 	}
-	if err := saveQueue(dir, want); err != nil {
+	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadQueue(dir)
+	got, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -642,10 +648,10 @@ func TestSaveAndLoadQueue_RoundTrip_StrengthFields(t *testing.T) {
 			},
 		}},
 	}
-	if err := saveQueue(dir, want); err != nil {
+	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadQueue(dir)
+	got, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -683,10 +689,10 @@ func TestSaveAndLoadQueue_RoundTrip_WeightKg(t *testing.T) {
 			},
 		}},
 	}
-	if err := saveQueue(dir, want); err != nil {
+	if err := appendToQueue(dir, &want[0]); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadQueue(dir)
+	got, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,13 +710,13 @@ func TestAppendToQueue_AccumulatesItems(t *testing.T) {
 	dur := 1200
 	a := WorkoutQueueItem{ID: "a", Name: "First", Sport: "running", Steps: []WorkoutStep{{Type: "interval", DurationS: &dur}}}
 	b := WorkoutQueueItem{ID: "b", Name: "Second", Sport: "cycling", Steps: []WorkoutStep{{Type: "steady", DurationS: &dur}}}
-	if err := appendToQueue(dir, a); err != nil {
+	if err := appendToQueue(dir, &a); err != nil {
 		t.Fatal(err)
 	}
-	if err := appendToQueue(dir, b); err != nil {
+	if err := appendToQueue(dir, &b); err != nil {
 		t.Fatal(err)
 	}
-	items, err := loadQueue(dir)
+	items, err := loadQueueItems(t, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -853,12 +859,16 @@ func TestAppendToQueue_WritesToTmpThenRenames(t *testing.T) {
 	dir := t.TempDir()
 	dur := 300
 	item := WorkoutQueueItem{ID: "x", Name: "Test", Sport: "running", Steps: []WorkoutStep{{Type: "cooldown", DurationS: &dur}}}
-	if err := appendToQueue(dir, item); err != nil {
+	if err := appendToQueue(dir, &item); err != nil {
 		t.Fatal(err)
 	}
 	// tmp file must be gone after atomic rename
-	if _, err := os.Stat(queuePath(dir) + ".tmp"); !os.IsNotExist(err) {
-		t.Error("tmp file still present after append")
+	entries, err := os.ReadDir(queueDir(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "x.json" {
+		t.Errorf("want only x.json in queue dir, got %v", entries)
 	}
 }
 
@@ -929,5 +939,243 @@ func TestCreateWorkout_PaceZone(t *testing.T) {
 				t.Fatalf("IsError = %v, want %v: %v", result.IsError, tc.wantErr, result.Content)
 			}
 		})
+	}
+}
+
+func TestCreateWorkout_ScheduleDate(t *testing.T) {
+	cases := []struct {
+		name    string
+		date    string
+		wantErr bool
+	}{
+		{"valid", time.Now().AddDate(0, 0, 3).Format(time.DateOnly), false},
+		{"past", "2020-01-01", true},
+		{"not a date", "tomorrow", true},
+		{"wrong format", "10/17/2026", true},
+		{"impossible date", "2026-02-30", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := callCreateWorkout(t, map[string]any{
+				"name": "Shakeout", "sport": "running", "schedule_date": tc.date,
+				"steps": []map[string]any{{"type": "steady", "duration_s": 1200}},
+			})
+			if result.IsError != tc.wantErr {
+				t.Fatalf("IsError = %v, want %v: %v", result.IsError, tc.wantErr, result.Content)
+			}
+		})
+	}
+}
+
+func TestAppendToQueue_ScheduleDateRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "a", Sport: "running", ScheduleDate: "2026-10-17"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "2", Name: "b", Sport: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(queueDir(dir), "2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Unscheduled items must omit the key entirely so sync.py's item.get("schedule_date") is falsy.
+	if strings.Contains(string(raw), "schedule_date") {
+		t.Fatalf("want no schedule_date key on unscheduled item: %s", raw)
+	}
+	items, err := loadQueueItems(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].ScheduleDate != "2026-10-17" || items[1].ScheduleDate != "" {
+		t.Fatalf("got %+v", items)
+	}
+}
+
+func TestValidateScheduleDate(t *testing.T) {
+	now := time.Date(2026, 10, 17, 3, 0, 0, 0, time.UTC) // 2026-10-16 15:00 in UTC-12
+	cases := []struct {
+		date    string
+		wantErr bool
+	}{
+		{"", false},
+		{"2026-10-17", false},
+		{"2026-10-16", false}, // still today in UTC-12, so someone's today
+		{"2026-10-15", true},
+		{"2027-01-05", false},
+		{"2026-13-01", true},
+	}
+	for _, tc := range cases {
+		if err := validateScheduleDate(tc.date, now); (err != nil) != tc.wantErr {
+			t.Errorf("validateScheduleDate(%q) err = %v, wantErr %v", tc.date, err, tc.wantErr)
+		}
+	}
+}
+
+func TestAppendToQueue_RejectsDuplicateID(t *testing.T) {
+	dir := t.TempDir()
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "a", Sport: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "b", Sport: "running"}); err == nil {
+		t.Fatal("want error: would overwrite a queued item")
+	}
+}
+
+func TestValidateScheduleDate_LateUTCDay(t *testing.T) {
+	// 23:00 UTC on Oct 17 is 11:00 Oct 17 in UTC-12: Oct 16 is past everywhere.
+	now := time.Date(2026, 10, 17, 23, 0, 0, 0, time.UTC)
+	if err := validateScheduleDate("2026-10-16", now); err == nil {
+		t.Fatal("want error: 2026-10-16 is over in every time zone")
+	}
+}
+
+func TestAppendToQueue_LeavesOtherItemsUntouched(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(queueDir(dir), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// An item sync.py is partway through: uploaded, not yet scheduled.
+	existing := []byte(`{"id":"1","name":"a","sport":"running","schedule_date":"2026-10-20","steps":[],"uploaded_workout_id":555}`)
+	path := filepath.Join(queueDir(dir), "1.json")
+	if err := os.WriteFile(path, existing, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "2", Name: "b", Sport: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, existing) {
+		t.Fatalf("existing item modified: %s", got)
+	}
+}
+
+// loadQueueItems reads the spool dir the way sync.py does (*.json, not dotfiles, in
+// (len, name) order — ids are UnixNano digit strings) and decodes each item. Tests only.
+func loadQueueItems(t *testing.T, dir string) ([]WorkoutQueueItem, error) {
+	t.Helper()
+	entries, err := os.ReadDir(queueDir(dir))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read queue dir: %w", err)
+	}
+	var names []string
+	for _, e := range entries {
+		if n := e.Name(); strings.HasSuffix(n, ".json") && !strings.HasPrefix(n, ".") {
+			names = append(names, n)
+		}
+	}
+	sort.Slice(names, func(i, j int) bool {
+		if len(names[i]) != len(names[j]) {
+			return len(names[i]) < len(names[j])
+		}
+		return names[i] < names[j]
+	})
+	items := make([]WorkoutQueueItem, len(names))
+	for i, n := range names {
+		data, err := os.ReadFile(filepath.Clean(filepath.Join(queueDir(dir), n)))
+		if err != nil {
+			return nil, fmt.Errorf("read queue item: %w", err)
+		}
+		if err := json.Unmarshal(data, &items[i]); err != nil {
+			return nil, fmt.Errorf("decode queue item %s: %w", n, err)
+		}
+	}
+	return items, nil
+}
+
+func TestValidateScheduleDate_UpperBound(t *testing.T) {
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC) // already 2026-10-18 in UTC+14
+	if err := validateScheduleDate("2027-10-18", now); err != nil {
+		t.Fatalf("365 days ahead: want ok, got %v", err)
+	}
+	for _, d := range []string{"2027-10-19", "2062-10-17", "9999-12-31"} {
+		if err := validateScheduleDate(d, now); err == nil {
+			t.Errorf("validateScheduleDate(%q): want error", d)
+		}
+	}
+}
+
+func TestNewQueueID_UniqueAtSameInstant(t *testing.T) {
+	now := time.Now()
+	seen := map[string]bool{}
+	for range 1000 {
+		id := newQueueID(now)
+		if seen[id] {
+			t.Fatalf("duplicate id %s", id)
+		}
+		seen[id] = true
+	}
+}
+
+func TestAppendToQueue_ConcurrentCallsAllLand(t *testing.T) {
+	dir := t.TempDir()
+	const n = 50
+	errs := make(chan error, n)
+	now := time.Now() // same timestamp for all: only the random suffix keeps them apart
+	for range n {
+		go func() {
+			errs <- appendToQueue(dir, &WorkoutQueueItem{ID: newQueueID(now), Name: "w", Sport: "running"})
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, err := loadQueueItems(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != n {
+		t.Fatalf("want %d queued items, got %d", n, len(items))
+	}
+	entries, _ := os.ReadDir(queueDir(dir))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			t.Errorf("leftover tmp file %s", e.Name())
+		}
+	}
+}
+
+func TestValidateScheduleDate_UpperBoundFromFurthestAheadZone(t *testing.T) {
+	// 11:00 UTC Oct 17 is already Oct 18 in UTC+14: a user there may schedule their own
+	// today + 365 = 2027-10-18.
+	now := time.Date(2026, 10, 17, 11, 0, 0, 0, time.UTC)
+	if err := validateScheduleDate("2027-10-18", now); err != nil {
+		t.Fatalf("UTC+14 user's today+365: want ok, got %v", err)
+	}
+	if err := validateScheduleDate("2027-10-19", now); err == nil {
+		t.Fatal("want error beyond anyone's today+365")
+	}
+}
+
+func TestLinkUnsupported(t *testing.T) {
+	for _, err := range []error{syscall.EPERM, syscall.ENOTSUP, syscall.EXDEV} {
+		if !linkUnsupported(&os.LinkError{Op: "link", Err: err}) {
+			t.Errorf("%v: want unsupported (fall back to rename)", err)
+		}
+	}
+	for _, err := range []error{syscall.EACCES, syscall.ENOSPC} {
+		if linkUnsupported(&os.LinkError{Op: "link", Err: err}) {
+			t.Errorf("%v: must be returned as a real error, not hidden by a rename", err)
+		}
+	}
+}
+
+func TestAppendToQueue_ReportsSuccessOnceLinked(t *testing.T) {
+	// The item must be reported queued once it's linked in, whatever happens after: an
+	// error would make the caller retry and queue a duplicate.
+	dir := t.TempDir()
+	if err := appendToQueue(dir, &WorkoutQueueItem{ID: "1", Name: "a", Sport: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(queueDir(dir), "1.json")); err != nil {
+		t.Fatal(err)
 	}
 }
