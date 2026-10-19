@@ -332,7 +332,7 @@ takes), `calendarDate`, and a `workout` object shaped like `upload_workout`'s re
 retried without re-uploading. A schedule retry first checks the calendar month for an item with that
 `workoutId` + `date` (shape verified live 2026-10-17: `itemType: "workout"`, `id` ==
 `workoutScheduleId`), so a schedule Garmin applied but whose response was lost isn't added twice.
-Nothing is scheduled onto a date that has passed (with a day's slack for time zones).
+Nothing is scheduled onto a date that has passed ("passed" means before today in UTC-12, the same cutoff `create_workout` validates against).
 
 An `upload_workout` whose response is lost *after* Garmin stored the workout is retried as a fresh
 upload — deliberately not detected. #111 built detection (tagging each upload's visible

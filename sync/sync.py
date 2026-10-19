@@ -13,13 +13,14 @@ State persisted in DATA_DIR/sync_state.json.
 login outside the container to seed TOKEN_STORE, then restart.
 """
 
+import errno
 import json
 import logging
 import os
 import re
 import time
 from collections.abc import Callable
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1794,6 +1795,10 @@ def _write_queue_item(path: Path, item: dict[str, Any]) -> None:
         dir_fd = os.open(path.parent, os.O_RDONLY)
         try:
             os.fsync(dir_fd)
+        except OSError as exc:
+            # Some filesystems can't fsync a directory; the rename itself still happened.
+            if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
+                raise
         finally:
             os.close(dir_fd)
     except OSError as exc:
@@ -2032,9 +2037,10 @@ _SCHEDULE_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def _schedule_expired(sched_date: str) -> bool:
-    """Whether sched_date is over — with a day's slack for the user being behind this
-    container's clock. Scheduling onto a past day only adds a phantom missed workout."""
-    return date.fromisoformat(sched_date) < date.today() - timedelta(days=1)
+    """Whether sched_date is over everywhere — i.e. before today in UTC-12, the same
+    cutoff create_workout's validateScheduleDate uses. Scheduling onto a past day only adds
+    a phantom missed workout."""
+    return date.fromisoformat(sched_date) < datetime.now(timezone(timedelta(hours=-12))).date()
 
 
 def _valid_schedule_date(item: dict[str, Any]) -> str | None:

@@ -1,5 +1,9 @@
 """Tests for sync.py — Garmin → InfluxDB sync sidecar."""
 
+import errno
+import json
+import os
+import stat
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -2168,6 +2172,54 @@ def test_pending_workouts_expired_item_uploads_unscheduled(tmp_path, monkeypatch
     garmin.upload_workout.assert_called_once()
     garmin.schedule_workout.assert_not_called()
     assert _read_queue(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    ("now", "scheduled"),
+    [
+        # 2026-10-17 23:00 UTC is 11:00 on the 17th in UTC-12: the 16th is over everywhere.
+        ("2026-10-17 23:00:00", False),
+        # 2026-10-17 11:00 UTC is still 23:00 on the 16th in UTC-12.
+        ("2026-10-17 11:00:00", True),
+    ],
+)
+def test_pending_workouts_schedule_expiry_uses_utc_minus_12(tmp_path, monkeypatch, now, scheduled):
+    monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
+    _write_queue(tmp_path, [_scheduled_item(date_str="2026-10-16")])
+    garmin = MagicMock()
+    garmin.upload_workout.return_value = _upload_response()
+    garmin.get_scheduled_workouts.return_value = {"calendarItems": []}
+    with freeze_time(now):
+        sync.sync_pending_workouts(garmin, MagicMock(), {})
+    garmin.upload_workout.assert_called_once()
+    assert garmin.schedule_workout.called is scheduled
+
+
+def test_write_queue_item_tolerates_unsupported_dir_fsync(tmp_path, monkeypatch):
+    real_fsync = os.fsync
+    fsynced_file = []
+
+    def fake_fsync(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError(errno.EINVAL, "Invalid argument")
+        fsynced_file.append(fd)
+        real_fsync(fd)
+
+    monkeypatch.setattr(sync.os, "fsync", fake_fsync)
+    path = tmp_path / "1.json"
+    sync._write_queue_item(path, {"name": "x"})
+    assert json.loads(path.read_text()) == {"name": "x"}
+    assert fsynced_file
+
+
+def test_write_queue_item_propagates_dir_fsync_io_error(tmp_path, monkeypatch):
+    def fake_fsync(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError(errno.EIO, "I/O error")
+
+    monkeypatch.setattr(sync.os, "fsync", fake_fsync)
+    with pytest.raises(sync._QueueWriteError):
+        sync._write_queue_item(tmp_path / "1.json", {"name": "x"})
 
 
 @pytest.mark.parametrize(
