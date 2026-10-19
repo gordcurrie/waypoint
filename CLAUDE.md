@@ -360,11 +360,15 @@ else (not a Garmin error — bad item data, a bug) is item-specific and never bl
 queue. Don't classify `GarminConnectConnectionError` on these two calls without checking the status.
 
 **Self-created `scheduled_workout` rows are tombstoned too** — keyed by Garmin's `scheduled_id`, the
-same `deleted_at` mechanism as coach-plan renames (#104), from tomorrow onwards. Routine now that
+same `deleted_at` mechanism as coach-plan renames (#104), from *today* onwards. Routine now that
 `schedule_date` puts workouts on the calendar: one moved or deleted in Garmin Connect would
-otherwise linger at its old date in `get_scheduled_workouts`. *Today* isn't covered yet: what a
-completed self-created calendar entry looks like is unverified, and a false tombstone would hide a
-real same-day workout.
+otherwise linger at its old date in `get_scheduled_workouts`. Including today relies on
+completion not changing a self-created calendar entry — verified live 2026-10-19 (#113) on **one**
+sample, a `create_workout`-scheduled running workout checked after its race: `id`, `workoutId`,
+`itemType: "workout"`, `date` and `sportTypeKey` unchanged, no `associatedActivityId`, and the run
+as a separate `itemType: "activity"` item. Other completion paths (strength, manual completion,
+started from the watch library) are unverified — if a same-day self-created workout ever vanishes
+from `get_scheduled_workouts`, suspect this first. Coach-plan tombstoning still starts tomorrow.
 
 **Workout queue is a spool directory, one file per workout** — `<data-dir>/workout_queue/<id>.json`,
 shared by two processes. The Go MCP server only ever *creates* files (`appendToQueue`: write and

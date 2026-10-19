@@ -1089,15 +1089,17 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     if had_error:
         log.warning("scheduled_workouts: fetch/parse error this run, skipping tombstoning")
     else:
-        # Starts tomorrow, not the 1st of the month (#105 review): today's own
-        # calendar item can legitimately look different by the time this sync runs
-        # (e.g. once a workout's underway/completed) for reasons that have nothing
-        # to do with the plan changing, and today is the one date where this
+        # Coach-plan window starts tomorrow, not the 1st of the month (#105 review):
+        # today's own calendar item can legitimately look different by the time this
+        # sync runs (e.g. once a workout's underway/completed) for reasons that have
+        # nothing to do with the plan changing, and today is the one date where this
         # write-side window would otherwise overlap tools/workouts.go's read-side
         # window (which starts from today forward) — a false tombstone here would
         # hide a real, still-relevant entry the same day it's scheduled. Nothing
         # needs a rename caught for a day that's already happening or done.
-        window_start = today + timedelta(days=1)
+        coach_start = today + timedelta(days=1)
+        # Self-created entries start today instead — see the self-created block below (#113).
+        self_start = today
         last_year, last_month = months[-1]
         window_end = (
             date(last_year + 1, 1, 1) if last_month == 12 else date(last_year, last_month + 1, 1)
@@ -1105,7 +1107,7 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         deleted_at = datetime.now(UTC).timestamp()
         coach_tags = ("workout_name", "sport")
         stale_keys = (
-            _query_active_keys(client, window_start, window_end, coach_tags) - fresh_coach_keys
+            _query_active_keys(client, coach_start, window_end, coach_tags) - fresh_coach_keys
         )
         points.extend(_tombstones(stale_keys, coach_tags, deleted_at))
         if stale_keys:
@@ -1117,10 +1119,19 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         # scheduled_id column doesn't exist until a self-created row has been written, and a
         # combined query naming it would then fail outright and take coach-plan tombstoning
         # (#104) down with it — same reasoning as _query_active_calendar_event_keys.
+        #
+        # Unlike the coach-plan window, this one includes today (#113): create_workout can
+        # schedule onto today, and one moved or deleted the same day would otherwise linger
+        # until midnight. Relies on a self-created entry not changing on completion —
+        # verified live 2026-10-19 on one sample (a create_workout-scheduled running workout,
+        # the day after the race it was for): id, workoutId, itemType "workout", date and
+        # sportTypeKey all unchanged, with the activity as a separate itemType "activity"
+        # item. Other completion paths (strength, manual completion) are unverified; a false
+        # tombstone there would hide a workout done today, so re-check this if one shows up.
         self_tags = ("scheduled_id", "sport")
         stale_self = (
             _query_active_keys(
-                client, window_start, window_end, self_tags, missing_column_expected=True
+                client, self_start, window_end, self_tags, missing_column_expected=True
             )
             - fresh_self_keys
         )
