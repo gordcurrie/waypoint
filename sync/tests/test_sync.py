@@ -1507,9 +1507,14 @@ def test_scheduled_workouts_tombstone_query_uses_rfc3339_bounds(no_sleep):
     client = MagicMock()
     client.query.return_value.to_pylist.return_value = []
     sync.sync_scheduled_workouts(garmin, client, {})
-    sql = client.query.call_args[0][0]
-    assert "2026-07-07T00:00:00Z" in sql
-    assert "2026-10-01T00:00:00Z" in sql
+    sqls = [c[0][0] for c in client.query.call_args_list]
+    coach_sql = next(s for s in sqls if "workout_name IS NOT NULL" in s)
+    assert "2026-07-07T00:00:00Z" in coach_sql
+    assert "2026-10-01T00:00:00Z" in coach_sql
+    # Self-created window includes today (#113).
+    self_sql = next(s for s in sqls if "scheduled_id IS NOT NULL" in s)
+    assert "2026-07-06T00:00:00Z" in self_sql
+    assert "2026-10-01T00:00:00Z" in self_sql
 
 
 @freeze_time("2026-07-06")
@@ -3180,6 +3185,34 @@ def test_scheduled_workouts_tombstones_moved_self_created_workout(no_sleep):
     assert "workout_name" not in tomb[0]
     fresh = [ln for ln in lines if "deleted_at=0" in ln]
     assert any("scheduled_id=42" in ln for ln in fresh)  # the Oct 22 row, live
+
+
+@freeze_time("2026-10-17")
+def test_scheduled_workouts_tombstones_self_created_moved_off_today(no_sleep):
+    """#113: a create_workout entry scheduled for today and moved (or deleted) in Garmin
+    Connect the same day must be tombstoned now, not linger until midnight."""
+    garmin = _sched_garmin([_self_created_item(42, "2026-10-19")])
+    client = _tombstone_query_client(
+        self_rows=[{"time": "2026-10-17T00:00:00", "scheduled_id": "42", "sport": "running"}]
+    )
+    sync.sync_scheduled_workouts(garmin, client, {})
+    lines = [str(p) for p in _written_points(client)]
+    tomb = [ln for ln in lines if "deleted_at=" in ln and "deleted_at=0" not in ln]
+    assert len(tomb) == 1
+    assert "scheduled_id=42" in tomb[0]
+
+
+@freeze_time("2026-10-17")
+def test_scheduled_workouts_self_created_today_not_falsely_tombstoned(no_sleep):
+    """#113: a self-created entry still on today's calendar (e.g. already completed — its
+    calendar item is unchanged by completion, verified live 2026-10-19) must stay live."""
+    garmin = _sched_garmin([_self_created_item(42, "2026-10-17")])
+    client = _tombstone_query_client(
+        self_rows=[{"time": "2026-10-17T00:00:00", "scheduled_id": "42", "sport": "running"}]
+    )
+    sync.sync_scheduled_workouts(garmin, client, {})
+    lines = [str(p) for p in _written_points(client)]
+    assert not [ln for ln in lines if "deleted_at=" in ln and "deleted_at=0" not in ln]
 
 
 @freeze_time("2026-10-17")

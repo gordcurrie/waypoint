@@ -1089,10 +1089,10 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
     if had_error:
         log.warning("scheduled_workouts: fetch/parse error this run, skipping tombstoning")
     else:
-        # Starts tomorrow, not the 1st of the month (#105 review): today's own
-        # calendar item can legitimately look different by the time this sync runs
-        # (e.g. once a workout's underway/completed) for reasons that have nothing
-        # to do with the plan changing, and today is the one date where this
+        # Coach-plan window starts tomorrow, not the 1st of the month (#105 review):
+        # today's own calendar item can legitimately look different by the time this
+        # sync runs (e.g. once a workout's underway/completed) for reasons that have
+        # nothing to do with the plan changing, and today is the one date where this
         # write-side window would otherwise overlap tools/workouts.go's read-side
         # window (which starts from today forward) — a false tombstone here would
         # hide a real, still-relevant entry the same day it's scheduled. Nothing
@@ -1117,11 +1117,16 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         # scheduled_id column doesn't exist until a self-created row has been written, and a
         # combined query naming it would then fail outright and take coach-plan tombstoning
         # (#104) down with it — same reasoning as _query_active_calendar_event_keys.
+        #
+        # Unlike the coach-plan window, this one includes today (#113): create_workout can
+        # schedule onto today, and one moved or deleted the same day would otherwise linger
+        # until midnight. Safe because a self-created entry doesn't change on completion —
+        # verified live 2026-10-19 against a completed race-day workout: id, workoutId,
+        # itemType "workout", date and sportTypeKey all unchanged, with the activity as a
+        # separate itemType "activity" item rather than a field on the workout entry.
         self_tags = ("scheduled_id", "sport")
         stale_self = (
-            _query_active_keys(
-                client, window_start, window_end, self_tags, missing_column_expected=True
-            )
+            _query_active_keys(client, today, window_end, self_tags, missing_column_expected=True)
             - fresh_self_keys
         )
         points.extend(_tombstones(stale_self, self_tags, deleted_at))
