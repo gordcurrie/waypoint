@@ -1123,10 +1123,11 @@ def sync_scheduled_workouts(garmin: Garmin, client: InfluxDBClient3, state: dict
         # Unlike the coach-plan window, this one includes today (#113): create_workout can
         # schedule onto today, and one moved or deleted the same day would otherwise linger
         # until midnight. Relies on a self-created entry not changing on completion —
-        # verified live 2026-10-19 on one sample (a create_workout-scheduled running workout,
-        # the day after the race it was for): id, workoutId, itemType "workout", date and
-        # sportTypeKey all unchanged, with the activity as a separate itemType "activity"
-        # item. Other completion paths (strength, manual completion) are unverified; a false
+        # verified live 2026-11-04 on one sample (a create_workout-scheduled running workout
+        # started from the watch calendar and run — the activity's associatedWorkoutId was
+        # the entry's workoutId — checked the same day): id, workoutId, itemType "workout",
+        # date and sportTypeKey all unchanged, with the activity as a separate itemType
+        # "activity" item. Other completion paths (strength, manual completion) are unverified; a false
         # tombstone there would hide a workout done today, so re-check this if one shows up.
         self_tags = ("scheduled_id", "sport")
         stale_self = (

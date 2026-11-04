@@ -3213,7 +3213,7 @@ def test_scheduled_workouts_tombstones_self_created_moved_off_today(no_sleep):
 @freeze_time("2026-10-17")
 def test_scheduled_workouts_self_created_today_not_falsely_tombstoned(no_sleep):
     """#113: a self-created entry still on today's calendar (e.g. already completed — its
-    calendar item is unchanged by completion, verified live 2026-10-19) must stay live."""
+    calendar item is unchanged by completion, verified live 2026-11-04) must stay live."""
     garmin = _sched_garmin([_self_created_item(42, "2026-10-17")])
     client = _tombstone_query_client(
         self_rows=[{"time": "2026-10-17T00:00:00", "scheduled_id": "42", "sport": "running"}]
@@ -3446,6 +3446,9 @@ def test_pending_workouts_upload_resets_failure_streak(tmp_path, monkeypatch):
         {"attempts": None},
     ],
 )
+# Frozen: the naive first_failure_at case would otherwise age past the 7-day quarantine
+# cutoff once the real clock moves on, and the item gets moved aside instead.
+@freeze_time("2026-10-17")
 def test_pending_workouts_hand_edited_failure_fields_dont_crash(tmp_path, monkeypatch, fields):
     monkeypatch.setattr(sync, "DATA_DIR", tmp_path)
     _write_queue(tmp_path, [{**_queue_item(id="1"), **fields}, _queue_item(id="2")])
